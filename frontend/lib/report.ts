@@ -5,7 +5,9 @@ import {
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
   QUESTION_LABELS,
+  RiskLevel,
 } from "./assessment";
+import { PALETTE, RISK_COLORS } from "./theme";
 
 /**
  * Assessment report (SCRUM-15).
@@ -27,6 +29,7 @@ export type ReportSection =
 export type ReportModel = {
   title: string;
   meta: { label: string; value: string }[];
+  risk: { level: RiskLevel; score: number };
   sections: ReportSection[];
 };
 
@@ -109,6 +112,7 @@ export function buildReportModel(
       { label: "Assessed", value: formatAssessedAt(result.assessedAt) },
       { label: "Scoring rules version", value: result.rulesVersion },
     ],
+    risk: { level: result.level, score: result.score },
     sections,
   };
 }
@@ -161,6 +165,7 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   };
 
   // Title block
+  doc.setTextColor(PALETTE.ink);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   writeLines(wrap(doc, model.title, CONTENT_WIDTH));
@@ -168,11 +173,21 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(90);
+  doc.setTextColor(PALETTE.muted);
   writeLines(model.meta.map((item) => `${item.label}: ${item.value}`));
-  doc.setTextColor(0);
   y += 6;
-  doc.setDrawColor(190);
+
+  // Risk banner: shape and text label, so the level never depends on colour.
+  const riskColor = RISK_COLORS[model.risk.level];
+  doc.setFillColor(riskColor);
+  drawRiskShape(doc, model.risk.level, MARGIN + 5, y - 4);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(riskColor);
+  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN + 16, y);
+  doc.setTextColor(PALETTE.ink);
+  y += 14;
+  doc.setDrawColor(PALETTE.line);
   doc.line(MARGIN, y, PAGE.width - MARGIN, y);
   y += 16;
 
@@ -216,12 +231,22 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
     doc.setPage(page);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(120);
+    doc.setTextColor(PALETTE.muted);
     doc.text("Decision support, not legal advice.", MARGIN, PAGE.height - MARGIN + 16);
     doc.text(`Page ${page} of ${pages}`, PAGE.width - MARGIN, PAGE.height - MARGIN + 16, { align: "right" });
   }
 
   return doc;
+}
+
+/** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */
+function drawRiskShape(doc: Doc, level: RiskLevel, x: number, y: number) {
+  const r = 4.5;
+  if (level === "LOW") doc.circle(x, y, r, "F");
+  else if (level === "MEDIUM") {
+    doc.triangle(x - r, y, x, y - r, x + r, y, "F");
+    doc.triangle(x - r, y, x, y + r, x + r, y, "F");
+  } else doc.triangle(x - r, y + r, x, y - r, x + r, y + r, "F");
 }
 
 export const REPORT_FILENAME = "data-governance-assessment.pdf";

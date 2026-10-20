@@ -54,10 +54,49 @@ Every text and control colour in `app/globals.css`, measured against its own bac
 | Control borders (fixed) | 3.01:1 | 3:1 | Pass |
 | Footer | 15.92:1 | 4.5:1 | Pass |
 
+## Colour system (SCRUM-24)
+
+All colours are design tokens in the `:root` block of `frontend/app/globals.css`; `frontend/lib/theme.ts` mirrors the subset the PDF report needs. `frontend/tests/theme.test.ts` enforces the rules below on every `npm test` run:
+
+- every text, control, focus and graphic pairing meets its WCAG AA ratio (table below);
+- no raw colour values exist outside the token block;
+- the PDF palette matches the stylesheet, and Low, Medium and High each have their own colour.
+
+| Pairing | Ratio | Required |
+| --- | --- | --- |
+| Body text (`--ink`) on surface / paper | 15.42 / 13.99:1 | 4.5:1 |
+| Muted text on surface / paper / hover tint | 5.78 / 5.24 / 5.09:1 | 4.5:1 |
+| Accent text (`--accent-strong`) on surface | 5.71:1 | 4.5:1 |
+| Primary button text, rest / hover | 15.97 / 12.08:1 | 4.5:1 |
+| Destructive button text, rest / hover | 6.43 / 8.70:1 | 4.5:1 |
+| Disabled button text | 4.56:1 | exempt (kept readable) |
+| Error, warning and success text on their tints | 5.80 / 5.53 / 5.53:1 | 4.5:1 |
+| Risk Low / Medium / High as text on surface | 6.19 / 6.04 / 6.43:1 | 4.5:1 |
+| Sidebar text tokens on `--ink` | 6.39–15.97:1 | 4.5:1 |
+| Control borders (`--control-line`) | 3.18:1 | 3:1 |
+| Focus ring on light / dark surfaces | 5.71 / 6.76:1 | 3:1 |
+| Progress bar against its track | 4.73:1 | 3:1 |
+| PDF body, meta and footer text on white | 15.97 / 5.98 / 5.98:1 | 4.5:1 (footer was 4.42:1, fixed) |
+
+State styling:
+
+- **Primary:** fills with navy on hover.
+- **Secondary:** gets a tint on hover.
+- **Destructive ("Start over"):** outlined in red, then filled red on hover.
+- **Disabled:** neutral fill, and the label says what is in progress.
+- **Selected:** filled, with a tick. Completed steps show a tick and the current step is bold with a dot.
+- **Focus:** a 3&nbsp;px ring appears on every interactive element.
+- **Errors:** an icon and a tinted background accompany the message.
+- **"Specialist review required":** uses the warning style, because it is a caution rather than a failure.
+
+The risk level is shown by colour, text label and shape together: a circle for Low, a diamond for Medium and a triangle for High, in the app and in the PDF. The colour now follows the level instead of being interpolated from the score, so Medium always looks the same. The risk scale has three labelled bands that match the rubric thresholds. In forced-colours mode the shapes and bands stay visible.
+
+At phone width, step labels in the progress list stack under their numbers. Before this, "Recommendations" overflowed and caused horizontal scrolling at 375&nbsp;px. Pages were checked for horizontal overflow at 320, 375, 768 and 1280&nbsp;px.
+
 ## Keyboard and screen-reader behaviour
 
 - Every control is reachable and operable with Tab, Enter and Space. There are no custom key handlers to learn, and no keyboard traps.
-- Focus is visible everywhere: a 3&nbsp;px brass outline with a 3&nbsp;px offset.
+- Focus is visible everywhere: a 3&nbsp;px amber outline with a 3&nbsp;px offset (dark amber on light surfaces, bright amber on navy).
 - The first Tab reveals the skip link.
 - Moving between steps puts focus on the new step heading, which scrolls it into view.
 - Selected options carry `aria-pressed`, and the current step carries `aria-current="step"`.
