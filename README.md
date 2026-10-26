@@ -1,5 +1,9 @@
 # Data Governance Readiness Analyzer
 
+> **SCRUM 22 draft review:** start with [README-SCRUM-22.md](README-SCRUM-22.md).
+> Local login: **http://localhost:3022/login**. Real sign-in needs Supabase configuration.
+> This draft requires account/session configuration and is not ready for hosted deployment.
+
 A guided, plain-language assessment for identifying privacy and governance risks before a proposed data use case moves forward.
 
 ## Architecture
@@ -12,7 +16,9 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 ## Local development
 
-From the repository root, run both services together:
+Complete the account/session setup in [README-SCRUM-22.md](README-SCRUM-22.md) first.
+On Windows, use `Start-SCRUM-22.ps1`. On macOS/Linux, create the same private environment
+files and install dependencies, then run both services together:
 
 ```bash
 ./scripts/start-dev.sh
@@ -27,10 +33,10 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8022 --env-file .env
 ```
 
-Check `http://localhost:8000/health` or `http://localhost:8000/version`.
+Check `http://localhost:8022/health` or `http://localhost:8022/version`.
 
 ### Frontend
 
@@ -38,10 +44,12 @@ Check `http://localhost:8000/health` or `http://localhost:8000/version`.
 cd frontend
 cp .env.example .env.local
 npm install
-npm run dev
+npm run dev -- --hostname localhost --port 3022
 ```
 
-Open `http://localhost:3000`. `NEXT_PUBLIC_API_BASE_URL` is required and the example configuration points it to `http://localhost:8000`.
+Open `http://localhost:3022/login`. Configure server-only `API_BASE_URL`, `APP_ORIGIN`, and
+`FRONTEND_SHARED_KEY` as described in the SCRUM-22 setup guide. Do not overwrite an existing
+`.env.local` when copying the example. Real login requires a configured Supabase project.
 
 ## Quality checks
 

@@ -4,11 +4,20 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import sample_payload
 
+from app.auth import require_session
 from app.config import Settings
 from app.logging_config import JsonFormatter
 from app.main import app, create_app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def authenticated_scoring_contract():
+    # These existing tests exercise scoring. Authentication uses separate, non-overridden apps in test_auth.py.
+    app.dependency_overrides[require_session] = lambda: {"user": {"id": "scoring-test"}}
+    yield
+    app.dependency_overrides.clear()
 
 
 def preflight(test_client, origin):

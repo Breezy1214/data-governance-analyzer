@@ -35,17 +35,22 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-echo "Starting backend at http://localhost:8000..."
+if [[ ! -f "$BACKEND_DIR/.env" || ! -f "$FRONTEND_DIR/.env.local" ]]; then
+  echo "Configure private environment files first; see README-SCRUM-22.md." >&2
+  exit 1
+fi
+
+echo "Starting backend at http://localhost:8022..."
 (
   cd "$BACKEND_DIR"
-  exec .venv/bin/uvicorn app.main:app --reload --port 8000
+  exec .venv/bin/uvicorn app.main:app --reload --port 8022 --env-file .env
 ) &
 backend_pid=$!
 
-echo "Starting frontend at http://localhost:3000..."
+echo "Starting frontend at http://localhost:3022/login..."
 (
   cd "$FRONTEND_DIR"
-  exec npm run dev
+  exec npm run dev -- --hostname localhost --port 3022
 ) &
 frontend_pid=$!
 

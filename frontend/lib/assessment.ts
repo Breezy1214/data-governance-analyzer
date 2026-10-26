@@ -200,24 +200,20 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
 }
 
 export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal): Promise<AssessmentResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("Assessment service is not configured");
-  }
-
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) abort();
   const timeout = setTimeout(abort, ASSESSMENT_TIMEOUT_MS);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/assessments`, {
+    const response = await fetch("/api/assessments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
       cache: "no-store",
       signal: controller.signal,
     });
+    if (response.status === 401) window.dispatchEvent(new Event("karlsgate-auth-expired"));
     if (!response.ok) throw new AssessmentServiceError(response.status);
 
     let result: unknown;

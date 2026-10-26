@@ -50,6 +50,17 @@
 }
 
 * { box-sizing: border-box; }
+.auth-page { width: min(100% - 40px, 460px); margin: 72px auto; }
+.auth-heading h1 { font-size: 32px; line-height: 1.2; letter-spacing: 0; margin: 16px 0; }
+.auth-heading p, .auth-note { color: var(--muted); line-height: 1.6; }
+.auth-form { margin-top: 32px; display: grid; gap: 12px; }
+.auth-form label { font-size: 14px; font-weight: 600; }
+.auth-form input { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--control-line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+.auth-form button { margin-top: 12px; min-height: 48px; }
+.auth-note { font-size: 13px; }
+.account-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.account-bar span { overflow-wrap: anywhere; min-width: 0; }
+.auth-status { padding: 24px; color: var(--muted); }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; }
 button, textarea, select { font: inherit; }

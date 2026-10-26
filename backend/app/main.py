@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth import require_session
+from app.auth import router as auth_router
 from app.config import Settings
 from app.logging_config import configure_logging, logger
 from app.request_limits import RequestBodyLimitMiddleware
@@ -25,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.include_router(auth_router)
 
     app.add_middleware(
         CORSMiddleware,
@@ -69,7 +72,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def version() -> dict[str, str]:
         return {"version": settings.version}
 
-    @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"])
+    @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"],
+              dependencies=[Depends(require_session)])
     def create_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
         request_id = str(uuid.uuid4())
         # Results describe a sensitive use case; keep them out of browser and proxy caches.

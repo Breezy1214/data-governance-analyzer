@@ -1,12 +1,19 @@
 # Data handling and retention (v1.0)
 
+> Historical baseline. On the SCRUM 22 review branch, authentication is required and session metadata
+> is stored separately. See [SCRUM 22](../README-SCRUM-22.md) for the current account/session policy.
+> Assessment answers remain unsaved on the server. Logout and account changes also clear local drafts.
+
 Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
 
 ## Decision
 
-v1.0 is **stateless**: assessments are not retained on the server, and there are no accounts or database. See [deployment.md](deployment.md).
+Assessments remain **stateless**: answers and reports are not retained on the server.
+SCRUM-22 adds authenticated accounts and a separate local session database containing
+identity/session metadata and encrypted provider tokens, not assessment content.
 
-- No authentication is implemented for v1.0.
+- Authentication is required on this review branch. Hosted deployment remains blocked until
+  production session storage and real-provider HTTPS checks are complete; see [SCRUM-22](../README-SCRUM-22.md).
 
 ## Field inventory
 
@@ -27,7 +34,10 @@ The API schema does not accept `description`; it remains exclusively in the brow
 ## Data flow
 
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.
-2. On **Assess risk**, the browser sends only the scored fields to `POST /assessments` in the request body. Nothing goes in the URL or query string. FastAPI is the only scoring implementation; if it is unavailable, the browser displays an error and does not produce a score.
+2. On **Assess risk**, the browser sends only the scored fields to same-origin `POST /api/assessments`.
+   The Next.js server forwards the request to FastAPI `POST /assessments` with server-only credentials.
+   Nothing goes in the URL or query string. FastAPI verifies the session and is the only scoring implementation;
+   if it is unavailable, the browser displays an error and does not produce a score.
 3. The API scores the request in memory and returns the result with `Cache-Control: no-store`. Nothing is written to a database.
 4. The PDF report is generated entirely in the browser (jsPDF) and downloaded with a generic filename (`data-governance-assessment.pdf`). It is never uploaded, and it carries no author or keyword metadata and no internal rule identifiers. See `frontend/lib/report.ts`.
 

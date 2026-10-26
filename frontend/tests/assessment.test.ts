@@ -41,7 +41,7 @@ describe("assessment client", () => {
 
     const result = await requestAssessment(baseline);
     expect(result).toEqual(assessmentResult);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.example.test/assessments");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/assessments");
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
     expect(JSON.parse(request.body as string)).toMatchObject({ schemaVersion: "2.0" });
@@ -64,12 +64,12 @@ describe("assessment client", () => {
     await expect(requestAssessment(baseline)).rejects.toThrow("network unavailable");
   });
 
-  it("fails when the assessment API is not configured", async () => {
+  it("uses the same-origin server even without a public API URL", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
     const fetchMock = stubAssessmentApi();
 
-    await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service is not configured");
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(requestAssessment(baseline)).resolves.toEqual(assessmentResult);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/assessments");
   });
 
   it("does not hide an API validation error with a local score", async () => {

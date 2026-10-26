@@ -203,6 +203,9 @@ export function AssessmentWizard() {
     setDownloading(true);
     setReportError(null);
     try {
+      const authorization = await fetch("/api/session", { cache: "no-store", signal: controller.signal });
+      if (authorization.status === 401) window.dispatchEvent(new Event("karlsgate-auth-expired"));
+      if (!authorization.ok) throw new Error("Session verification failed");
       await downloadAssessmentReport(input, result, controller.signal);
     } catch {
       if (controller.signal.aborted || pendingReport.current !== controller) return;
