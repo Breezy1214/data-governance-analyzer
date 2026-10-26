@@ -30,7 +30,7 @@ import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
 const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
 const RETENTION_NOTICE =
-  `Your description stays in this browser tab. Questionnaire answers are sent to our service to calculate your score and are not saved on our servers. Your draft is cleared when you close the tab, start over, or are inactive for ${IDLE_MINUTES} minutes.`;
+  `Your description stays in this tab. Answers are scored, not stored. Drafts clear after ${IDLE_MINUTES} minutes idle.`;
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -229,8 +229,8 @@ export function AssessmentWizard() {
       setImportStatus({
         kind: "notice",
         message: imported.truncated
-          ? `Added the first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters of ${imported.fileName}. Edit it down to the part that matters.`
-          : `Added the text from ${imported.fileName}. Check it before continuing.`,
+          ? `Imported ${imported.fileName} (first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters).`
+          : `Imported ${imported.fileName}.`,
       });
     } catch (failure) {
       if (controller.signal.aborted) return;
@@ -322,13 +322,13 @@ export function AssessmentWizard() {
                 }}
               >
                 <div>
-                  <p className="dropzone-title">Have a document already?</p>
+                  <p className="dropzone-title">Drop a document here</p>
                   <p className="dropzone-help" id="upload-help">
-                    Drop {ACCEPTED_LABEL} here, or choose a file. It is read in this browser and never uploaded.
+                    {ACCEPTED_LABEL}. It stays on your device.
                   </p>
                 </div>
                 <label className="sr-only" htmlFor="document-upload">
-                  Upload a document to fill in the description ({ACCEPTED_LABEL})
+                  Import a document ({ACCEPTED_LABEL})
                 </label>
                 <button
                   className="secondary"
@@ -348,7 +348,7 @@ export function AssessmentWizard() {
                   onChange={(event) => void importDocument(event.target.files?.[0])}
                 />
               </div>
-              <p className="method-note import-status" aria-live="polite">{importing ? "Reading your document\u2026" : importStatus?.kind === "notice" ? importStatus.message : ""}</p>
+              <p className="method-note import-status" aria-live="polite">{importing ? "Reading your document\u2026" : importStatus?.kind === "notice" && input.description ? importStatus.message : ""}</p>
               {importStatus?.kind === "error" && <p className="error" role="alert">{importStatus.message}</p>}
 
               <p className="method-note" id="retention-notice">{RETENTION_NOTICE}</p>

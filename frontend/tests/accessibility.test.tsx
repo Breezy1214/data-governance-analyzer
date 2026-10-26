@@ -163,7 +163,7 @@ describe("assessment flow accessibility", () => {
     expect(input).not.toBeNull();
     expect(input.getAttribute("accept")).toContain(".pdf");
     expect(input.getAttribute("aria-describedby")).toBe("upload-help");
-    expect(document.querySelector("#upload-help")?.textContent).toMatch(/never uploaded/i);
+    expect(document.querySelector("#upload-help")?.textContent).toMatch(/stays on your device/i);
     expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
     await expectNoViolations(container);
   });

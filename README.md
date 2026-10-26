@@ -12,6 +12,14 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 ## Local development
 
+From the repository root, run both services together:
+
+```bash
+./scripts/start-dev.sh
+```
+
+Press `Ctrl+C` to stop the frontend and backend.
+
 ### Backend
 
 ```bash
