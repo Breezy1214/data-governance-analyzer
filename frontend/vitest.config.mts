@@ -3,8 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    // Mirrors the "@/*" path alias in tsconfig.json so component tests
-    // can import the same modules the app does.
+    // Mirror tsconfig's "@/*" alias.
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
   },
   test: {

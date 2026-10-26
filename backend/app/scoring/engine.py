@@ -17,11 +17,8 @@ from app.scoring.models import (
     RecommendationDetail,
     RiskFactor,
 )
+from app.scoring.recommendations import map_recommendations
 from app.scoring.rules import RuleSet, get_ruleset
-
-
-def _unique(items):
-    return list(dict.fromkeys(items))
 
 
 def score_assessment(
@@ -42,8 +39,7 @@ def score_assessment(
     level = ruleset.thresholds.level_for(score)
     guidance = ruleset.guidance_by_level[level]
 
-    applicable_capabilities = [cap for cap in ruleset.capabilities if cap.applies(request)]
-    capabilities = _unique(cap.label for cap in applicable_capabilities)
+    mapped = map_recommendations([factor.ruleId for factor in factors], ruleset.version)
 
     fired_rule_ids = {factor.ruleId for factor in factors}
     recommendation_rules = [rule for rule in ruleset.recommendations if rule.applies(request)]
@@ -59,9 +55,25 @@ def score_assessment(
         for priority, rule in enumerate(recommendation_rules, start=1)
     ]
 
+    # Preserve v2 priorities/rationales, then include any catalog safeguard not
+    # already represented (e.g. internal raw exchange without vendor matching).
+    actions = {item.action for item in recommendation_details}
+    for safeguard in mapped.generalSafeguards:
+        if safeguard.text not in actions and safeguard.factorIds:
+            recommendation_details.append(RecommendationDetail(
+                id=safeguard.id,
+                priority=len(recommendation_details) + 1,
+                title="Additional safeguard",
+                action=safeguard.text,
+                rationale="This safeguard addresses the identified risk factors listed below.",
+                riskFactorIds=safeguard.factorIds,
+            ))
+            actions.add(safeguard.text)
+
     limitations = [lim.copy for lim in ruleset.limitations if lim.applies(request)]
 
     return AssessmentResponse(
+        **mapped.model_dump(),
         schemaVersion=SCHEMA_VERSION,
         rulesVersion=ruleset.version,
         score=score,
@@ -69,7 +81,7 @@ def score_assessment(
         guidance=guidance,
         factors=factors,
         recommendationDetails=recommendation_details,
-        capabilities=capabilities,
+        capabilities=[item.label for item in mapped.karlsgateRecommendations],
         limitations=limitations,
         assessedAt=assessed_at or datetime.now(timezone.utc).isoformat(),
     )

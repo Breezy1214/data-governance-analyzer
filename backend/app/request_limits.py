@@ -11,12 +11,9 @@ from app.logging_config import logger
 
 
 class RequestBodyLimitMiddleware:
-    """Reject bodies above ``max_bytes``, including chunked requests.
+    """Reject bodies over max_bytes, including chunked ones.
 
-    Checking Content-Length avoids reading known-oversized bodies. Otherwise,
-    the middleware buffers only up to the configured cap and replays that
-    bounded body to the application. This also covers chunked requests without
-    allowing the framework's JSON parser to accumulate an unbounded payload.
+    Buffers at most max_bytes before replaying the body to the app.
     """
 
     def __init__(self, app: ASGIApp, max_bytes: int) -> None:

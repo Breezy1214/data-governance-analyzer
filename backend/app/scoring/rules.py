@@ -23,21 +23,10 @@ Predicate = Callable[[AssessmentRequest], bool]
 
 @dataclass(frozen=True)
 class Rule:
-    """A single scoring rule: if `applies` is true, `points` are added."""
-
     id: str
     category: str
     label: str
     points: int
-    applies: Predicate
-
-
-@dataclass(frozen=True)
-class Capability:
-    """A privacy-enhancing capability shown only when its applicability rule passes."""
-
-    id: str
-    label: str
     applies: Predicate
 
 
@@ -52,8 +41,6 @@ class Limitation:
 
 @dataclass(frozen=True)
 class RecommendationRule:
-    """A prioritized safeguard and its traceability to scoring rules."""
-
     id: str
     title: str
     action: str
@@ -82,7 +69,6 @@ class RuleSet:
     thresholds: RiskThresholds
     guidance_by_level: Mapping[RiskLevel, str]
     rules: tuple[Rule, ...]
-    capabilities: tuple[Capability, ...]
     limitations: tuple[Limitation, ...]
     recommendations: tuple[RecommendationRule, ...]
 
@@ -120,7 +106,7 @@ RULESET_V1_0 = RuleSet(
         "MEDIUM": "Proceed only after the listed controls and an accountable review are in place.",
         "HIGH": "Pause implementation until privacy, security, and governance controls are approved.",
     },
-    # Order matters only for readability; every applicable rule is reported.
+    # Tuple order is the factor display order.
     rules=(
         Rule("DATA_SENSITIVITY_HIGH", "data_sensitivity", "Regulated or highly sensitive information", 28, _has_high_sensitivity),
         Rule("DATA_SENSITIVITY_DIRECT", "data_sensitivity", "Direct personal identifiers", 14, _has_direct_identifiers_only),
@@ -135,28 +121,6 @@ RULESET_V1_0 = RuleSet(
         Rule("PURPOSE_OTHER", "purpose", "Intended use: Other", 6, lambda p: p.purpose == "other"),
         Rule("PURPOSE_MARKETING", "purpose", "Intended use: Marketing or advertising", 8, lambda p: p.purpose == "marketing"),
         Rule("PURPOSE_AI", "purpose", "Intended use: AI model training or development", 10, lambda p: p.purpose == "ai"),
-    ),
-    # Order here is the display/priority order: protected matching, then
-    # re-identification remediation, then de-identification, then the two
-    # controls that always apply.
-    capabilities=(
-        Capability(
-            "PROTECTED_MATCHING",
-            "Protected matching",
-            _uses_protected_matching,
-        ),
-        Capability(
-            "REID_REMEDIATION",
-            "Re-identification risk remediation",
-            lambda p: p.combined == "yes",
-        ),
-        Capability(
-            "DEIDENTIFICATION",
-            "De-identification",
-            _has_high_sensitivity,
-        ),
-        Capability("DATA_MINIMIZATION", "Data minimization", lambda p: True),
-        Capability("GOVERNANCE_EXECUTION", "Governance policy execution", lambda p: True),
     ),
     limitations=(
         Limitation(
@@ -263,11 +227,9 @@ def _validate_ruleset(ruleset: RuleSet) -> None:
 
     rule_ids = tuple(rule.id for rule in ruleset.rules)
     recommendation_ids = tuple(rule.id for rule in ruleset.recommendations)
-    capability_ids = tuple(capability.id for capability in ruleset.capabilities)
     duplicate_ids = {
         "rules": _duplicates(rule_ids),
         "recommendations": _duplicates(recommendation_ids),
-        "capabilities": _duplicates(capability_ids),
     }
     collisions = {kind: values for kind, values in duplicate_ids.items() if values}
     if collisions:
@@ -309,12 +271,7 @@ CURRENT_RULES_VERSION = RULESET_V1_0.version
 
 
 def get_ruleset(version: str | None = None) -> RuleSet:
-    """Look up a ruleset by version, defaulting to the current one.
-
-    Raises ValueError for an unsupported/unknown rules version so the API
-    layer can turn it into a clear client error rather than a misleading
-    score computed under the wrong rubric.
-    """
+    """Look up a ruleset by version, defaulting to the current one."""
     resolved = version or CURRENT_RULES_VERSION
     try:
         return RULESETS[resolved]

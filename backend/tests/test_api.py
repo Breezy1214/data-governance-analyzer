@@ -2,25 +2,24 @@ from time import perf_counter
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import sample_payload
 
+from app.config import Settings
 from app.logging_config import JsonFormatter
-from app.main import app
+from app.main import app, create_app
 
 client = TestClient(app)
 
 
-def sample_payload(**overrides):
-    payload = {
-        "dataTypes": ["emails"],
-        "externalAccess": "yes",
-        "rawExchange": "no",
-        "dataMovement": "no",
-        "combined": "no",
-        "secondaryUse": "no",
-        "purpose": "matching",
-    }
-    payload.update(overrides)
-    return payload
+def preflight(test_client, origin):
+    return test_client.options(
+        "/assessments",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
 
 
 def test_health_and_version():
@@ -36,6 +35,14 @@ def test_assessment_returns_transparent_score_with_attribution():
     assert body["level"] == "MEDIUM"
     assert body["schemaVersion"] == "2.0"
     assert body["rulesVersion"] == "1.0"
+    assert body["mappingVersion"] == "1.1"
+    assert body["mappingApprovalStatus"] == "approved"
+    assert {item["text"] for item in body["generalSafeguards"]} <= {
+        item["action"] for item in body["recommendationDetails"]
+    }
+    matching = next(item for item in body["karlsgateRecommendations"] if item["id"] == "PROTECTED_MATCHING")
+    assert matching["conditionId"] == "EXTERNAL_AND_RAW_OR_MATCHING"
+    assert matching["factorIds"] == ["EXTERNAL_ACCESS", "PURPOSE_MATCHING"]
     assert "Protected matching" in body["capabilities"]
     assert {factor["ruleId"] for factor in body["factors"]} == {
         "DATA_SENSITIVITY_DIRECT",
@@ -102,17 +109,26 @@ def test_oversized_request_is_rejected_before_validation():
 
 @pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
 def test_development_frontend_origins_can_post(origin):
-    response = client.options(
-        "/assessments",
-        headers={
-            "Origin": origin,
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
-        },
-    )
+    response = preflight(client, origin)
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
+
+
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [
+        ("https://data-governance-analyzer-git-dev-team.vercel.app", True),
+        ("https://data-governance-analyzer-abc123-team.vercel.app", True),
+        ("https://evil.example/data-governance-analyzer-x-team.vercel.app", False),
+        ("https://other-project-team.vercel.app", False),
+    ],
+)
+def test_preview_origin_regex_controls_cors(origin, allowed):
+    settings = Settings(allowed_origin_regex=r"https://data-governance-analyzer-[a-z0-9-]+-team\.vercel\.app")
+    response = preflight(TestClient(create_app(settings)), origin)
+
+    assert (response.headers.get("access-control-allow-origin") == origin) is allowed
 
 
 def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):

@@ -1,20 +1,16 @@
 import {
   AssessmentInput,
   AssessmentResult,
-  CAPABILITY_COPY,
+  BINARY_FIELDS,
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
   QUESTION_LABELS,
+  RiskLevel,
 } from "./assessment";
+import { recommendationReason } from "./recommendations";
+import { PALETTE, RISK_COLORS } from "./theme";
 
-/**
- * Assessment report (SCRUM-15).
- *
- * The report is built and rendered entirely in the browser and is never
- * uploaded; see docs/data-handling.md. `buildReportModel` is a pure
- * function so the report's content can be tested without a PDF engine,
- * and it deliberately omits internal identifiers such as rule ids.
- */
+// Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
 
 export const DISCLAIMER =
   "This report is decision support, not legal advice. It does not determine compliance with HIPAA, PCI DSS, or any other regulation. Specialist legal, privacy, and security review may still be required.";
@@ -27,10 +23,11 @@ export type ReportSection =
 export type ReportModel = {
   title: string;
   meta: { label: string; value: string }[];
+  risk: { level: RiskLevel; score: number };
   sections: ReportSection[];
 };
 
-function formatAssessedAt(value: string): string {
+export function formatAssessedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
@@ -50,11 +47,7 @@ export function buildReportModel(
           label: "Information involved",
           value: input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ") || "None selected",
         },
-        { label: QUESTION_LABELS.externalAccess, value: answerLabel(input.externalAccess) },
-        { label: QUESTION_LABELS.rawExchange, value: answerLabel(input.rawExchange) },
-        { label: QUESTION_LABELS.dataMovement, value: answerLabel(input.dataMovement) },
-        { label: QUESTION_LABELS.combined, value: answerLabel(input.combined) },
-        { label: QUESTION_LABELS.secondaryUse, value: answerLabel(input.secondaryUse) },
+        ...BINARY_FIELDS.map((key) => ({ label: QUESTION_LABELS[key], value: answerLabel(input[key]) })),
         { label: QUESTION_LABELS.purpose, value: PURPOSE_LABELS[input.purpose] },
       ],
     },
@@ -85,11 +78,11 @@ export function buildReportModel(
     },
   ];
 
-  if (result.capabilities.length) {
+  if (result.karlsgateRecommendations.length) {
     sections.push({
-      heading: "Privacy-enhancing capability fit",
+      heading: "Karlsgate capability fit",
       kind: "list",
-      items: result.capabilities.map((capability) => `${capability}: ${CAPABILITY_COPY[capability] ?? ""}`),
+      items: result.karlsgateRecommendations.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
     });
   }
 
@@ -108,7 +101,10 @@ export function buildReportModel(
     meta: [
       { label: "Assessed", value: formatAssessedAt(result.assessedAt) },
       { label: "Scoring rules version", value: result.rulesVersion },
+      { label: "Recommendation mapping version", value: result.mappingVersion },
+      { label: "Mapping approval", value: result.mappingApprovalStatus === "approved" ? "Approved" : "Stakeholder approval pending" },
     ],
+    risk: { level: result.level, score: result.score },
     sections,
   };
 }
@@ -118,8 +114,6 @@ function answerLabel(value: string): string {
   if (value === "no") return "No";
   return "Not answered";
 }
-
-// --- PDF rendering ------------------------------------------------------
 
 const PAGE = { width: 595.28, height: 841.89 }; // A4 in points
 const MARGIN = 56;
@@ -132,7 +126,6 @@ function wrap(doc: Doc, text: string, width: number): string[] {
   return doc.splitTextToSize(text, width) as string[];
 }
 
-/** Renders the model into a jsPDF document, paginating as it goes. */
 export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -160,7 +153,7 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
     }
   };
 
-  // Title block
+  doc.setTextColor(PALETTE.ink);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   writeLines(wrap(doc, model.title, CONTENT_WIDTH));
@@ -168,11 +161,21 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(90);
+  doc.setTextColor(PALETTE.muted);
   writeLines(model.meta.map((item) => `${item.label}: ${item.value}`));
-  doc.setTextColor(0);
   y += 6;
-  doc.setDrawColor(190);
+
+  // Risk banner: shape and text label, so the level never depends on colour.
+  const riskColor = RISK_COLORS[model.risk.level];
+  doc.setFillColor(riskColor);
+  drawRiskShape(doc, model.risk.level, MARGIN + 5, y - 4);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(riskColor);
+  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN + 16, y);
+  doc.setTextColor(PALETTE.ink);
+  y += 14;
+  doc.setDrawColor(PALETTE.line);
   doc.line(MARGIN, y, PAGE.width - MARGIN, y);
   y += 16;
 
@@ -216,7 +219,7 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
     doc.setPage(page);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(120);
+    doc.setTextColor(PALETTE.muted);
     doc.text("Decision support, not legal advice.", MARGIN, PAGE.height - MARGIN + 16);
     doc.text(`Page ${page} of ${pages}`, PAGE.width - MARGIN, PAGE.height - MARGIN + 16, { align: "right" });
   }
@@ -224,12 +227,19 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   return doc;
 }
 
-export const REPORT_FILENAME = "data-governance-assessment.pdf";
+/** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */
+function drawRiskShape(doc: Doc, level: RiskLevel, x: number, y: number) {
+  const r = 4.5;
+  if (level === "LOW") doc.circle(x, y, r, "F");
+  else if (level === "MEDIUM") {
+    doc.triangle(x - r, y, x, y - r, x + r, y, "F");
+    doc.triangle(x - r, y, x, y + r, x + r, y, "F");
+  } else doc.triangle(x - r, y + r, x, y - r, x + r, y + r, "F");
+}
 
-/**
- * Builds and downloads the report. Throws if generation fails so the
- * caller can show a message; the assessment on screen is untouched.
- */
+const REPORT_FILENAME = "data-governance-assessment.pdf";
+
+/** Throws on failure so the caller can show an error. */
 export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,

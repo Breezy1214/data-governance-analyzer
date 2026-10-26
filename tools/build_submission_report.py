@@ -2,8 +2,6 @@ from pathlib import Path
 
 from PIL import Image
 from docx import Document
-from docx.enum.section import WD_SECTION
-from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
@@ -105,8 +103,7 @@ def keep_with_next(paragraph) -> None:
 
 
 def add_heading(doc: Document, text: str, level: int) -> None:
-    paragraph = doc.add_heading(text, level=level)
-    paragraph.paragraph_format.keep_with_next = True
+    doc.add_heading(text, level=level)
 
 
 def add_body(doc: Document, text: str, indent: bool = True) -> None:
@@ -129,17 +126,17 @@ def add_figure(
     width: float = 6.45,
 ) -> None:
     number_paragraph = doc.add_paragraph()
-    number_paragraph.paragraph_format.keep_with_next = True
+    keep_with_next(number_paragraph)
     number_paragraph.paragraph_format.line_spacing = 1
     number_paragraph.add_run(f"Figure {number}").bold = True
     title_paragraph = doc.add_paragraph()
-    title_paragraph.paragraph_format.keep_with_next = True
+    keep_with_next(title_paragraph)
     title_paragraph.paragraph_format.line_spacing = 1
     title_run = title_paragraph.add_run(title)
     title_run.italic = True
     image_paragraph = doc.add_paragraph()
     image_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    image_paragraph.paragraph_format.keep_with_next = True
+    keep_with_next(image_paragraph)
     image_paragraph.paragraph_format.line_spacing = 1
     image_paragraph.add_run().add_picture(str(image_path), width=Inches(width))
     note_paragraph = doc.add_paragraph()
@@ -237,13 +234,13 @@ def add_verification_table(doc: Document) -> None:
 def add_story(doc: Document, story: dict) -> None:
     add_heading(doc, story["heading"], 3)
     metadata = doc.add_paragraph()
-    metadata.paragraph_format.keep_with_next = True
+    keep_with_next(metadata)
     metadata_run = metadata.add_run(story["meta"])
     metadata_run.bold = True
     metadata_run.font.color.rgb = RGBColor.from_string(MID)
     add_body(doc, story["story"])
     label = doc.add_paragraph()
-    label.paragraph_format.keep_with_next = True
+    keep_with_next(label)
     label.add_run("Acceptance criteria").bold = True
     add_bullets(doc, story["criteria"])
 
@@ -289,7 +286,7 @@ def configure_document(doc: Document) -> None:
         style._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
         style.paragraph_format.space_before = Pt(12)
         style.paragraph_format.space_after = Pt(0)
-        style.paragraph_format.keep_with_next = True
+        keep_with_next(style)
 
     styles["Heading 1"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
     styles["Heading 2"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -300,9 +297,6 @@ def configure_document(doc: Document) -> None:
     styles["List Bullet"].paragraph_format.line_spacing = 2
     styles["List Bullet"].paragraph_format.left_indent = Inches(0.5)
     styles["List Bullet"].paragraph_format.first_line_indent = Inches(-0.25)
-
-    if "Figure Caption" not in styles:
-        styles.add_style("Figure Caption", WD_STYLE_TYPE.PARAGRAPH)
 
 
 def build_report() -> Path:
@@ -366,11 +360,11 @@ def build_report() -> Path:
     )
     doc.add_page_break()
     table_number = doc.add_paragraph()
-    table_number.paragraph_format.keep_with_next = True
+    keep_with_next(table_number)
     table_number.paragraph_format.line_spacing = 1
     table_number.add_run("Table 1").bold = True
     table_title = doc.add_paragraph()
-    table_title.paragraph_format.keep_with_next = True
+    keep_with_next(table_title)
     table_title.paragraph_format.line_spacing = 1
     table_title.add_run("Milestone backlog summary").italic = True
     add_status_table(doc)

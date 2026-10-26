@@ -23,12 +23,12 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+"app.scoring" = ["mappings/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
 target-version = "py39"
-
-[tool.ruff.lint]
-ignore = ["UP045"]

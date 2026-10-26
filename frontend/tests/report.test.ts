@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssessmentInput } from "../lib/assessment";
-import { DISCLAIMER, buildReportModel, downloadAssessmentReport, renderAssessmentPdf } from "../lib/report";
+import { DISCLAIMER, ReportModel, buildReportModel, downloadAssessmentReport, renderAssessmentPdf } from "../lib/report";
 import { assessmentResult } from "./assessment-fixture";
 
 const input: AssessmentInput = {
@@ -17,76 +17,69 @@ const input: AssessmentInput = {
 const result = assessmentResult;
 const model = buildReportModel(input, result);
 
+function headingsOf(report: ReportModel): string[] {
+  return report.sections.map((section) => section.heading);
+}
+
+const headings = headingsOf(model);
+const flat = JSON.stringify(model);
+
 afterEach(() => vi.restoreAllMocks());
-
-function headings() {
-  return model.sections.map((section) => section.heading);
-}
-
-function flatten(): string {
-  return JSON.stringify(model);
-}
 
 describe("report model", () => {
   it("includes every section the ticket requires", () => {
-    expect(headings()).toEqual([
+    expect(headings).toEqual([
       "Use case",
       "Questionnaire responses",
       "Risk assessment",
       "Contributing risk factors",
       "Recommended safeguards",
-      "Privacy-enhancing capability fit",
+      "Karlsgate capability fit",
       "Specialist review required",
       "Disclaimer",
     ]);
   });
 
   it("reports the same score, level, and rules version shown in the app", () => {
-    expect(flatten()).toContain(`${result.score} out of 100`);
-    expect(flatten()).toContain(result.level);
-    expect(flatten()).toContain(result.guidance);
+    expect(flat).toContain(`${result.score} out of 100`);
+    expect(flat).toContain(result.level);
+    expect(flat).toContain(result.guidance);
     expect(model.meta).toContainEqual({ label: "Scoring rules version", value: result.rulesVersion });
+    expect(model.meta).toContainEqual({ label: "Recommendation mapping version", value: result.mappingVersion });
+    expect(model.meta).toContainEqual({ label: "Mapping approval", value: "Approved" });
   });
 
   it("carries the use case, every answer, and every recommendation", () => {
-    expect(flatten()).toContain(input.description);
-    expect(flatten()).toContain("Email addresses, Health information");
-    expect(flatten()).toContain("Research");
-    result.recommendationDetails.forEach((item) => expect(flatten()).toContain(item.action));
+    expect(flat).toContain(input.description);
+    expect(flat).toContain("Email addresses, Health information");
+    expect(flat).toContain("Research");
     result.recommendationDetails.forEach((item) => {
-      expect(flatten()).toContain(item.rationale);
+      expect(flat).toContain(item.action);
+      expect(flat).toContain(item.rationale);
       item.riskFactorIds.forEach((ruleId) => {
-        expect(flatten()).toContain(result.factors.find((factor) => factor.ruleId === ruleId)?.label);
+        expect(flat).toContain(result.factors.find((factor) => factor.ruleId === ruleId)?.label);
       });
     });
-    result.factors.forEach((factor) => expect(flatten()).toContain(factor.label));
+    result.factors.forEach((factor) => expect(flat).toContain(factor.label));
+    result.karlsgateRecommendations.forEach((item) => expect(flat).toContain(item.text));
+    expect(flat).toContain("Relevant to:");
   });
 
   it("omits internal rule identifiers and categories", () => {
     result.factors.forEach((factor) => {
-      expect(flatten()).not.toContain(factor.ruleId);
-      expect(flatten()).not.toContain(`"${factor.category}"`);
+      expect(flat).not.toContain(factor.ruleId);
+      expect(flat).not.toContain(`"${factor.category}"`);
     });
-    expect(flatten()).not.toContain("schemaVersion");
+    expect(flat).not.toContain("schemaVersion");
   });
 
   it("states the decision-support disclaimer", () => {
-    expect(flatten()).toContain(DISCLAIMER);
+    expect(flat).toContain(DISCLAIMER);
   });
 
   it("drops the conditional sections when they do not apply", () => {
-    const lowRisk: AssessmentInput = {
-      ...input,
-      dataTypes: ["emails"],
-      externalAccess: "no",
-      rawExchange: "no",
-      dataMovement: "no",
-      combined: "no",
-      secondaryUse: "no",
-      purpose: "analytics",
-    };
-    const lowModel = buildReportModel(lowRisk, { ...result, limitations: [] });
-    expect(lowModel.sections.map((section) => section.heading)).not.toContain("Specialist review required");
+    const lowModel = buildReportModel(input, { ...result, limitations: [] });
+    expect(headingsOf(lowModel)).not.toContain("Specialist review required");
   });
 
   it("labels an unanswered question instead of leaving it blank", () => {

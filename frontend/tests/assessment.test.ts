@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AssessmentInput,
   ASSESSMENT_TIMEOUT_MS,
@@ -6,7 +6,7 @@ import {
   validateDescription,
   validateQuestions,
 } from "../lib/assessment";
-import { assessmentResult } from "./assessment-fixture";
+import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
 const baseline: AssessmentInput = {
   description: "Match customer email addresses with a partner for campaign measurement.",
@@ -18,6 +18,10 @@ const baseline: AssessmentInput = {
   secondaryUse: "no",
   purpose: "matching",
 };
+
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -33,13 +37,7 @@ describe("assessment client", () => {
 
   it("sends an explicit schema version to the assessment API", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test/");
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(assessmentResult), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAssessmentApi();
 
     const result = await requestAssessment(baseline);
     expect(result).toEqual(assessmentResult);
@@ -50,9 +48,7 @@ describe("assessment client", () => {
   });
 
   it("never sends the free-text description to the assessment API", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(assessmentResult), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAssessmentApi();
 
     await requestAssessment(baseline);
 
@@ -63,24 +59,21 @@ describe("assessment client", () => {
   });
 
   it("fails when the configured API is unreachable", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network unavailable")));
+    stubAssessmentApi(new TypeError("network unavailable"));
 
     await expect(requestAssessment(baseline)).rejects.toThrow("network unavailable");
   });
 
   it("fails when the assessment API is not configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAssessmentApi();
 
     await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service is not configured");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not hide an API validation error with a local score", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 422 })));
+    stubAssessmentApi(new Response(null, { status: 422 }));
 
     await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service returned 422");
   });
@@ -95,24 +88,29 @@ describe("assessment client", () => {
     { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], riskFactorIds: ["UNKNOWN_RULE"] }] },
     { ...assessmentResult, recommendationDetails: [{ ...assessmentResult.recommendationDetails[0], priority: 2 }] },
     { ...assessmentResult, assessedAt: "not a date" },
+    { ...assessmentResult, mappingVersion: undefined },
+    { ...assessmentResult, mappingVersion: "99.0" },
+    { ...assessmentResult, mappingApprovalStatus: "pending" },
+    { ...assessmentResult, generalSafeguards: [] },
+    { ...assessmentResult, capabilities: [] },
+    { ...assessmentResult, karlsgateRecommendations: [{ ...assessmentResult.karlsgateRecommendations[0], text: "Unsupported claim" }] },
+    { ...assessmentResult, karlsgateRecommendations: [{ ...assessmentResult.karlsgateRecommendations[0], conditionId: "UNKNOWN" }] },
+    { ...assessmentResult, karlsgateRecommendations: [assessmentResult.karlsgateRecommendations[0], assessmentResult.karlsgateRecommendations[0]] },
+    { ...assessmentResult, karlsgateRecommendations: assessmentResult.karlsgateRecommendations.slice(1), capabilities: assessmentResult.capabilities.slice(1) },
+    { ...assessmentResult, karlsgateRecommendations: [...assessmentResult.karlsgateRecommendations].reverse(), capabilities: [...assessmentResult.capabilities].reverse() },
   ])("rejects a malformed API response: %j", async (body) => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
+    stubAssessmentApi(new Response(JSON.stringify(body)));
     await expect(requestAssessment(baseline)).rejects.toThrow("invalid response");
   });
 
   it("rejects invalid JSON", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not json")));
+    stubAssessmentApi(new Response("not json"));
     await expect(requestAssessment(baseline)).rejects.toThrow("invalid response");
   });
 
   it("aborts hung requests and releases the timeout", async () => {
     vi.useFakeTimers();
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
-      options.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    })));
+    vi.stubGlobal("fetch", vi.fn(hangingFetch));
     const assertion = expect(requestAssessment(baseline)).rejects.toMatchObject({ name: "AbortError" });
     await vi.advanceTimersByTimeAsync(ASSESSMENT_TIMEOUT_MS);
     await assertion;
@@ -121,8 +119,7 @@ describe("assessment client", () => {
 
   it("cleans up the timeout and cancellation listener after success", async () => {
     vi.useFakeTimers();
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(assessmentResult))));
+    stubAssessmentApi();
     const controller = new AbortController();
     const remove = vi.spyOn(controller.signal, "removeEventListener");
     await requestAssessment(baseline, controller.signal);

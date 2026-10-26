@@ -1,13 +1,6 @@
 import { AssessmentInput, isAssessmentInput } from "./assessment";
 
-/**
- * Session-scoped draft storage (SCRUM-16).
- *
- * v1.0 does not retain assessments. A draft lives only in this tab's
- * sessionStorage so an accidental refresh does not lose work; it is
- * cleared when the tab closes, after IDLE_TIMEOUT_MS of inactivity, or
- * when the person starts over. See docs/data-handling.md.
- */
+/** v1.0 retains nothing: the draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16, docs/data-handling.md). */
 
 export const DRAFT_KEY = "governance-assessment-draft-v2";
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -17,7 +10,7 @@ const LEGACY_KEYS = ["governance-assessment-draft-v1"];
 
 type StoredDraft = { savedAt: number; input: AssessmentInput };
 
-function safely<T>(action: () => T, fallback: T): T {
+function safely<T>(action: () => T, fallback?: T): T | undefined {
   try {
     return action();
   } catch {
@@ -30,12 +23,12 @@ export function purgeLegacyDrafts(storage?: Storage): void {
   safely(() => {
     const target = storage ?? window.localStorage;
     LEGACY_KEYS.forEach((key) => target.removeItem(key));
-  }, undefined);
+  });
 }
 
 export function saveDraft(input: AssessmentInput, storage?: Storage, now = Date.now()): void {
   const draft: StoredDraft = { savedAt: now, input };
-  safely(() => (storage ?? window.sessionStorage).setItem(DRAFT_KEY, JSON.stringify(draft)), undefined);
+  safely(() => (storage ?? window.sessionStorage).setItem(DRAFT_KEY, JSON.stringify(draft)));
 }
 
 export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput | null {
@@ -56,5 +49,5 @@ export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput 
 }
 
 export function clearDraft(storage?: Storage): void {
-  safely(() => (storage ?? window.sessionStorage).removeItem(DRAFT_KEY), undefined);
+  safely(() => (storage ?? window.sessionStorage).removeItem(DRAFT_KEY));
 }

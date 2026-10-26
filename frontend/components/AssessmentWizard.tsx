@@ -6,9 +6,9 @@ import {
   AssessmentResult,
   AssessmentServiceError,
   DATA_TYPE_LABELS,
+  DESCRIPTION_MAX_LENGTH,
   DataType,
   EMPTY_INPUT,
-  CAPABILITY_COPY,
   PURPOSE_LABELS,
   QUESTION_LABELS,
   Purpose,
@@ -17,13 +17,20 @@ import {
   validateDescription,
   validateQuestions,
 } from "@/lib/assessment";
-import { downloadAssessmentReport } from "@/lib/report";
-import { riskColor } from "@/lib/risk-color";
+import { downloadAssessmentReport, formatAssessedAt } from "@/lib/report";
+import {
+  ACCEPTED_FILE_TYPES,
+  ACCEPTED_LABEL,
+  DocumentImportError,
+  extractDocumentText,
+} from "@/lib/document-import";
+import { recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 
 const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
+const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
 const RETENTION_NOTICE =
-  "Your description stays in this browser tab. Questionnaire answers are sent to our service to calculate your score and are not saved on our servers. Your draft is cleared when you close the tab, start over, or are inactive for 30 minutes.";
+  `Your description stays in this browser tab. Questionnaire answers are sent to our service to calculate your score and are not saved on our servers. Your draft is cleared when you close the tab, start over, or are inactive for ${IDLE_MINUTES} minutes.`;
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -61,9 +68,14 @@ export function AssessmentWizard() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ kind: "notice" | "error"; message: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
   const pendingAssessment = useRef<AbortController | null>(null);
   const pendingReport = useRef<AbortController | null>(null);
+  const pendingImport = useRef<AbortController | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const factorLabelsById = useMemo(
     () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
@@ -75,20 +87,31 @@ export function AssessmentWizard() {
     pendingAssessment.current = null;
     pendingReport.current?.abort();
     pendingReport.current = null;
+    pendingImport.current?.abort();
+    pendingImport.current = null;
     setLoading(false);
     setDownloading(false);
+    setImporting(false);
   }, []);
 
-  useEffect(() => () => {
-    pendingAssessment.current?.abort();
-    pendingAssessment.current = null;
-    pendingReport.current?.abort();
-    pendingReport.current = null;
-  }, []);
+  useEffect(() => cancelPendingWork, [cancelPendingWork]);
+
+  const reset = useCallback(() => {
+    cancelPendingWork();
+    setInput(EMPTY_INPUT);
+    setResult(null);
+    setStep(0);
+    setMaxReached(0);
+    setError(null);
+    setReportError(null);
+    setImportStatus(null);
+    clearDraft();
+  }, [cancelPendingWork]);
 
   useEffect(() => {
     purgeLegacyDrafts();
     const restored = loadDraft();
+    // Deferred: sessionStorage is client-only, and react-hooks/set-state-in-effect bans sync setState here.
     const restoreDraft = window.setTimeout(() => {
       if (restored) setInput(restored);
       setDraftReady(true);
@@ -108,14 +131,8 @@ export function AssessmentWizard() {
     const restart = () => {
       window.clearTimeout(idle);
       idle = window.setTimeout(() => {
-        cancelPendingWork();
-        clearDraft();
-        setInput(EMPTY_INPUT);
-        setResult(null);
-        setStep(0);
-        setMaxReached(0);
-        setReportError(null);
-        setError("Your session expired after 30 minutes of inactivity, so your answers were cleared.");
+        reset();
+        setError(`Your session expired after ${IDLE_MINUTES} minutes of inactivity, so your answers were cleared.`);
       }, IDLE_TIMEOUT_MS);
     };
     const events = ["pointerdown", "keydown", "scroll"] as const;
@@ -125,7 +142,7 @@ export function AssessmentWizard() {
       window.clearTimeout(idle);
       events.forEach((name) => window.removeEventListener(name, restart));
     };
-  }, [cancelPendingWork]);
+  }, [reset]);
 
   useEffect(() => {
     mainHeading.current?.focus();
@@ -179,17 +196,6 @@ export function AssessmentWizard() {
     }
   };
 
-  const reset = () => {
-    cancelPendingWork();
-    setInput(EMPTY_INPUT);
-    setResult(null);
-    setStep(0);
-    setMaxReached(0);
-    setError(null);
-    setReportError(null);
-    clearDraft();
-  };
-
   const download = async () => {
     if (!result || pendingReport.current) return;
     const controller = new AbortController();
@@ -208,6 +214,42 @@ export function AssessmentWizard() {
       }
     }
   };
+
+  const importDocument = async (file: File | undefined) => {
+    if (!file || pendingImport.current) return;
+    // Parsing cannot be interrupted, so a reset or idle timeout discards the result instead.
+    const controller = new AbortController();
+    pendingImport.current = controller;
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const imported = await extractDocumentText(file);
+      if (controller.signal.aborted) return;
+      update("description", imported.text);
+      setImportStatus({
+        kind: "notice",
+        message: imported.truncated
+          ? `Added the first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters of ${imported.fileName}. Edit it down to the part that matters.`
+          : `Added the text from ${imported.fileName}. Check it before continuing.`,
+      });
+    } catch (failure) {
+      if (controller.signal.aborted) return;
+      setImportStatus({
+        kind: "error",
+        message: failure instanceof DocumentImportError
+          ? failure.message
+          : "That file could not be read. Try another, or type the description instead.",
+      });
+    } finally {
+      if (pendingImport.current === controller) {
+        pendingImport.current = null;
+        setImporting(false);
+      }
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
+
+  const progress = ((step + 1) / STEPS.length) * 100;
 
   return (
     <main>
@@ -238,9 +280,9 @@ export function AssessmentWizard() {
           </ol>
           <div className="progress-copy">
             <span>Step {step + 1} of {STEPS.length}</span>
-            <span>{Math.round(((step + 1) / STEPS.length) * 100)}%</span>
+            <span>{Math.round(progress)}%</span>
           </div>
-          <div className="progress-track" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
+          <div className="progress-track" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
         </aside>
 
         <section className="workspace" id="assessment">
@@ -258,14 +300,57 @@ export function AssessmentWizard() {
                   id="description"
                   value={input.description}
                   onChange={(event) => update("description", event.target.value)}
-                  maxLength={1000}
+                  maxLength={DESCRIPTION_MAX_LENGTH}
                   aria-describedby="description-help description-error retention-notice"
                   aria-invalid={Boolean(error)}
                   placeholder="For example: We want to compare our customer database with a partner’s records to understand which customers we share."
                 />
               </label>
-              <div className="field-meta" id="description-help"><span>A clear sentence or two is enough. Avoid names or other identifying details.</span><span>{input.description.length} / 1,000</span></div>
+              <div className="field-meta" id="description-help"><span>A clear sentence or two is enough. Avoid names or other identifying details.</span><span>{input.description.length} / {DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")}</span></div>
               {error && <p className="error" id="description-error" role="alert">{error}</p>}
+
+              <div
+                className={dragging ? "dropzone dragging" : "dropzone"}
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  void importDocument(event.dataTransfer.files[0]);
+                }}
+              >
+                <div>
+                  <p className="dropzone-title">Have a document already?</p>
+                  <p className="dropzone-help" id="upload-help">
+                    Drop {ACCEPTED_LABEL} here, or choose a file. It is read in this browser and never uploaded.
+                  </p>
+                </div>
+                <label className="sr-only" htmlFor="document-upload">
+                  Upload a document to fill in the description ({ACCEPTED_LABEL})
+                </label>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={importing}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  {importing ? "Reading\u2026" : "Choose file"}
+                </button>
+                <input
+                  ref={fileInput}
+                  id="document-upload"
+                  type="file"
+                  className="sr-only"
+                  accept={ACCEPTED_FILE_TYPES}
+                  aria-describedby="upload-help"
+                  onChange={(event) => void importDocument(event.target.files?.[0])}
+                />
+              </div>
+              <p className="method-note import-status" aria-live="polite">{importing ? "Reading your document\u2026" : importStatus?.kind === "notice" ? importStatus.message : ""}</p>
+              {importStatus?.kind === "error" && <p className="error" role="alert">{importStatus.message}</p>}
+
               <p className="method-note" id="retention-notice">{RETENTION_NOTICE}</p>
               <div className="actions end"><button className="primary" type="button" onClick={() => moveTo(1)}>Continue <span>→</span></button></div>
             </div>
@@ -307,20 +392,18 @@ export function AssessmentWizard() {
           {step === 2 && result && (
             <div
               className="step-panel risk-result"
-              style={{
-                "--risk-color": riskColor(result.score),
-                "--risk-position": `${result.score}%`,
-              } as React.CSSProperties}
+              data-risk={result.level.toLowerCase()}
+              style={{ "--risk-position": `${result.score}%` } as React.CSSProperties}
             >
               <p className="section-number">03 / ASSESSMENT</p>
               <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
               <div className="score">
                 <span className="score-number">{result.score}</span><span className="score-total">/ 100</span>
-                <div><b>{result.level} RISK</b><p>{result.guidance}</p></div>
+                <div><b className="risk-label"><span className="risk-icon" aria-hidden="true" />{result.level} RISK</b><p>{result.guidance}</p></div>
               </div>
               <div className="risk-scale" aria-hidden="true">
-                <div className="risk-scale-track"><i /></div>
-                <div className="risk-scale-labels"><span>Low risk</span><span>High risk</span></div>
+                <div className="risk-scale-track"><span /><span /><span /><i /></div>
+                <div className="risk-scale-labels"><span>Low</span><span>Medium</span><span>High</span></div>
               </div>
               <div className="rule" />
               <h3>What drives this score</h3>
@@ -334,17 +417,17 @@ export function AssessmentWizard() {
 
           {step === 3 && result && (
             <div
-              className="step-panel recommendation-result"
-              style={{ "--risk-color": riskColor(result.score) } as React.CSSProperties}
+              className="step-panel"
+              data-risk={result.level.toLowerCase()}
             >
               <p className="section-number">04 / RECOMMENDATIONS</p>
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
               <div className="recommendation-outcome">
-                <b>{result.level} RISK · {result.score}/100</b>
+                <b className="risk-label"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
                 <p>{result.guidance}</p>
               </div>
-              <h3>Recommended protections</h3>
+              <h3>General safeguards</h3>
               {result.recommendationDetails.length > 0 ? (
                 <ol className="recommendation-list">
                   {result.recommendationDetails.map((item) => {
@@ -368,22 +451,25 @@ export function AssessmentWizard() {
               ) : (
                 <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
               )}
-              {result.capabilities.length > 0 && (
+              {result.karlsgateRecommendations.length > 0 && (
                 <div className="capability-panel">
-                  <p className="section-number">PRIVACY-ENHANCING CAPABILITY FIT</p>
+                  <p className="section-number">KARLSGATE CAPABILITY FIT</p>
                   <h3>Applicable privacy-enhancing controls</h3>
                   <p>Only capabilities whose documented applicability rules are satisfied are shown.</p>
                   <ul className="capability-list">
-                    {result.capabilities.map((capability) => (
-                      <li key={capability}><b>{capability}</b><p>{CAPABILITY_COPY[capability] ?? ""}</p></li>
+                    {result.karlsgateRecommendations.map((capability) => (
+                      <li key={capability.id}><b>{capability.label}</b><p>{capability.text}</p>
+                        <p className="recommendation-reason">{recommendationReason(capability, result.factors)}</p>
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
+              <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
               {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
-              <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Assessed</dt><dd>{new Date(result.assessedAt).toLocaleString()}</dd></div></dl></details>
+              <details className="summary"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation mapping version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}
-              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="secondary" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
+              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>
           )}
         </section>

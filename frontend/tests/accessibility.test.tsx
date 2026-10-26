@@ -3,9 +3,10 @@ import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { CAPABILITY_COPY, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { BINARY_FIELDS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { CAPABILITY_COPY } from "../lib/recommendations";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
-import { assessmentResult } from "./assessment-fixture";
+import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
 /**
  * Accessibility checks for the assessment flow (SCRUM-17).
@@ -28,36 +29,28 @@ async function expectNoViolations(container: HTMLElement) {
   expect(summary).toEqual([]);
 }
 
-function completeQuestions() {
-  ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"].forEach((key) => {
-    const group = screen.getByRole("group", {
-      name: new RegExp(QUESTION_LABELS[key as keyof typeof QUESTION_LABELS].slice(0, 24), "i"),
-    });
+function describeUseCase(description = "Share loyalty member emails with a partner brand for campaign measurement.") {
+  fireEvent.change(screen.getByLabelText(/use-case description/i), { target: { value: description } });
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+}
+
+function completeQuestions(dataType = /email addresses/i) {
+  fireEvent.click(screen.getByRole("button", { name: dataType }));
+  BINARY_FIELDS.forEach((key) => {
+    const group = screen.getByRole("group", { name: new RegExp(QUESTION_LABELS[key].slice(0, 24), "i") });
     fireEvent.click(within(group).getByRole("button", { name: "Yes" }));
   });
 }
 
-function answerQuestions() {
-  fireEvent.change(screen.getByLabelText(/use-case description/i), {
-    target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-  fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
-  completeQuestions();
+function answerQuestions(dataType?: RegExp, description?: string) {
+  describeUseCase(description);
+  completeQuestions(dataType);
 }
 
 beforeEach(() => {
   window.sessionStorage.clear?.();
   vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation(() =>
-      new Response(JSON.stringify(assessmentResult), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    ),
-  );
+  stubAssessmentApi();
 });
 
 afterEach(() => {
@@ -116,9 +109,7 @@ describe("assessment flow accessibility", () => {
 
   it("aborts scoring and clears the draft on idle expiry", async () => {
     vi.useFakeTimers();
-    vi.mocked(fetch).mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    }));
+    vi.mocked(fetch).mockImplementationOnce(hangingFetch);
     render(<AssessmentWizard />);
     await act(async () => vi.advanceTimersByTimeAsync(0));
     answerQuestions();
@@ -129,10 +120,23 @@ describe("assessment flow accessibility", () => {
     expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("discards a document import that finishes after idle expiry", async () => {
+    vi.useFakeTimers();
+    let finishReading!: (text: string) => void;
+    const reading = new Promise<string>((done) => { finishReading = done; });
+    // Only the members the text reader touches; jsdom's File cannot read its contents.
+    const file = { name: "brief.txt", size: 20, slice: () => ({ text: () => reading }) } as unknown as File;
+    const { container } = render(<AssessmentWizard />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.change(container.querySelector("#document-upload")!, { target: { files: [file] } });
+    await act(async () => vi.advanceTimersByTimeAsync(IDLE_TIMEOUT_MS));
+    await act(async () => finishReading("Late private description."));
+    expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe("");
+    expect(window.sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
   it("aborts scoring when the wizard unmounts", async () => {
-    vi.mocked(fetch).mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
-      options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-    }));
+    vi.mocked(fetch).mockImplementationOnce(hangingFetch);
     const view = render(<AssessmentWizard />);
     answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
@@ -153,6 +157,17 @@ describe("assessment flow accessibility", () => {
     expect(document.querySelector("#assessment")).not.toBeNull();
   });
 
+  it("exposes the document upload with a labelled control and help text", async () => {
+    const { container } = render(<AssessmentWizard />);
+    const input = container.querySelector("#document-upload") as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.getAttribute("accept")).toContain(".pdf");
+    expect(input.getAttribute("aria-describedby")).toBe("upload-help");
+    expect(document.querySelector("#upload-help")?.textContent).toMatch(/never uploaded/i);
+    expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
+    await expectNoViolations(container);
+  });
+
   it("announces the current step through a status region", () => {
     render(<AssessmentWizard />);
     expect(screen.getByRole("status").textContent).toContain("Step 1 of 4");
@@ -161,37 +176,27 @@ describe("assessment flow accessibility", () => {
   it("keeps every step reachable and accessible through the whole flow", async () => {
     const { container } = render(<AssessmentWizard />);
 
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    // Step 2: questions
+    describeUseCase();
     await screen.findByText(/how will the data be handled/i);
     await expectNoViolations(container);
-    fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
     completeQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
-    // Step 3: score
     await screen.findByText(/what drives this score/i);
     await expectNoViolations(container);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
-    // Step 4: recommendations
     await screen.findByText(/controls before approval/i);
+    expect(screen.getByRole("heading", { name: "General safeguards" })).toBeTruthy();
+    expect(container.querySelector(".recommendation-reason")?.textContent).toMatch(/Relevant to:/);
+    expect(screen.getByText(/Recommendation mapping v1.1: stakeholder approved/)).toBeTruthy();
+    expect(screen.getByText("Recommendation mapping version")).toBeTruthy();
     await expectNoViolations(container);
   });
 
   it("explains each recommended control in approved plain language", async () => {
     const { container } = render(<AssessmentWizard />);
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share loyalty member emails with a partner brand for campaign measurement." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByText(/how will the data be handled/i);
-    fireEvent.click(screen.getByRole("button", { name: /email addresses/i }));
-    completeQuestions();
+    answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     await screen.findByText(/what drives this score/i);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
@@ -215,13 +220,7 @@ describe("assessment flow accessibility", () => {
 
   it("does not rely on colour alone to convey the risk level", async () => {
     render(<AssessmentWizard />);
-    fireEvent.change(screen.getByLabelText(/use-case description/i), {
-      target: { value: "Share patient records with an external analytics vendor for modelling." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByText(/how will the data be handled/i);
-    fireEvent.click(screen.getByRole("button", { name: /health information/i }));
-    completeQuestions();
+    answerQuestions(/health information/i, "Share patient records with an external analytics vendor for modelling.");
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
     await screen.findByText(/what drives this score/i);

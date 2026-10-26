@@ -1,0 +1,171 @@
+{
+  "version": "1.1",
+  "approvalStatus": "approved",
+  "source": "docs/risk-scoring-rubric-v1.0.md",
+  "rulesVersions": [
+    "1.0"
+  ],
+  "baselineSafeguardIds": [
+    "ACCESS_CONTROL",
+    "FIELD_MINIMIZATION",
+    "RETENTION_DELETION",
+    "PURPOSE_ACCOUNTABILITY"
+  ],
+  "safeguards": [
+    {
+      "id": "ACCESS_CONTROL",
+      "text": "Limit access to named roles and review permissions regularly."
+    },
+    {
+      "id": "FIELD_MINIMIZATION",
+      "text": "Collect and share only the fields required for the approved purpose."
+    },
+    {
+      "id": "RETENTION_DELETION",
+      "text": "Set retention, deletion, and incident-response responsibilities before launch."
+    },
+    {
+      "id": "PURPOSE_ACCOUNTABILITY",
+      "text": "Record the approved purpose, data owner, and control evidence in the governance register."
+    },
+    {
+      "id": "PRIVATE_MATCHING",
+      "text": "Use protected matching instead of transferring raw identifiers."
+    },
+    {
+      "id": "REIDENTIFICATION_REVIEW",
+      "text": "Measure and remediate re-identification risk before combining datasets."
+    },
+    {
+      "id": "DEIDENTIFY_RECORDS",
+      "text": "De-identify sensitive records before they leave the originating system."
+    },
+    {
+      "id": "SECONDARY_USE_APPROVAL",
+      "text": "Create a separate approval gate for any secondary use."
+    }
+  ],
+  "factorSafeguards": {
+    "DATA_SENSITIVITY_HIGH": [
+      "ACCESS_CONTROL",
+      "FIELD_MINIMIZATION",
+      "RETENTION_DELETION",
+      "DEIDENTIFY_RECORDS"
+    ],
+    "DATA_SENSITIVITY_DIRECT": [
+      "ACCESS_CONTROL",
+      "FIELD_MINIMIZATION",
+      "RETENTION_DELETION"
+    ],
+    "EXTERNAL_ACCESS": [
+      "ACCESS_CONTROL",
+      "FIELD_MINIMIZATION",
+      "PURPOSE_ACCOUNTABILITY"
+    ],
+    "RAW_EXCHANGE": [
+      "ACCESS_CONTROL",
+      "FIELD_MINIMIZATION",
+      "PRIVATE_MATCHING"
+    ],
+    "DATA_MOVEMENT": [
+      "ACCESS_CONTROL",
+      "FIELD_MINIMIZATION",
+      "RETENTION_DELETION"
+    ],
+    "COMBINED_REIDENTIFICATION": [
+      "FIELD_MINIMIZATION",
+      "REIDENTIFICATION_REVIEW"
+    ],
+    "SECONDARY_USE": [
+      "PURPOSE_ACCOUNTABILITY",
+      "RETENTION_DELETION",
+      "SECONDARY_USE_APPROVAL"
+    ],
+    "PURPOSE_ANALYTICS": [
+      "FIELD_MINIMIZATION",
+      "PURPOSE_ACCOUNTABILITY"
+    ],
+    "PURPOSE_RESEARCH": [
+      "FIELD_MINIMIZATION",
+      "PURPOSE_ACCOUNTABILITY",
+      "RETENTION_DELETION"
+    ],
+    "PURPOSE_MATCHING": [
+      "FIELD_MINIMIZATION",
+      "PRIVATE_MATCHING",
+      "PURPOSE_ACCOUNTABILITY"
+    ],
+    "PURPOSE_OTHER": [
+      "PURPOSE_ACCOUNTABILITY",
+      "FIELD_MINIMIZATION"
+    ],
+    "PURPOSE_MARKETING": [
+      "PURPOSE_ACCOUNTABILITY",
+      "FIELD_MINIMIZATION",
+      "RETENTION_DELETION"
+    ],
+    "PURPOSE_AI": [
+      "PURPOSE_ACCOUNTABILITY",
+      "FIELD_MINIMIZATION",
+      "RETENTION_DELETION"
+    ]
+  },
+  "karlsgate": [
+    {
+      "id": "PROTECTED_MATCHING",
+      "label": "Protected matching",
+      "text": "Identify records shared across parties without transferring raw identifiers to the other party.",
+      "conditionId": "EXTERNAL_AND_RAW_OR_MATCHING",
+      "anyOfAllFactors": [
+        [
+          "EXTERNAL_ACCESS",
+          "RAW_EXCHANGE"
+        ],
+        [
+          "EXTERNAL_ACCESS",
+          "PURPOSE_MATCHING"
+        ]
+      ]
+    },
+    {
+      "id": "REID_REMEDIATION",
+      "label": "Re-identification risk remediation",
+      "text": "Measure how dataset combination could reveal a person or sensitive attribute, then reduce that risk before release.",
+      "conditionId": "DATASETS_COMBINED",
+      "anyOfAllFactors": [
+        [
+          "COMBINED_REIDENTIFICATION"
+        ]
+      ]
+    },
+    {
+      "id": "DEIDENTIFICATION",
+      "label": "De-identification",
+      "text": "Transform sensitive records so directly identifying values are not exposed during the approved workflow.",
+      "conditionId": "HIGH_SENSITIVITY_DATA",
+      "anyOfAllFactors": [
+        [
+          "DATA_SENSITIVITY_HIGH"
+        ]
+      ]
+    },
+    {
+      "id": "DATA_MINIMIZATION",
+      "label": "Data minimization",
+      "text": "Limit collection, processing, and disclosure to fields required for the documented purpose.",
+      "conditionId": "ALL_ASSESSMENTS",
+      "anyOfAllFactors": [
+        []
+      ]
+    },
+    {
+      "id": "GOVERNANCE_EXECUTION",
+      "label": "Governance policy execution",
+      "text": "Turn approved purpose, access, retention, and deletion rules into enforceable workflow controls and evidence.",
+      "conditionId": "ALL_ASSESSMENTS",
+      "anyOfAllFactors": [
+        []
+      ]
+    }
+  ]
+}
