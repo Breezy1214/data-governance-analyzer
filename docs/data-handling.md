@@ -57,4 +57,4 @@ Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
 
 ## What we tell users
 
-The describe step explains that the description stays in the browser, questionnaire answers are sent for scoring without server storage, and the draft is cleared on close, on start over, or after 30 minutes of inactivity. If retention changes, update that copy in `frontend/components/AssessmentWizard.tsx` in the same change.
+The describe step explains that the description stays in the browser, questionnaire answers are sent for scoring without server storage, and the draft clears after 30 minutes of inactivity. The draft also clears on tab close and on start over; the copy leaves those out as self-evident. If retention changes, update that copy in `frontend/components/AssessmentWizard.tsx` in the same change.
