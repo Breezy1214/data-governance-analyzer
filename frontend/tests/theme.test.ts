@@ -48,7 +48,11 @@ const PAIRS: [string, string, number][] = [
   ["muted", "surface-hover", 4.5],
   ["accent-strong", "surface", 4.5],
   ["accent-strong", "paper", 4.5],
-  // Buttons and selected choices
+  // Buttons, the current step and selected choices
+  ["white", "brand", 4.5],
+  ["white", "brand-hover", 4.5],
+  ["brand", "brand-soft", 4.5],
+  ["ink", "brand-soft", 4.5],
   ["white", "ink", 4.5],
   ["white", "ink-hover", 4.5],
   ["white", "danger-hover", 4.5],

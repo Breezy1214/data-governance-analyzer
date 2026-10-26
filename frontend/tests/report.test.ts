@@ -61,8 +61,28 @@ describe("report model", () => {
       });
     });
     result.factors.forEach((factor) => expect(flat).toContain(factor.label));
-    result.karlsgateRecommendations.forEach((item) => expect(flat).toContain(item.text));
-    expect(flat).toContain("Relevant to:");
+  });
+
+  it("lists each Karlsgate capability once, beside the safeguard it delivers", () => {
+    result.karlsgateRecommendations.forEach((item) => expect(flat.split(item.text)).toHaveLength(2));
+    const safeguards = model.sections.find((section) => section.heading === "Recommended safeguards");
+    const capabilityFit = model.sections.find((section) => section.heading === "Karlsgate capability fit");
+    const inSafeguards = JSON.stringify(safeguards);
+    ["Protected matching", "Re-identification risk remediation", "De-identification", "Data minimization"]
+      .forEach((label) => expect(inSafeguards).toContain(`Karlsgate capability: ${label}.`));
+    expect(capabilityFit).toEqual({
+      heading: "Karlsgate capability fit",
+      kind: "list",
+      items: [expect.stringMatching(/^Governance policy execution: .* Baseline control for every assessment\.$/)],
+    });
+  });
+
+  it("drops the capability section when every capability is paired with a safeguard", () => {
+    const paired = buildReportModel(input, {
+      ...result,
+      karlsgateRecommendations: result.karlsgateRecommendations.filter((item) => item.id !== "GOVERNANCE_EXECUTION"),
+    });
+    expect(headingsOf(paired)).not.toContain("Karlsgate capability fit");
   });
 
   it("omits internal rule identifiers and categories", () => {

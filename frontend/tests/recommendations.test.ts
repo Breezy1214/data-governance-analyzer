@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AssessmentInput, DATA_TYPE_LABELS, PURPOSE_LABELS, type YesNo } from "../lib/assessment";
-import { CAPABILITY_COPY, mapRecommendations, recommendationReason } from "../lib/recommendations";
+import { CAPABILITY_COPY, CAPABILITY_SAFEGUARD, mapRecommendations, pairCapabilities, recommendationReason } from "../lib/recommendations";
 import catalog from "../lib/mappings/v1.1.json";
 
 const cases = [
@@ -96,5 +96,31 @@ describe("versioned recommendation mapping", () => {
       { ruleId: "EXTERNAL_ACCESS", label: "Access by another organization" },
     ])).toBe("Relevant to: Access by another organization.");
     expect(recommendationReason({ id: "BASELINE", text: "Control", factorIds: [] }, [])).toMatch(/Baseline control/);
+  });
+});
+
+describe("capability pairing for display", () => {
+  it("pairs only catalog capabilities with catalog safeguards", () => {
+    Object.entries(CAPABILITY_SAFEGUARD).forEach(([capability, safeguard]) => {
+      expect(catalog.karlsgate.map((entry) => entry.id)).toContain(capability);
+      expect(catalog.safeguards.map((entry) => entry.id)).toContain(safeguard);
+    });
+  });
+
+  it("attaches each capability to its listed safeguard and keeps the rest", () => {
+    const { generalSafeguards, karlsgateRecommendations } = mapRecommendations(
+      ["EXTERNAL_ACCESS", "RAW_EXCHANGE", "COMBINED_REIDENTIFICATION", "DATA_SENSITIVITY_HIGH"], "1.0");
+    const { byAction, remaining } = pairCapabilities(generalSafeguards.map((item) => item.text), karlsgateRecommendations);
+    expect([...byAction.values()].map((item) => item.id).sort())
+      .toEqual(["DATA_MINIMIZATION", "DEIDENTIFICATION", "PROTECTED_MATCHING", "REID_REMEDIATION"]);
+    expect(remaining.map((item) => item.id)).toEqual(["GOVERNANCE_EXECUTION"]);
+    expect(byAction.size + remaining.length).toBe(karlsgateRecommendations.length);
+  });
+
+  it("leaves a capability in place when its safeguard is not listed", () => {
+    const { karlsgateRecommendations } = mapRecommendations(["COMBINED_REIDENTIFICATION"], "1.0");
+    const { byAction, remaining } = pairCapabilities([], karlsgateRecommendations);
+    expect(byAction.size).toBe(0);
+    expect(remaining).toEqual(karlsgateRecommendations);
   });
 });
