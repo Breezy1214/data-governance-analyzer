@@ -12,10 +12,8 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 ## Local development
 
-Install dependencies below, then on Windows run `scripts/setup-local.ps1` to generate
-private environment files and `Start-Karlsgate-Login.ps1` to start the application.
-The setup script does not overwrite existing files. On macOS/Linux, create the same private environment
-files and install dependencies, then run both services together:
+Install dependencies below and configure private environment files from the examples.
+On macOS/Linux, run both services together with the team's startup script:
 
 ```bash
 ./scripts/start-dev.sh
