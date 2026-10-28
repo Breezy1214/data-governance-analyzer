@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-kg-scrum22-session" : "kg-scrum22-session";
+export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-kg-session" : "kg-session";
 export type AuthSession = {
   user: { id: string; email: string };
   binding: string;

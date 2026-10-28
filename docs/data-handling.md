@@ -1,7 +1,6 @@
 # Data handling and retention (v1.0)
 
-> Historical baseline. On the SCRUM 22 review branch, authentication is required and session metadata
-> is stored separately. See [SCRUM 22](../README-SCRUM-22.md) for the current account/session policy.
+> Authentication is required and session metadata is stored separately from assessments.
 > Assessment answers remain unsaved on the server. Logout and account changes also clear local drafts.
 
 Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
@@ -9,11 +8,11 @@ Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so i
 ## Decision
 
 Assessments remain **stateless**: answers and reports are not retained on the server.
-SCRUM-22 adds authenticated accounts and a separate local session database containing
+Karlsgate login uses authenticated accounts and a separate local session database containing
 identity/session metadata and encrypted provider tokens, not assessment content.
 
 - Authentication is required on this review branch. Hosted deployment remains blocked until
-  production session storage and real-provider HTTPS checks are complete; see [SCRUM-22](../README-SCRUM-22.md).
+  production session storage and real-provider HTTPS checks are complete.
 
 ## Field inventory
 

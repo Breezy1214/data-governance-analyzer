@@ -1,9 +1,5 @@
 # Data Governance Readiness Analyzer
 
-> **SCRUM 22 draft review:** start with [README-SCRUM-22.md](README-SCRUM-22.md).
-> Local login: **http://localhost:3022/login**. Real sign-in needs Supabase configuration.
-> This draft requires account/session configuration and is not ready for hosted deployment.
-
 A guided, plain-language assessment for identifying privacy and governance risks before a proposed data use case moves forward.
 
 ## Architecture
@@ -16,8 +12,9 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 ## Local development
 
-Complete the account/session setup in [README-SCRUM-22.md](README-SCRUM-22.md) first.
-On Windows, use `Start-SCRUM-22.ps1`. On macOS/Linux, create the same private environment
+Install dependencies below, then on Windows run `scripts/setup-local.ps1` to generate
+private environment files and `Start-Karlsgate-Login.ps1` to start the application.
+The setup script does not overwrite existing files. On macOS/Linux, create the same private environment
 files and install dependencies, then run both services together:
 
 ```bash
@@ -48,8 +45,11 @@ npm run dev -- --hostname localhost --port 3022
 ```
 
 Open `http://localhost:3022/login`. Configure server-only `API_BASE_URL`, `APP_ORIGIN`, and
-`FRONTEND_SHARED_KEY` as described in the SCRUM-22 setup guide. Do not overwrite an existing
+`FRONTEND_SHARED_KEY` using the environment examples. The shared key must match the backend;
+generate a Fernet key for backend `SESSION_ENCRYPTION_KEY`. Do not overwrite an existing
 `.env.local` when copying the example. Real login requires a configured Supabase project.
+Set backend `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` and use an existing confirmed
+account. Never use a service-role key or commit private environment files.
 
 ## Quality checks
 
@@ -77,6 +77,9 @@ cd backend
 ## Deployment
 
 Deployment configuration and environment requirements are documented in [docs/deployment.md](docs/deployment.md). Do not commit credentials or production-sensitive data.
+
+Login currently uses a local SQLite session store. Hosted environments are deliberately
+blocked until shared production session storage and real Supabase/HTTPS checks are complete.
 
 ## SCRUM 12 Integration
 

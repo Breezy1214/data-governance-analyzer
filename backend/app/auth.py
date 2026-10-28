@@ -1,4 +1,4 @@
-"""Local SCRUM-22 sessions. Only the Next.js server receives bearer credentials."""
+"""Local Karlsgate sessions. Only the Next.js server receives bearer credentials."""
 from __future__ import annotations
 
 import hashlib

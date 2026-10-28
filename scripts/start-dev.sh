@@ -36,7 +36,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [[ ! -f "$BACKEND_DIR/.env" || ! -f "$FRONTEND_DIR/.env.local" ]]; then
-  echo "Configure private environment files first; see README-SCRUM-22.md." >&2
+  echo "Configure private environment files first; see README.md." >&2
   exit 1
 fi
 
