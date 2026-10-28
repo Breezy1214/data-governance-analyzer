@@ -13,6 +13,7 @@ import {
   PURPOSE_LABELS,
   QUESTION_LABELS,
   Purpose,
+  RISK_THRESHOLDS,
   RiskLevel,
   YesNo,
   requestAssessment,
@@ -30,13 +31,17 @@ import { pairCapabilities, recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
 
-const STEPS = ["Describe", "Answer questions", "Assessment", "Recommendations"] as const;
-const STEP_ICONS: IconName[] = ["describe", "questions", "assessment", "recommendations"];
-// Rubric v1.0 thresholds (backend/app/scoring/rules.py).
+const STEPS: { label: string; icon: IconName }[] = [
+  { label: "Describe", icon: "describe" },
+  { label: "Answer questions", icon: "questions" },
+  { label: "Assessment", icon: "assessment" },
+  { label: "Recommendations", icon: "recommendations" },
+];
+const { lowMax, mediumMax } = RISK_THRESHOLDS;
 const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = [
-  { level: "LOW", label: "Low", range: "0–29" },
-  { level: "MEDIUM", label: "Medium", range: "30–59" },
-  { level: "HIGH", label: "High", range: "60–100" },
+  { level: "LOW", label: "Low", range: `0–${lowMax}` },
+  { level: "MEDIUM", label: "Medium", range: `${lowMax + 1}–${mediumMax}` },
+  { level: "HIGH", label: "High", range: `${mediumMax + 1}–100` },
 ];
 const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
 
@@ -79,11 +84,44 @@ function StatCard({ title, badge, value, unit, detail }: Stat) {
   );
 }
 
+const INTRO_STATS: Stat[] = [
+  { title: "Questions", badge: "Step 2", value: Object.keys(QUESTION_LABELS).length, detail: <>About data, <b>access</b> and use</> },
+  { title: "Risk score", badge: "Step 3", value: "0–100", detail: <>Across <b>{RISK_BANDS.length}</b> risk bands</> },
+  { title: "Draft retention", badge: "This tab", value: IDLE_MINUTES, unit: "min", detail: <>Cleared when <b>idle</b></> },
+  { title: "Answers stored", badge: "Private", value: 0, detail: <>Answers are <b>scored, not stored</b></> },
+];
+
+function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null): Stat[] {
+  if (step === 0) return INTRO_STATS;
+  if (step === 1) {
+    const answers = BINARY_FIELDS.map((field) => input[field]);
+    const answered = (input.dataTypes.length > 0 ? 1 : 0) + answers.filter(Boolean).length;
+    const complete = validateQuestions(input) === null;
+    return [
+      {
+        title: "Questions answered",
+        badge: complete ? "Complete" : "In progress",
+        value: answered,
+        unit: `/ ${BINARY_FIELDS.length + 1}`,
+        detail: complete ? <>Ready to <b>assess</b></> : <>All required <b>before scoring</b></>,
+      },
+      { title: "Data types", badge: "Question 1", value: input.dataTypes.length, unit: `/ ${Object.keys(DATA_TYPE_LABELS).length}`, detail: <>Types <b>selected</b> so far</> },
+      { title: "Yes answers", badge: "So far", value: answers.filter((answer) => answer === "yes").length, detail: <>Of <b>{BINARY_FIELDS.length}</b> handling questions</> },
+    ];
+  }
+  if (!result) return [];
+  return [
+    { title: "Safeguards", badge: "Next step", value: result.recommendationDetails.length, detail: <>Tailored to <b>this use case</b></> },
+    { title: "Capability fit", badge: "Mapped", value: result.karlsgateRecommendations.length, detail: <>Privacy-enhancing <b>controls</b></> },
+    { title: "Specialist review", badge: "Flagged", value: result.limitations.length, detail: <>Areas needing <b>expert sign-off</b></> },
+  ];
+}
+
 const RING_RADIUS = 70;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
 function ScoreRing({ score }: { score: number }) {
-  const filled = (Math.min(100, Math.max(0, score)) / 100) * RING_LENGTH;
+  const filled = (score / 100) * RING_LENGTH;
   return (
     <div className="score-ring">
       <svg viewBox="0 0 180 180" aria-hidden="true">
@@ -124,13 +162,7 @@ export function AssessmentWizard() {
     () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
     [result],
   );
-  const capabilities = useMemo(
-    () => pairCapabilities(
-      result?.recommendationDetails.map((item) => item.action) ?? [],
-      result?.karlsgateRecommendations ?? [],
-    ),
-    [result],
-  );
+  const capabilities = useMemo(() => result && pairCapabilities(result), [result]);
 
   const cancelPendingWork = useCallback(() => {
     pendingAssessment.current?.abort();
@@ -300,23 +332,7 @@ export function AssessmentWizard() {
   };
 
   const progress = ((step + 1) / STEPS.length) * 100;
-  const answered = (input.dataTypes.length > 0 ? 1 : 0) + BINARY_FIELDS.filter((field) => input[field]).length;
-  const required = BINARY_FIELDS.length + 1;
-
-  const stats: Stat[] = step === 0 ? [
-    { title: "Questions", badge: "Step 2", value: Object.keys(QUESTION_LABELS).length, detail: <>About data, <b>access</b> and use</> },
-    { title: "Risk score", badge: "Step 3", value: "0–100", detail: <>Across <b>{RISK_BANDS.length}</b> risk bands</> },
-    { title: "Draft retention", badge: "This tab", value: IDLE_MINUTES, unit: "min", detail: <>Cleared when <b>idle</b></> },
-    { title: "Answers stored", badge: "Private", value: 0, detail: <>Answers are <b>scored, not stored</b></> },
-  ] : step === 1 ? [
-    { title: "Questions answered", badge: answered === required ? "Complete" : "In progress", value: answered, unit: `/ ${required}`, detail: answered === required ? <>Ready to <b>assess</b></> : <>All required <b>before scoring</b></> },
-    { title: "Data types", badge: "Question 1", value: input.dataTypes.length, unit: `/ ${Object.keys(DATA_TYPE_LABELS).length}`, detail: <>Types <b>selected</b> so far</> },
-    { title: "Yes answers", badge: "So far", value: BINARY_FIELDS.filter((field) => input[field] === "yes").length, detail: <>Of <b>{BINARY_FIELDS.length}</b> handling questions</> },
-  ] : result ? [
-    { title: "Safeguards", badge: "Next step", value: result.recommendationDetails.length, detail: <>Tailored to <b>this use case</b></> },
-    { title: "Capability fit", badge: "Mapped", value: result.karlsgateRecommendations.length, detail: <>Privacy-enhancing <b>controls</b></> },
-    { title: "Specialist review", badge: "Flagged", value: result.limitations.length, detail: <>Areas needing <b>expert sign-off</b></> },
-  ] : [];
+  const stats = statsFor(step, input, result);
 
   return (
     <div className="app">
@@ -329,7 +345,7 @@ export function AssessmentWizard() {
         </a>
         <p className="nav-label">Steps</p>
         <ol className="step-list">
-          {STEPS.map((label, index) => (
+          {STEPS.map(({ label, icon }, index) => (
             <li key={label} className={index === step ? "current" : index < step ? "complete" : ""}>
               <button
                 type="button"
@@ -337,7 +353,7 @@ export function AssessmentWizard() {
                 disabled={index > maxReached}
                 aria-current={index === step ? "step" : undefined}
               >
-                <Icon name={STEP_ICONS[index]} />
+                <Icon name={icon} />
                 <span className="step-name">{label}</span>
                 <span className="step-number">0{index + 1}</span>
               </button>
@@ -356,7 +372,7 @@ export function AssessmentWizard() {
       <main className="main-area" id="top">
         <div className="topbar">
           <Icon name="grid" size={18} />
-          <b>{STEPS[step]}</b>
+          <b>{STEPS[step].label}</b>
         </div>
 
         <header className="page-header">
@@ -371,7 +387,7 @@ export function AssessmentWizard() {
 
         <section className="workspace" id="assessment">
           <p className="sr-only" role="status">
-            {loading ? "Assessing your answers." : `Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
+            {loading ? "Assessing your answers." : `Step ${step + 1} of ${STEPS.length}: ${STEPS[step].label}`}
           </p>
           {stats.length > 0 && (
             <aside className="stat-rail" aria-label="Summary">
@@ -385,7 +401,7 @@ export function AssessmentWizard() {
               <p className="lede">Include what data is involved, who needs it, and the outcome you want.</p>
               <div className="card">
                 <label className="text-field" htmlFor="description">
-                  <span>Use-case description <b>Required</b></span>
+                  <span>Use-case description <b className="badge">Required</b></span>
                   <textarea
                     id="description"
                     value={input.description}
@@ -535,7 +551,7 @@ export function AssessmentWizard() {
                         const label = factorLabelsById.get(ruleId);
                         return label ? [label] : [];
                       });
-                      const capability = capabilities.byAction.get(item.action);
+                      const capability = capabilities?.byAction.get(item.action);
                       return (
                         <li key={item.id}>
                           <span>{String(item.priority).padStart(2, "0")}</span>
@@ -559,7 +575,7 @@ export function AssessmentWizard() {
                   <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
                 )}
               </div>
-              {capabilities.remaining.length > 0 && (
+              {capabilities && capabilities.remaining.length > 0 && (
                 <div className="capability-panel">
                   <p className="section-number">Karlsgate capability fit</p>
                   <h3>{capabilities.byAction.size > 0 ? "Further privacy-enhancing controls" : "Applicable privacy-enhancing controls"}</h3>

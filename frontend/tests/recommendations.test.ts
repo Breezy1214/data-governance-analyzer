@@ -110,7 +110,8 @@ describe("capability pairing for display", () => {
   it("attaches each capability to its listed safeguard and keeps the rest", () => {
     const { generalSafeguards, karlsgateRecommendations } = mapRecommendations(
       ["EXTERNAL_ACCESS", "RAW_EXCHANGE", "COMBINED_REIDENTIFICATION", "DATA_SENSITIVITY_HIGH"], "1.0");
-    const { byAction, remaining } = pairCapabilities(generalSafeguards.map((item) => item.text), karlsgateRecommendations);
+    const recommendationDetails = generalSafeguards.map((item) => ({ action: item.text }));
+    const { byAction, remaining } = pairCapabilities({ recommendationDetails, karlsgateRecommendations });
     expect([...byAction.values()].map((item) => item.id).sort())
       .toEqual(["DATA_MINIMIZATION", "DEIDENTIFICATION", "PROTECTED_MATCHING", "REID_REMEDIATION"]);
     expect(remaining.map((item) => item.id)).toEqual(["GOVERNANCE_EXECUTION"]);
@@ -119,7 +120,7 @@ describe("capability pairing for display", () => {
 
   it("leaves a capability in place when its safeguard is not listed", () => {
     const { karlsgateRecommendations } = mapRecommendations(["COMBINED_REIDENTIFICATION"], "1.0");
-    const { byAction, remaining } = pairCapabilities([], karlsgateRecommendations);
+    const { byAction, remaining } = pairCapabilities({ recommendationDetails: [], karlsgateRecommendations });
     expect(byAction.size).toBe(0);
     expect(remaining).toEqual(karlsgateRecommendations);
   });

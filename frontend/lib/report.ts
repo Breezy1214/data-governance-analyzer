@@ -38,10 +38,7 @@ export function buildReportModel(
 ): ReportModel {
   const factorLabels = new Map(result.factors.map((factor) => [factor.ruleId, factor.label]));
   // Same pairing as the app: a capability is listed once, with the safeguard it delivers.
-  const capabilities = pairCapabilities(
-    result.recommendationDetails.map((item) => item.action),
-    result.karlsgateRecommendations,
-  );
+  const capabilities = pairCapabilities(result);
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: input.description.trim() },
     {
@@ -187,11 +184,12 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   y += 16;
 
   for (const section of model.sections) {
-    // Room for the heading plus the first lines of its content, so a heading never ends a page.
-    space(LINE_HEIGHT * 5);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    writeLines(wrap(doc, section.heading, CONTENT_WIDTH));
+    const heading = wrap(doc, section.heading, CONTENT_WIDTH);
+    // Keep the heading with the first lines of its content, so a heading never ends a page.
+    space(LINE_HEIGHT * (heading.length + Math.min(firstBlockLines(doc, section), 3)) + 2);
+    writeLines(heading);
     y += 2;
 
     doc.setFont("helvetica", "normal");
@@ -233,6 +231,15 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   }
 
   return doc;
+}
+
+/** Lines in a section's first paragraph, answer, or list item, at body text size. */
+function firstBlockLines(doc: Doc, section: ReportSection): number {
+  const measure = (text: string, width: number) =>
+    (doc.splitTextToSize(text, width, { fontSize: 11 }) as string[]).length;
+  if (section.kind === "paragraph") return measure(section.body, CONTENT_WIDTH);
+  if (section.kind === "pairs") return section.pairs.length ? 1 + measure(section.pairs[0].value, CONTENT_WIDTH - 12) : 0;
+  return section.items.length ? measure(section.items[0], CONTENT_WIDTH - 18) : 0;
 }
 
 /** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */

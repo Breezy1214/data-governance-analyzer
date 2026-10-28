@@ -73,10 +73,14 @@ const SAFEGUARD_TEXT = new Map(catalog.safeguards.map((entry) => [entry.id, entr
  * safeguard's action text, so a control is shown once. Capabilities with no
  * listed counterpart are returned in `remaining`.
  */
-export function pairCapabilities(actions: string[], capabilities: KarlsgateRecommendation[]) {
+export function pairCapabilities({ recommendationDetails, karlsgateRecommendations }: {
+  recommendationDetails: { action: string }[];
+  karlsgateRecommendations: KarlsgateRecommendation[];
+}) {
+  const actions = recommendationDetails.map((item) => item.action);
   const byAction = new Map<string, KarlsgateRecommendation>();
   const remaining: KarlsgateRecommendation[] = [];
-  capabilities.forEach((capability) => {
+  karlsgateRecommendations.forEach((capability) => {
     const action = SAFEGUARD_TEXT.get(CAPABILITY_SAFEGUARD[capability.id]);
     if (action && actions.includes(action) && !byAction.has(action)) byAction.set(action, capability);
     else remaining.push(capability);
