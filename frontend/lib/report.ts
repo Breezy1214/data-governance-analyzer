@@ -7,7 +7,7 @@ import {
   QUESTION_LABELS,
   RiskLevel,
 } from "./assessment";
-import { recommendationReason } from "./recommendations";
+import { pairCapabilities, recommendationReason } from "./recommendations";
 import { PALETTE, RISK_COLORS } from "./theme";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
@@ -37,6 +37,8 @@ export function buildReportModel(
   result: AssessmentResult,
 ): ReportModel {
   const factorLabels = new Map(result.factors.map((factor) => [factor.ruleId, factor.label]));
+  // Same pairing as the app: a capability is listed once, with the safeguard it delivers.
+  const capabilities = pairCapabilities(result);
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: input.description.trim() },
     {
@@ -73,16 +75,18 @@ export function buildReportModel(
       ordered: true,
       items: result.recommendationDetails.map((item) => {
         const triggers = item.riskFactorIds.map((ruleId) => factorLabels.get(ruleId)).filter(Boolean);
-        return `${item.action} Why this applies: ${item.rationale} Triggered by: ${triggers.join(", ")}.`;
+        const capability = capabilities.byAction.get(item.action);
+        const fit = capability ? ` Karlsgate capability: ${capability.label}. ${capability.text}` : "";
+        return `${item.action} Why this applies: ${item.rationale} Triggered by: ${triggers.join(", ")}.${fit}`;
       }),
     },
   ];
 
-  if (result.karlsgateRecommendations.length) {
+  if (capabilities.remaining.length) {
     sections.push({
       heading: "Karlsgate capability fit",
       kind: "list",
-      items: result.karlsgateRecommendations.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
+      items: capabilities.remaining.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
     });
   }
 
@@ -180,10 +184,12 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   y += 16;
 
   for (const section of model.sections) {
-    space(LINE_HEIGHT * 3);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    writeLines(wrap(doc, section.heading, CONTENT_WIDTH));
+    const heading = wrap(doc, section.heading, CONTENT_WIDTH);
+    // Keep the heading with the first lines of its content, so a heading never ends a page.
+    space(LINE_HEIGHT * (heading.length + Math.min(firstBlockLines(doc, section), 3)) + 2);
+    writeLines(heading);
     y += 2;
 
     doc.setFont("helvetica", "normal");
@@ -225,6 +231,15 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   }
 
   return doc;
+}
+
+/** Lines in a section's first paragraph, answer, or list item, at body text size. */
+function firstBlockLines(doc: Doc, section: ReportSection): number {
+  const measure = (text: string, width: number) =>
+    (doc.splitTextToSize(text, width, { fontSize: 11 }) as string[]).length;
+  if (section.kind === "paragraph") return measure(section.body, CONTENT_WIDTH);
+  if (section.kind === "pairs") return section.pairs.length ? 1 + measure(section.pairs[0].value, CONTENT_WIDTH - 12) : 0;
+  return section.items.length ? measure(section.items[0], CONTENT_WIDTH - 18) : 0;
 }
 
 /** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */

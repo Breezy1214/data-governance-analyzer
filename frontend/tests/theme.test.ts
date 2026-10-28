@@ -48,9 +48,12 @@ const PAIRS: [string, string, number][] = [
   ["muted", "surface-hover", 4.5],
   ["accent-strong", "surface", 4.5],
   ["accent-strong", "paper", 4.5],
-  // Buttons and selected choices
+  // Buttons, the current step and selected choices
+  ["white", "brand", 4.5],
+  ["white", "brand-hover", 4.5],
+  ["brand", "brand-soft", 4.5],
+  ["ink", "brand-soft", 4.5],
   ["white", "ink", 4.5],
-  ["white", "ink-hover", 4.5],
   ["white", "danger-hover", 4.5],
   ["danger", "surface", 4.5],
   ["disabled-fg", "disabled-bg", 4.5],
@@ -64,8 +67,6 @@ const PAIRS: [string, string, number][] = [
   ["risk-high", "surface", 4.5],
   // Text on the dark panels
   ["on-ink", "ink", 4.5],
-  ["on-ink-muted", "ink", 4.5],
-  ["on-ink-dim", "ink", 4.5],
   ["on-ink-strong", "ink", 4.5],
   ["accent", "ink", 4.5],
   // Non-text: control boundaries, focus rings, progress

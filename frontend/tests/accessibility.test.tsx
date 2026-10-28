@@ -188,7 +188,7 @@ describe("assessment flow accessibility", () => {
 
     await screen.findByText(/controls before approval/i);
     expect(screen.getByRole("heading", { name: "General safeguards" })).toBeTruthy();
-    expect(container.querySelector(".recommendation-reason")?.textContent).toMatch(/Relevant to:/);
+    expect(container.querySelector(".capability-list .recommendation-reason")?.textContent).toMatch(/Baseline control/);
     expect(screen.getByText(/Recommendation mapping v1.1: stakeholder approved/)).toBeTruthy();
     expect(screen.getByText("Recommendation mapping version")).toBeTruthy();
     await expectNoViolations(container);
@@ -202,13 +202,15 @@ describe("assessment flow accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
     await waitFor(() => expect(container.querySelector(".capability-list")).not.toBeNull());
-    const panel = container.querySelector(".capability-list") as HTMLElement;
-    const labels = Array.from(panel.querySelectorAll("b")).map((node) => node.textContent ?? "");
-    expect(labels.length).toBeGreaterThan(0);
-    labels.forEach((label) => {
-      expect(CAPABILITY_COPY[label]).toBeTruthy();
-      expect(panel.textContent).toContain(CAPABILITY_COPY[label]);
+    // Each capability appears once: beside the safeguard it delivers, or in the panel.
+    assessmentResult.karlsgateRecommendations.forEach((capability) => {
+      expect(CAPABILITY_COPY[capability.label]).toBe(capability.text);
+      expect(screen.getAllByText(capability.label)).toHaveLength(1);
+      expect(screen.getAllByText(capability.text)).toHaveLength(1);
     });
+    const list = container.querySelector(".recommendation-list") as HTMLElement;
+    expect(within(list).getByText("Protected matching")).toBeTruthy();
+    expect(within(container.querySelector(".capability-list") as HTMLElement).getByText("Governance policy execution")).toBeTruthy();
 
     expect(screen.getByText(/HIGH RISK · 100\/100/i)).toBeTruthy();
     assessmentResult.recommendationDetails.forEach((recommendation) => {
@@ -219,11 +221,12 @@ describe("assessment flow accessibility", () => {
   });
 
   it("does not rely on colour alone to convey the risk level", async () => {
-    render(<AssessmentWizard />);
+    const { container } = render(<AssessmentWizard />);
     answerQuestions(/health information/i, "Share patient records with an external analytics vendor for modelling.");
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
     await screen.findByText(/what drives this score/i);
-    expect(screen.getByText(/HIGH RISK/)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/high risk/);
+    expect(container.querySelector('[data-risk="high"] h2 .risk-icon')).not.toBeNull();
   });
 });
