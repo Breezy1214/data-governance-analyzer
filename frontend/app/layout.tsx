@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Libre_Franklin, Newsreader } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
-const sans = Libre_Franklin({
+const sans = Inter({
   variable: "--font-sans",
-  subsets: ["latin"],
-});
-const serif = Newsreader({
-  variable: "--font-serif",
   subsets: ["latin"],
 });
 const mono = IBM_Plex_Mono({
@@ -24,8 +20,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${serif.variable} ${mono.variable}`}>{children}</body>
+      <body className={`${sans.variable} ${mono.variable}`}>{children}</body>
     </html>
   );
 }
-

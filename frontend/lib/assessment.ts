@@ -88,6 +88,11 @@ export const EMPTY_INPUT: AssessmentInput = {
 
 export const BINARY_FIELDS = ["externalAccess", "rawExchange", "dataMovement", "combined", "secondaryUse"] as const;
 export const DESCRIPTION_MAX_LENGTH = 1000;
+export const RISK_THRESHOLDS = { lowMax: 29, mediumMax: 59 } as const;
+
+export function riskLevelFor(score: number): RiskLevel {
+  return score <= RISK_THRESHOLDS.lowMax ? "LOW" : score <= RISK_THRESHOLDS.mediumMax ? "MEDIUM" : "HIGH";
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -173,10 +178,9 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
   const score = value.score as number;
   const level = value.level as RiskLevel;
   const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
-  const expectedLevel: RiskLevel = score <= 29 ? "LOW" : score <= 59 ? "MEDIUM" : "HIGH";
 
   return score === Math.min(100, rawScore)
-    && level === expectedLevel
+    && level === riskLevelFor(score)
     && hasUniqueValues(details.map((detail) => detail.id))
     && details.every((detail, index) => detail.priority === index + 1
       && hasUniqueValues(detail.riskFactorIds)

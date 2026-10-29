@@ -58,6 +58,36 @@ export function mapRecommendations(factorIds: string[], rulesVersion: string): R
   };
 }
 
+// Display pairing only: the catalog safeguard each Karlsgate capability delivers.
+export const CAPABILITY_SAFEGUARD: Record<string, string> = {
+  PROTECTED_MATCHING: "PRIVATE_MATCHING",
+  REID_REMEDIATION: "REIDENTIFICATION_REVIEW",
+  DEIDENTIFICATION: "DEIDENTIFY_RECORDS",
+  DATA_MINIMIZATION: "FIELD_MINIMIZATION",
+};
+
+const SAFEGUARD_TEXT = new Map(catalog.safeguards.map((entry) => [entry.id, entry.text]));
+
+/**
+ * Attach each capability to the listed safeguard it delivers, matched on the
+ * safeguard's action text, so a control is shown once. Capabilities with no
+ * listed counterpart are returned in `remaining`.
+ */
+export function pairCapabilities({ recommendationDetails, karlsgateRecommendations }: {
+  recommendationDetails: { action: string }[];
+  karlsgateRecommendations: KarlsgateRecommendation[];
+}) {
+  const actions = recommendationDetails.map((item) => item.action);
+  const byAction = new Map<string, KarlsgateRecommendation>();
+  const remaining: KarlsgateRecommendation[] = [];
+  karlsgateRecommendations.forEach((capability) => {
+    const action = SAFEGUARD_TEXT.get(CAPABILITY_SAFEGUARD[capability.id]);
+    if (action && actions.includes(action) && !byAction.has(action)) byAction.set(action, capability);
+    else remaining.push(capability);
+  });
+  return { byAction, remaining };
+}
+
 export function recommendationReason(
   item: SafeguardRecommendation,
   factors: { ruleId: string; label: string }[],
