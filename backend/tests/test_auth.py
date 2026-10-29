@@ -1,181 +1,115 @@
-import sqlite3
+import time
+import uuid
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-import httpx
+import jwt
 import pytest
-from cryptography.fernet import Fernet
-from fastapi import HTTPException
+from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from helpers import sample_payload
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 
-from app.auth import AuthService, AuthSettings, SupabaseProvider, fail
+from app.config import Settings
 from app.main import create_app
 
-
-class FakeProvider:
-    """Test-only identity service; never selected by application configuration."""
-    user_id = "1d94120d-7f1d-4e3d-a379-d82438eb7e24"
-    refreshed = 0
-    unavailable = False
-    logout_fails = False
-
-    def login(self, email, password):
-        if self.unavailable:
-            raise fail(503, "Provider unavailable")
-        if email != "client@example.test" or password != "test-only-password":
-            raise fail(401, "Email or password is incorrect.")
-        return {"access_token": "provider-access-secret", "refresh_token": "provider-refresh-secret", "expires_in": 120}
-
-    def user(self, token):
-        return {"id": self.user_id, "email": "client@example.test"}
-
-    def refresh(self, token):
-        self.refreshed += 1
-        return self.login("client@example.test", "test-only-password")
-
-    def logout(self, token):
-        if self.logout_fails:
-            raise fail(503, "Provider unavailable")
+PROJECT = "https://example.supabase.co"
 
 
 @pytest.fixture
-def system(tmp_path, monkeypatch):
-    monkeypatch.setenv("APP_ENV", "test")
-    settings = AuthSettings(url="https://example.supabase.co", publishable_key="test-key",
-                            frontend_key="f" * 48, encryption_key=Fernet.generate_key().decode(),
-                            database=str(tmp_path / "sessions.sqlite3"), idle_seconds=100, max_seconds=300)
-    now = [1000.0]
-    provider = FakeProvider()
-    service = AuthService(settings, provider, lambda: now[0])
-    app = create_app()
-    app.state.auth_service = service
-    client = TestClient(app, headers={"X-Frontend-Key": settings.frontend_key})
-    return client, service, provider, now
+def private_key():
+    return ec.generate_private_key(ec.SECP256R1())
 
 
-def sign_in(client):
-    response = client.post("/auth/login", json={"email": "client@example.test", "password": "test-only-password"})
+def token(private_key, **overrides):
+    claims = {
+        "sub": str(uuid.uuid4()), "session_id": str(uuid.uuid4()),
+        "iss": f"{PROJECT}/auth/v1", "aud": "authenticated",
+        "exp": int(time.time()) + 300, "iat": int(time.time()) - 1,
+        "role": "authenticated", "is_anonymous": False,
+    }
+    claims.update(overrides)
+    return jwt.encode(claims, private_key, algorithm="ES256", headers={"kid": "test-key"})
+
+
+@pytest.fixture
+def client(private_key):
+    app = create_app(Settings(supabase_url=PROJECT, environment="staging"))
+    with TestClient(app) as client:
+        app.state.token_verifier.keys.get_signing_key_from_jwt = Mock(
+            return_value=SimpleNamespace(key=private_key.public_key())
+        )
+        yield client
+
+
+def test_staging_accepts_signed_access_token(client, private_key):
+    response = client.post("/assessments", json=sample_payload(),
+                           headers={"Authorization": f"Bearer {token(private_key)}"})
     assert response.status_code == 200
-    return response.json()
+    assert response.headers["cache-control"] == "no-store"
+    assert client.get("/health").json()["environment"] == "staging"
 
 
-def auth_header(result):
-    return {"Authorization": f"Bearer {result['sessionToken']}"}
+@pytest.mark.parametrize("header", ["", "Basic anything", "Bearer ", "Bearer invalid"])
+def test_missing_and_malformed_credentials_rejected(client, header):
+    response = client.post("/assessments", json=sample_payload(), headers={"Authorization": header})
+    assert response.status_code == 401
+    assert response.json() == {"message": "Please sign in again."}
 
 
-def test_login_protected_scoring_and_logout(system):
-    client, _, _, _ = system
-    assert client.post("/assessments", json=sample_payload()).status_code == 401
-    result = sign_in(client)
-    assert result["user"]["email"] == "client@example.test"
-    headers = auth_header(result)
-    assert client.get("/auth/session", headers=headers).status_code == 200
-    scored = client.post("/assessments", json=sample_payload(), headers=headers)
-    assert scored.status_code == 200
-    assert scored.json()["mappingVersion"] == "1.1"
-    assert client.post("/auth/logout", headers=headers).status_code == 204
-    assert client.get("/auth/session", headers=headers).status_code == 401
-    assert client.post("/assessments", json=sample_payload(), headers=headers).status_code == 401
+@pytest.mark.parametrize("claims", [
+    {"exp": 1}, {"iss": "https://attacker.test/auth/v1"}, {"aud": "other"},
+    {"sub": "not-a-user"}, {"session_id": "not-a-session"}, {"role": "service_role"},
+    {"is_anonymous": True}, {"exp": None}, {"iat": int(time.time()) + 3600},
+])
+def test_invalid_claims_rejected(client, private_key, claims):
+    response = client.post("/assessments", json=sample_payload(),
+                           headers={"Authorization": f"Bearer {token(private_key, **claims)}"})
+    assert response.status_code == 401
 
 
-def test_unknown_account_and_wrong_password_are_indistinguishable(system):
-    client, _, _, _ = system
-    responses = [client.post("/auth/login", json={"email": email, "password": "wrong"})
-                 for email in ("client@example.test", "unknown@example.test")]
-    assert [r.status_code for r in responses] == [401, 401]
-    assert responses[0].json() == responses[1].json()
+def test_wrong_signature_rejected(client):
+    forged = token(ec.generate_private_key(ec.SECP256R1()))
+    assert client.post("/assessments", json=sample_payload(),
+                       headers={"Authorization": f"Bearer {forged}"}).status_code == 401
 
 
-def test_idle_expiry_cannot_be_extended_by_passive_polling(system):
-    client, _, _, now = system
-    headers = auth_header(sign_in(client))
-    now[0] += 80
-    assert client.get("/auth/session", headers=headers).status_code == 200
-    now[0] += 21
-    assert client.post("/auth/activity", headers=headers).status_code == 401
+def test_symmetric_tokens_are_not_accepted(client):
+    forged = jwt.encode({"sub": "attacker"}, "not-a-real-key" * 4, algorithm="HS256")
+    assert client.post("/assessments", json=sample_payload(),
+                       headers={"Authorization": f"Bearer {forged}"}).status_code == 401
 
 
-def test_activity_refresh_and_absolute_expiry(system):
-    client, _, provider, now = system
-    headers = auth_header(sign_in(client))
-    for _ in range(3):
-        now[0] += 90
-        assert client.post("/auth/activity", headers=headers).status_code == 200
-    assert provider.refreshed >= 1
-    now[0] += 31
-    assert client.get("/auth/session", headers=headers).status_code == 401
+def test_jwks_outage_is_service_error_not_logout(client, private_key):
+    client.app.state.token_verifier.keys.get_signing_key_from_jwt.side_effect = PyJWKClientConnectionError("private detail")
+    response = client.post("/assessments", json=sample_payload(),
+                           headers={"Authorization": f"Bearer {token(private_key)}"})
+    assert response.status_code == 503
+    assert "private detail" not in response.text
 
 
-def test_restarted_server_keeps_session_and_encrypted_provider_credentials(system):
-    client, service, provider, now = system
-    result = sign_in(client)
-    replacement = AuthService(service.settings, provider, lambda: now[0])
-    assert replacement.authenticate(result["sessionToken"])["binding"] == result["binding"]
-    with sqlite3.connect(service.settings.database) as db:
-        row = db.execute("SELECT digest,tokens FROM sessions").fetchone()
-    assert row[0] != result["sessionToken"]
-    assert b"provider-access-secret" not in row[1]
-    assert b"provider-refresh-secret" not in row[1]
+def test_unknown_key_is_unauthorized(client, private_key):
+    client.app.state.token_verifier.keys.get_signing_key_from_jwt.side_effect = PyJWKClientError("unknown")
+    assert client.post("/assessments", json=sample_payload(),
+                       headers={"Authorization": f"Bearer {token(private_key)}"}).status_code == 401
 
 
-def test_logout_still_revokes_locally_during_provider_outage(system):
-    client, _, provider, _ = system
-    headers = auth_header(sign_in(client))
-    provider.logout_fails = True
-    assert client.post("/auth/logout", headers=headers).status_code == 204
-    assert client.get("/auth/session", headers=headers).status_code == 401
+@pytest.mark.parametrize("url", ["", "http://example.test", "https://user:secret@example.test", "https://example.test/path"])
+def test_invalid_configuration_fails_startup(url):
+    with pytest.raises(ValueError, match="SUPABASE_URL"), TestClient(create_app(Settings(supabase_url=url))):
+        pass
 
 
-def test_untrusted_frontend_and_forged_tokens_fail(system):
-    client, _, _, _ = system
-    result = sign_in(client)
-    assert client.get("/auth/session", headers={**auth_header(result), "X-Frontend-Key": "wrong"}).status_code == 401
-    assert client.get("/auth/session", headers={"Authorization": "Bearer forged"}).status_code == 401
+def test_settings_reads_supabase_configuration(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", PROJECT + "/")
+    monkeypatch.setenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+    settings = Settings.from_env()
+    settings.validate_auth()
+    assert settings.supabase_url == PROJECT
 
 
-def test_rate_limit_and_no_sensitive_logging(system, caplog):
-    client, _, _, _ = system
-    for _ in range(5):
-        assert client.post("/auth/login", json={"email": "unknown@example.test", "password": "private-password"}).status_code == 401
-    assert client.post("/auth/login", json={"email": "unknown@example.test", "password": "private-password"}).status_code == 429
-    assert "private-password" not in caplog.text
-    assert "unknown@example.test" not in caplog.text
-
-
-def test_unconfigured_auth_fails_closed_and_health_remains_available(monkeypatch):
-    monkeypatch.delenv("SESSION_ENCRYPTION_KEY", raising=False)
-    with TestClient(create_app()) as client:
-        assert client.get("/health").status_code == 200
-        assert client.post("/assessments", json=sample_payload()).status_code == 503
-
-
-def test_local_store_cannot_be_used_as_production_storage(system, monkeypatch):
-    _, service, provider, _ = system
-    monkeypatch.setenv("APP_ENV", "production")
-    with pytest.raises(HTTPException) as error:
-        AuthService(service.settings, provider)
-    assert error.value.status_code == 503
-
-
-def test_sessions_are_isolated(system):
-    client, _, _, _ = system
-    first, second = sign_in(client), sign_in(client)
-    assert first["binding"] != second["binding"]
-    client.post("/auth/logout", headers=auth_header(first))
-    assert client.get("/auth/session", headers=auth_header(second)).status_code == 200
-
-
-def test_provider_errors_are_sanitized(system, monkeypatch):
-    _, service, _, _ = system
-    provider = SupabaseProvider(service.settings)
-    monkeypatch.setattr(httpx, "request", lambda *a, **k: httpx.Response(400, json={"message": "Account exists: secret"}))
-    with pytest.raises(HTTPException) as error:
-        provider.login("client@example.test", "private-password")
-    assert error.value.detail == "Email or password is incorrect."
-
-
-def test_corrupt_token_store_is_rejected(system):
-    client, service, _, _ = system
-    result = sign_in(client)
-    with service.connection() as db:
-        db.execute("UPDATE sessions SET tokens=?", (b"invalid",))
-    assert client.get("/auth/session", headers=auth_header(result)).status_code == 401
+def test_backend_does_not_grant_cross_origin_browser_access(client):
+    response = client.options("/assessments", headers={
+        "Origin": "https://attacker.test", "Access-Control-Request-Method": "POST",
+    })
+    assert "access-control-allow-origin" not in response.headers

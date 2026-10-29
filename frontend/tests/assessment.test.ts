@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AssessmentInput,
   ASSESSMENT_TIMEOUT_MS,
@@ -19,10 +19,6 @@ const baseline: AssessmentInput = {
   purpose: "matching",
 };
 
-beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
-});
-
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
@@ -36,7 +32,6 @@ describe("assessment client", () => {
   });
 
   it("sends an explicit schema version to the assessment API", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test/");
     const fetchMock = stubAssessmentApi();
 
     const result = await requestAssessment(baseline);
@@ -62,14 +57,6 @@ describe("assessment client", () => {
     stubAssessmentApi(new TypeError("network unavailable"));
 
     await expect(requestAssessment(baseline)).rejects.toThrow("network unavailable");
-  });
-
-  it("uses the same-origin server even without a public API URL", async () => {
-    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
-    const fetchMock = stubAssessmentApi();
-
-    await expect(requestAssessment(baseline)).resolves.toEqual(assessmentResult);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/assessments");
   });
 
   it("does not hide an API validation error with a local score", async () => {

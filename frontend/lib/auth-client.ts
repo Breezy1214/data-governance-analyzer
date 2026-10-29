@@ -1,7 +1,7 @@
 import { clearDraft, purgeLegacyDrafts } from "./session";
 
-export const AUTH_EVENT = "karlsgate-auth-changed";
-const OWNER_KEY = "karlsgate-draft-owner";
+export const AUTH_EVENT = "auth-changed";
+const OWNER_KEY = "draft-owner";
 
 export function clearPrivateState() {
   clearDraft();

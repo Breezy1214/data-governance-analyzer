@@ -1,88 +1,79 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { AuthSession } from "@/lib/auth-server";
-import { AUTH_EVENT, bindDraft, clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { AuthSession } from "@/lib/auth-messages";
+import { AUTH_EVENT, clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
 import { AssessmentWizard } from "./AssessmentWizard";
 
 export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
-  const [ready, setReady] = useState(false);
+  const router = useRouter();
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
+  const expire = useCallback(() => {
+    clearPrivateState();
+    setBlocked(true);
+    router.replace("/login?reason=expired");
+  }, [router]);
 
   useEffect(() => {
+    if (blocked) return;
     let alive = true;
-    let busy = false;
-    let lastActivity = 0;
-    let deadline = Math.min(session.expiresAt, session.idleExpiresAt) * 1000;
+    let checking = false;
     const controller = new AbortController();
-    const expire = () => {
-      if (!alive) return;
-      clearPrivateState(); setReady(false);
-      window.location.replace("/login?reason=expired");
-    };
-    const check = async (touch = false) => {
-      if (!alive || busy) return;
-      busy = true;
+    const check = async () => {
+      if (checking || document.visibilityState === "hidden") return;
+      checking = true;
       try {
-        const response = await fetch(touch ? "/api/activity" : "/api/session", {
-          method: touch ? "POST" : "GET", cache: "no-store",
+        const response = await fetch("/api/session", {
+          cache: "no-store",
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
         });
         if (!alive) return;
         if (response.status === 401) { expire(); return; }
         if (!response.ok) throw new Error("Unavailable");
         const current: AuthSession = await response.json();
-        if (current.binding !== session.binding || current.user.id !== session.user.id) { expire(); return; }
-        deadline = Math.min(current.expiresAt, current.idleExpiresAt) * 1000;
-        if (Date.now() >= deadline) { expire(); return; }
-        bindDraft(session.binding);
-        setError(""); setReady(true);
+        if (current.binding !== session.binding) { expire(); return; }
+        setError("");
       } catch {
-        if (alive) { setReady(false); setError("Unable to verify your session. Retrying..."); }
-      } finally { busy = false; }
-    };
-    const activity = () => {
-      if (Date.now() - lastActivity < 60000 || document.visibilityState === "hidden") return;
-      lastActivity = Date.now(); void check(true);
-    };
-    const visibility = () => {
-      setReady(false);
-      if (document.visibilityState === "visible") void check();
+        if (alive) setError("Session check unavailable. Your work is still here; we will retry.");
+      } finally { checking = false; }
     };
     const storage = (event: StorageEvent) => { if (event.key === AUTH_EVENT) expire(); };
+    // No second activity/idle timer: the wizard owns draft retention; Supabase owns login expiry.
+    const interval = window.setInterval(check, 60000);
+    document.addEventListener("visibilitychange", check);
     window.addEventListener("storage", storage);
-    window.addEventListener("karlsgate-auth-expired", expire);
-    document.addEventListener("visibilitychange", visibility);
-    window.addEventListener("pageshow", visibility);
-    const events = ["pointerdown", "keydown", "scroll"] as const;
-    events.forEach((event) => window.addEventListener(event, activity, { passive: true }));
-    void check();
-    const timer = window.setInterval(() => {
-      if (Date.now() >= deadline) expire();
-    }, 1000);
-    const poll = window.setInterval(() => { if (document.visibilityState !== "hidden") void check(); }, 30000);
     return () => {
-      alive = false; controller.abort(); clearInterval(timer); clearInterval(poll);
-      events.forEach((event) => window.removeEventListener(event, activity));
-      window.removeEventListener("storage", storage); window.removeEventListener("karlsgate-auth-expired", expire);
-      document.removeEventListener("visibilitychange", visibility); window.removeEventListener("pageshow", visibility);
+      alive = false;
+      controller.abort();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("storage", storage);
     };
-  }, [session.binding, session.user.id, session.expiresAt, session.idleExpiresAt]);
+  }, [session.binding, expire, blocked]);
 
   async function logout() {
-    setBlocked(true); clearPrivateState(); notifyAuthChange(); setError("");
+    setBlocked(true);
+    clearPrivateState();
+    notifyAuthChange();
+    setError("");
     try {
       const response = await fetch("/api/logout", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(15000) });
-      if (!response.ok && response.status !== 401) throw new Error("Unavailable");
-      window.location.replace("/login?reason=signed-out");
-    } catch { setError("Your work is hidden, but sign-out could not be confirmed. Please retry before leaving this device."); }
+      if (!response.ok) throw new Error("Unavailable");
+      router.replace("/login?reason=signed-out");
+    } catch {
+      setError("Sign-out could not be confirmed. Please retry before leaving this device.");
+    }
   }
 
   return <>
-    <div className="account-bar"><span>{session.user.email}</span>
-      <button className="secondary" onClick={logout}>{blocked ? "Retry sign out" : "Sign out"}</button></div>
     {error && <p className="auth-status" role="alert">{error}</p>}
-    {ready && !blocked ? <AssessmentWizard /> : <p className="auth-status" role="status">{blocked ? "Assessment locked." : "Checking your session..."}</p>}
+    {blocked
+      ? <main className="auth-page"><p role="status">Assessment locked.</p>
+          <button className="secondary" onClick={logout}>Retry sign out</button></main>
+      : <AssessmentWizard sessionBinding={session.binding} onUnauthorized={expire}
+          account={<div className="account-controls"><span>{session.user.email}</span>
+            <button className="secondary" onClick={logout}>Sign out</button></div>} />}
   </>;
 }

@@ -1,89 +1,174 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const jar = vi.hoisted(() => new Map<string, { value: string }>());
+const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(), getUser: vi.fn(), signInWithPassword: vi.fn(), signOut: vi.fn(),
+  createServerClient: vi.fn(), setCookie: vi.fn(),
+}));
 vi.mock("server-only", () => ({}));
-vi.mock("next/headers", () => ({ cookies: async () => ({ get: (key: string) => jar.get(key), has: (key: string) => jar.has(key) }) }));
-import { currentSession, forward, SESSION_COOKIE } from "../lib/auth-server";
+vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], set: mocks.setCookie }) }));
+import { currentSession, sameOrigin } from "../lib/auth-server";
+import { POST as login } from "../app/api/login/route";
+import { POST as logout } from "../app/api/logout/route";
+import { POST as assess } from "../app/api/assessments/route";
+import { GET as session } from "../app/api/session/route";
+import { proxy } from "../proxy";
+import { NextRequest } from "next/server";
 
 beforeEach(() => {
-  vi.stubEnv("API_BASE_URL", "http://127.0.0.1:8002");
-  vi.stubEnv("FRONTEND_SHARED_KEY", "server-only-key");
-  vi.stubEnv("APP_ORIGIN", "http://localhost:3002");
+  vi.resetAllMocks();
+  vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+  vi.stubEnv("SUPABASE_PUBLISHABLE_KEY", "publishable-test-key");
+  vi.stubEnv("API_BASE_URL", "http://localhost:8000");
+  vi.stubEnv("APP_ORIGIN", "");
+  vi.stubEnv("VERCEL_URL", "");
+  mocks.createServerClient.mockReturnValue({ auth: mocks });
+  mocks.getSession.mockResolvedValue({ data: { session: { access_token: "private-jwt" } }, error: null });
+  mocks.getUser.mockResolvedValue({ data: { user: { id: "user-id", email: "client@example.test", is_anonymous: false } }, error: null });
+  mocks.signInWithPassword.mockResolvedValue({ error: null });
+  mocks.signOut.mockResolvedValue({ error: null });
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); jar.clear(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-function request(action: string, origin = "http://localhost:3002", body = "{}") {
-  return new Request(`http://localhost:3002/api/${action}`, { method: "POST", headers: {
-    Origin: origin, "Content-Type": "application/json",
-  }, body });
+function request(path: string, origin = "http://localhost:3000", body: unknown = { email: "client@example.test", password: "private-password" }) {
+  return new Request("http://localhost:3000/api/" + path, {
+    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
 }
 
-describe("server-side authentication boundary", () => {
-  it("rejects cross-origin state changes before contacting the backend", async () => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
-    const response = await forward(request("login", "https://attacker.test"), "login");
+describe("Supabase authentication routes", () => {
+  it("rejects cross-site requests before authentication", async () => {
+    const response = await login(request("login", "https://attacker.test"));
     expect(response.status).toBe(403);
-    expect(fetch).not.toHaveBeenCalled();
+    expect((await response.json()).message).toMatch(/verified/);
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("places the session only in an HttpOnly cookie, never in the browser JSON", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ sessionToken: "opaque-private-token",
-      user: { id: "user", email: "client@example.test" }, binding: "binding", expiresAt: Date.now() / 1000 + 3600 })));
-    const response = await forward(request("login"), "login");
+  it.each(["http://localhost:3000", "http://127.0.0.1:3000", "https://preview-123.vercel.app"])(
+    "accepts same-origin navigation at %s without APP_ORIGIN", (origin) => {
+      expect(sameOrigin(new Request(origin + "/api/login", { headers: { origin } }))).toBe(true);
+    },
+  );
+
+  it("supports explicitly configured deployment origins without allowing other previews", () => {
+    vi.stubEnv("VERCEL_URL", "approved.vercel.app");
+    expect(sameOrigin(request("login", "https://approved.vercel.app"))).toBe(true);
+    expect(sameOrigin(request("login", "https://other.vercel.app"))).toBe(false);
+    const req = request("login"); req.headers.set("sec-fetch-site", "cross-site");
+    expect(sameOrigin(req)).toBe(false);
+  });
+
+  it("handles Next URL normalization using the actual Host, not forwarded host", () => {
+    const normalized = new Request("http://localhost:3000/api/login", {
+      headers: { origin: "http://127.0.0.1:3000", host: "127.0.0.1:3000" },
+    });
+    expect(sameOrigin(normalized)).toBe(true);
+    const forged = new Request("https://real.example/api/login", {
+      headers: { origin: "https://attacker.test", host: "real.example", "x-forwarded-host": "attacker.test" },
+    });
+    expect(sameOrigin(forged)).toBe(false);
+  });
+
+  it("uses SSR HttpOnly cookies and never returns tokens in login JSON", async () => {
+    const response = await login(request("login"));
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
-    expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
-    expect(await response.text()).not.toContain("opaque-private-token");
+    expect(await response.json()).toEqual({ ok: true });
+    const options = mocks.createServerClient.mock.calls[0][2];
+    expect(options.cookieOptions).toMatchObject({ name: "session", httpOnly: true, sameSite: "lax", path: "/" });
+    options.cookies.setAll([{ name: "session", value: "private-jwt", options: { httpOnly: true } }]);
+    expect(mocks.setCookie).toHaveBeenCalledWith("session", "private-jwt", { httpOnly: true });
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
-  it("forwards server credentials only to the configured backend", async () => {
-    jar.set(SESSION_COOKIE, { value: "opaque-private-token" });
-    const fetch = vi.fn().mockResolvedValue(Response.json({ score: 1 })); vi.stubGlobal("fetch", fetch);
-    await forward(request("assessments"), "assessments");
-    const [url, options] = fetch.mock.calls[0];
-    expect(url).toBe("http://127.0.0.1:8002/assessments");
-    expect(options.headers.Authorization).toBe("Bearer opaque-private-token");
-    expect(options.headers["X-Frontend-Key"]).toBe("server-only-key");
+  it("sets secure cookies in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    await login(request("login"));
+    expect(mocks.createServerClient.mock.calls[0][2].cookieOptions.secure).toBe(true);
   });
 
-  it("clears a rejected session and sanitizes backend errors", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ secret: "database-password" }, { status: 401 })));
-    const response = await forward(request("assessments"), "assessments");
+  it.each([400, 401, 403, 422])("does not expose account existence on provider status %s", async (status) => {
+    mocks.signInWithPassword.mockResolvedValue({ error: { status, message: "account detail" } });
+    const response = await login(request("login"));
     expect(response.status).toBe(401);
-    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
-    expect(await response.text()).not.toContain("database-password");
+    expect(await response.json()).toEqual({ message: "Email or password is incorrect." });
   });
 
-  it("does not falsely confirm logout when the backend is unavailable", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("unavailable")));
-    const response = await forward(request("logout"), "logout");
-    expect(response.status).toBe(503);
-    expect(response.headers.has("set-cookie")).toBe(false);
+  it.each([429, 503])("preserves provider failure category %s without provider details", async (status) => {
+    mocks.signInWithPassword.mockResolvedValue({ error: { status, message: "secret detail" } });
+    const response = await login(request("login"));
+    expect(response.status).toBe(status);
+    expect(await response.text()).not.toContain("secret detail");
   });
 
-  it("clears cookies after confirmed logout", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
-    const response = await forward(request("logout"), "logout");
+  it("rejects invalid input without a provider call", async () => {
+    expect((await login(request("login", undefined, { email: [], password: "" }))).status).toBe(400);
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("forwards only a verified token and the unchanged body to FastAPI", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 1 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await assess(request("assessments", undefined, { schemaVersion: "2.0" }));
     expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(mocks.getUser).toHaveBeenCalledWith("private-jwt");
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url.toString()).toBe("http://localhost:8000/assessments");
+    expect(options.headers.Authorization).toBe("Bearer private-jwt");
+    expect(options.headers["X-Frontend-Key"]).toBeUndefined();
+    expect(options.body).toBeInstanceOf(ReadableStream);
   });
 
-  it("protects initial page access without trusting client identity", async () => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  it.each([401, 413, 422, 503])("preserves backend status and safe message %s", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ message: "Backend message" }, { status })));
+    const response = await assess(request("assessments"));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ message: "Backend message" });
+  });
+
+  it("does not trust an unverified cookie session", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 401 } });
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    expect((await assess(request("assessments"))).status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns no session for a signed-out visitor", async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: null }, error: null });
     expect(await currentSession()).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    expect((await session()).status).toBe(401);
   });
 
-  it("rejects oversized streamed login bodies", async () => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
-    expect((await forward(request("login", undefined, "x".repeat(17000)), "login")).status).toBe(413);
-    expect(fetch).not.toHaveBeenCalled();
+  it("keeps authentication outages distinct from being signed out", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 503 } });
+    await expect(currentSession()).rejects.toThrow(/unavailable/);
+    expect((await session()).status).toBe(503);
   });
 
-  it("rejects GET logout and unknown actions", async () => {
-    expect((await forward(new Request("http://localhost:3002/api/logout"), "logout")).status).toBe(405);
-    expect((await forward(request("admin"), "admin")).status).toBe(404);
+  it("reports missing configuration instead of redirecting to login", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    await expect(currentSession()).rejects.toThrow(/configuration/);
+    expect((await session()).status).toBe(503);
+  });
+
+  it("confirms sign-out only after Supabase accepts it", async () => {
+    expect((await logout(request("logout"))).status).toBe(200);
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    mocks.signOut.mockResolvedValue({ error: { status: 503 } });
+    expect((await logout(request("logout"))).status).toBe(503);
+  });
+
+  it("refreshes cookies on both the downstream request and browser response", async () => {
+    mocks.getUser.mockImplementation(async () => {
+      mocks.createServerClient.mock.calls[0][2].cookies.setAll([
+        { name: "session", value: "refreshed", options: { httpOnly: true, sameSite: "lax", path: "/" } },
+      ]);
+      return { data: { user: { id: "user-id" } }, error: null };
+    });
+    const req = new NextRequest("https://example.test/");
+    const response = await proxy(req);
+    expect(req.cookies.get("session")?.value).toBe("refreshed");
+    expect(response.cookies.get("session")?.value).toBe("refreshed");
+    expect(response.headers.get("cache-control")).toContain("no-store");
   });
 });

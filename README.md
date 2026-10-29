@@ -28,10 +28,10 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
-uvicorn app.main:app --reload --port 8022 --env-file .env
+uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
 
-Check `http://localhost:8022/health` or `http://localhost:8022/version`.
+Check `http://localhost:8000/health` or `http://localhost:8000/version`.
 
 ### Frontend
 
@@ -39,15 +39,14 @@ Check `http://localhost:8022/health` or `http://localhost:8022/version`.
 cd frontend
 cp .env.example .env.local
 npm install
-npm run dev -- --hostname localhost --port 3022
+npm run dev
 ```
 
-Open `http://localhost:3022/login`. Configure server-only `API_BASE_URL`, `APP_ORIGIN`, and
-`FRONTEND_SHARED_KEY` using the environment examples. The shared key must match the backend;
-generate a Fernet key for backend `SESSION_ENCRYPTION_KEY`. Do not overwrite an existing
-`.env.local` when copying the example. Real login requires a configured Supabase project.
-Set backend `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` and use an existing confirmed
-account. Never use a service-role key or commit private environment files.
+Open `http://localhost:3000/login`. Set server-only `API_BASE_URL`, `SUPABASE_URL`, and
+`SUPABASE_PUBLISHABLE_KEY` in the frontend environment. Set `SUPABASE_URL` in the backend
+environment. Use the same Supabase project with an asymmetric signing key (ES256 or RS256)
+and an existing confirmed account. Never use a service-role key or commit private environment
+files. Do not overwrite existing environment files when copying the examples.
 
 ## Quality checks
 
@@ -76,8 +75,9 @@ cd backend
 
 Deployment configuration and environment requirements are documented in [docs/deployment.md](docs/deployment.md). Do not commit credentials or production-sensitive data.
 
-Login currently uses a local SQLite session store. Hosted environments are deliberately
-blocked until shared production session storage and real Supabase/HTTPS checks are complete.
+Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
+FastAPI verifies access-token signatures through the project's JWKS endpoint.
+Real-provider and HTTPS smoke tests are required before deploying; see the deployment guide.
 
 ## SCRUM 12 Integration
 

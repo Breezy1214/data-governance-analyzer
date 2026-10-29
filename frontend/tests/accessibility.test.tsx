@@ -49,7 +49,6 @@ function answerQuestions(dataType?: RegExp, description?: string) {
 
 beforeEach(() => {
   window.sessionStorage.clear?.();
-  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
   stubAssessmentApi();
 });
 
@@ -61,6 +60,16 @@ afterEach(() => {
 });
 
 describe("assessment flow accessibility", () => {
+  it("handles an unauthorized assessment in the component and clears its draft", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const onUnauthorized = vi.fn();
+    render(<AssessmentWizard onUnauthorized={onUnauthorized} />);
+    answerQuestions();
+    fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
+    await waitFor(() => expect(onUnauthorized).toHaveBeenCalledOnce());
+    expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+    expect(screen.queryByText(/what drives this score/i)).toBeNull();
+  });
   it("restores drafts across repeated mounts in Strict Mode", async () => {
     const draft = { ...EMPTY_INPUT, description: "Share loyalty member emails with a partner brand." };
     saveDraft(draft);

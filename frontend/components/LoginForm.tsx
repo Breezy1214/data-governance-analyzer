@@ -2,17 +2,13 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
+import { AUTH_MESSAGES } from "@/lib/auth-messages";
 
-export function LoginForm() {
+export function LoginForm({ expired = false }: { expired?: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(expired ? AUTH_MESSAGES.expired : "");
   useEffect(() => {
     clearPrivateState();
-    const reason = new URLSearchParams(window.location.search).get("reason");
-    const timer = window.setTimeout(() => {
-      if (reason === "expired") setError("Your session has ended. Please sign in again.");
-    }, 0);
-    return () => window.clearTimeout(timer);
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -26,10 +22,8 @@ export function LoginForm() {
         body: JSON.stringify({ email: String(fields.get("email")).trim(), password: String(fields.get("password")) }),
         cache: "no-store", signal: AbortSignal.timeout(15000) });
       if (!response.ok) {
-        setError(response.status === 401 ? "Email or password is incorrect."
-          : response.status === 429 ? "Too many attempts. Please try again later."
-          : response.status === 503 ? "Sign-in is not available right now. Please contact your project administrator."
-          : "Please check your details and try again.");
+        const payload = await response.json().catch(() => null);
+        setError(typeof payload?.message === "string" ? payload.message : AUTH_MESSAGES.unavailable);
         return;
       }
       clearPrivateState(); notifyAuthChange();
@@ -43,7 +37,7 @@ export function LoginForm() {
   }
 
   return <main className="auth-page">
-    <header className="auth-heading"><p className="section-number">KARLSGATE</p><h1>Client sign in</h1>
+    <header className="auth-heading"><h1>Client sign in</h1>
       <p>Data Governance Readiness Analyzer</p></header>
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       <label htmlFor="email">Email address</label>

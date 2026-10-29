@@ -1,103 +1,94 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createSupabaseClient } from "./supabase";
+import { AUTH_MESSAGES, type AuthSession } from "./auth-messages";
 
-export const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-kg-session" : "kg-session";
-export type AuthSession = {
-  user: { id: string; email: string };
-  binding: string;
-  expiresAt: number;
-  idleExpiresAt: number;
-};
+export class AuthenticationError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
 
-export async function backend(path: string, method = "GET", body?: unknown, signal?: AbortSignal) {
-  const base = process.env.API_BASE_URL;
-  const key = process.env.FRONTEND_SHARED_KEY;
-  if (!base || !key) throw new Error("Authentication unavailable");
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  return fetch(`${base.replace(/\/+$/, "")}${path}`, {
-    method, cache: "no-store", redirect: "error",
-    headers: { "Content-Type": "application/json", "X-Frontend-Key": key,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000),
+export async function serverAuth(readOnly = false) {
+  const cookieStore = await cookies();
+  return createSupabaseClient({
+    getAll: () => cookieStore.getAll(),
+    setAll: readOnly ? undefined : (updates) => {
+      updates.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+    },
   });
 }
 
+export function sessionError(error: { status?: number; name?: string }) {
+  if (error.name === "AuthSessionMissingError" || error.status === 400 || error.status === 401 || error.status === 403) {
+    return new AuthenticationError(401, AUTH_MESSAGES.expired);
+  }
+  return new AuthenticationError(503, AUTH_MESSAGES.unavailable);
+}
+
+export async function authenticatedSession(readOnly = false) {
+  const client = await serverAuth(readOnly);
+  // getSession supplies a token, not trusted identity. Verify that token with Auth before use.
+  const { data: { session }, error } = await client.auth.getSession();
+  if (error) throw sessionError(error);
+  if (!session) return null;
+  const { data: { user }, error: userError } = await client.auth.getUser(session.access_token);
+  if (userError) throw sessionError(userError);
+  if (!user || user.is_anonymous || !user.email) throw new AuthenticationError(401, AUTH_MESSAGES.expired);
+  const payload: AuthSession = { user: { id: user.id, email: user.email }, binding: user.id };
+  return { accessToken: session.access_token, payload };
+}
+
 export async function currentSession(): Promise<AuthSession | null> {
-  if (!(await cookies()).has(SESSION_COOKIE)) return null;
-  const response = await backend("/auth/session");
-  if (response.status === 401) return null;
-  if (!response.ok) throw new Error("Authentication unavailable");
-  return response.json();
+  try { return (await authenticatedSession(true))?.payload ?? null; }
+  catch (error) {
+    if (error instanceof AuthenticationError && error.status === 401) return null;
+    throw error;
+  }
 }
 
 export function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store, private" } });
 }
 
-export function clearCookie(response: NextResponse) {
-  response.cookies.set(SESSION_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production",
-    sameSite: "lax", path: "/", maxAge: 0 });
-  return response;
+export function errorResponse(error: unknown) {
+  return error instanceof AuthenticationError
+    ? json({ message: error.message }, error.status)
+    : json({ message: AUTH_MESSAGES.unavailable }, 503);
 }
 
 export function sameOrigin(request: Request) {
-  const allowed = process.env.APP_ORIGIN;
-  return Boolean(allowed && request.headers.get("origin") === allowed
-    && request.headers.get("sec-fetch-site") !== "cross-site");
+  const origin = request.headers.get("origin");
+  if (!origin || request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const allowed = new Set([new URL(request.url).origin]);
+  // Next may normalize request.url to localhost while the browser uses 127.0.0.1.
+  // Host is the actual HTTP destination; never trust arbitrary X-Forwarded-Host values.
+  try {
+    const source = new URL(origin);
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(source.hostname);
+    if (source.origin === origin && source.host === request.headers.get("host")
+      && (source.protocol === "https:" || (loopback && source.protocol === "http:"))) {
+      allowed.add(origin);
+    }
+  } catch { return false; }
+  if (process.env.APP_ORIGIN) allowed.add(new URL(process.env.APP_ORIGIN).origin);
+  if (process.env.VERCEL_URL) allowed.add(new URL("https://" + process.env.VERCEL_URL).origin);
+  return allowed.has(origin);
 }
 
-export async function forward(request: Request, action: string) {
-  const routes: Record<string, string> = {
-    login: "/auth/login", logout: "/auth/logout", session: "/auth/session",
-    activity: "/auth/activity", assessments: "/assessments",
-  };
-  if (!Object.hasOwn(routes, action)) return json({ message: "Not found." }, 404);
-  if (request.method !== (action === "session" ? "GET" : "POST")) return json({ message: "Method not allowed." }, 405);
-  if (request.method === "POST" && !sameOrigin(request)) return json({ message: "Request not allowed." }, 403);
-  try {
-    let body: unknown;
-    if (action === "login" || action === "assessments") {
-      if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ message: "Invalid request." }, 415);
-      // Bound the stream as well as Content-Length; do not buffer arbitrarily large bodies.
-      const reader = request.body?.getReader();
-      if (!reader) return json({ message: "Invalid request." }, 400);
-      let size = 0;
-      const parts: Uint8Array[] = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > 16384) { await reader.cancel(); return json({ message: "Request too large." }, 413); }
-        parts.push(value);
-      }
-      try { body = JSON.parse(Buffer.concat(parts).toString("utf8")); }
-      catch { return json({ message: "Invalid request." }, 400); }
-    }
-    const upstream = await backend(routes[action], request.method, body, request.signal);
-    if (!upstream.ok) {
-      const status = [400, 401, 403, 422, 429].includes(upstream.status) ? upstream.status : 503;
-      const message = status === 401 ? (action === "login" ? "Email or password is incorrect." : "Please sign in again.")
-        : status === 429 ? "Too many attempts. Please try again later."
-        : status === 503 ? "Sign-in service is unavailable. Please try again later."
-        : "Please check your details and try again.";
-      const response = json({ message }, status);
-      return status === 401 && action !== "login" ? clearCookie(response) : response;
-    }
-    if (action === "logout") return clearCookie(json({ ok: true }));
-    const result = await upstream.json();
-    if (action === "login") {
-      const { sessionToken, ...session } = result;
-      if (typeof sessionToken !== "string" || !Number.isFinite(session.expiresAt)) throw new Error("Invalid session");
-      const response = json(session);
-      response.cookies.set(SESSION_COOKIE, sessionToken, { httpOnly: true,
-        secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/",
-        maxAge: Math.max(0, Math.floor(session.expiresAt - Date.now() / 1000)) });
-      return response;
-    }
-    return json(result);
-  } catch {
-    return json({ message: "The service is temporarily unavailable. Please try again." }, 503);
-  }
+export function requireSameOrigin(request: Request) {
+  if (!sameOrigin(request)) throw new AuthenticationError(403, AUTH_MESSAGES.forbidden);
+}
+
+export async function backend(request: Request, accessToken: string) {
+  const base = process.env.API_BASE_URL;
+  if (!base) throw new Error("Backend configuration is unavailable.");
+  // Stream unchanged; FastAPI owns JSON validation and its configured request-size limit.
+  return fetch(new URL("/assessments", base), {
+    method: "POST", cache: "no-store", redirect: "error",
+    headers: { "Content-Type": request.headers.get("content-type") ?? "application/json",
+      Authorization: `Bearer ${accessToken}` },
+    body: request.body,
+    duplex: "half",
+    signal: AbortSignal.any([request.signal, AbortSignal.timeout(12000)]),
+  } as RequestInit & { duplex: "half" });
 }

@@ -59,15 +59,15 @@
 .auth-heading p, .auth-note { color: var(--muted); line-height: 1.6; }
 .auth-form { margin-top: 32px; display: grid; gap: 12px; }
 .auth-form label { font-size: 14px; font-weight: 600; }
-.auth-form input { width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--control-line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+.auth-form input { min-width: 0; min-height: 50px; padding: 12px; }
 .auth-form button { margin-top: 12px; min-height: 48px; }
 .auth-note { font-size: 13px; }
-.account-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.account-bar span { overflow-wrap: anywhere; min-width: 0; }
+.account-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.account-controls span { overflow-wrap: anywhere; min-width: 0; }
 .auth-status { padding: 24px; color: var(--muted); }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; -webkit-font-smoothing: antialiased; }
-button, textarea, select { font: inherit; }
+button, input, textarea, select { font: inherit; }
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 /* Programmatic focus targets (step headings) are not controls, so they get no ring. */
 [tabindex="-1"]:focus { outline: none; }
@@ -104,7 +104,7 @@ button, textarea, select { font: inherit; }
 .progress-card p { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 .main-area { min-width: 0; display: flex; flex-direction: column; padding: 16px clamp(16px, 3vw, 36px) 0; }
-.topbar { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--brand); font-size: 14px; }
+.topbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 40px; color: var(--brand); font-size: 14px; }
 .topbar b { font-weight: 500; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px 24px; margin: 14px 0 26px; }
 .page-header h1 { margin: 0 0 6px; font-size: clamp(26px, 2.4vw, 32px); font-weight: 500; letter-spacing: -.02em; }
@@ -134,10 +134,10 @@ button, textarea, select { font: inherit; }
 .workspace .card-title { margin: 0 0 16px; font-size: 17px; font-weight: 500; }
 
 .text-field > span, .select-field > span { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; font-weight: 600; }
-textarea, select { width: 100%; border: 1px solid var(--control-line); border-radius: 12px; background: var(--surface); color: var(--ink); transition: border-color .18s, box-shadow .18s; }
+input, textarea, select { width: 100%; border: 1px solid var(--control-line); border-radius: 12px; background: var(--surface); color: var(--ink); transition: border-color .18s, box-shadow .18s; }
 textarea { min-height: 190px; resize: vertical; padding: 16px; line-height: 1.6; }
 select { min-height: 48px; padding: 0 14px; cursor: pointer; }
-textarea:hover, select:hover { border-color: var(--brand); }
+input:hover, textarea:hover, select:hover { border-color: var(--brand); }
 textarea:focus-visible, select:focus-visible { outline-offset: 1px; border-color: var(--brand); }
 textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
 textarea::placeholder { color: var(--muted); }

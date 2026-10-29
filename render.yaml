@@ -13,7 +13,7 @@ services:
         value: staging
       - key: APP_VERSION
         value: 0.1.0
-      - key: ALLOWED_ORIGINS
+      - key: SUPABASE_URL
         sync: false
-      - key: ALLOWED_ORIGIN_REGEX
-        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated

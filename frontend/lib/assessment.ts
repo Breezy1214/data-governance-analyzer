@@ -217,7 +217,6 @@ export async function requestAssessment(input: AssessmentInput, signal?: AbortSi
       cache: "no-store",
       signal: controller.signal,
     });
-    if (response.status === 401) window.dispatchEvent(new Event("karlsgate-auth-expired"));
     if (!response.ok) throw new AssessmentServiceError(response.status);
 
     let result: unknown;

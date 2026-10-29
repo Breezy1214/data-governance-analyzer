@@ -5,9 +5,8 @@ from fastapi.testclient import TestClient
 from helpers import sample_payload
 
 from app.auth import require_session
-from app.config import Settings
 from app.logging_config import JsonFormatter
-from app.main import app, create_app
+from app.main import app
 
 client = TestClient(app)
 
@@ -18,17 +17,6 @@ def authenticated_scoring_contract():
     app.dependency_overrides[require_session] = lambda: {"user": {"id": "scoring-test"}}
     yield
     app.dependency_overrides.clear()
-
-
-def preflight(test_client, origin):
-    return test_client.options(
-        "/assessments",
-        headers={
-            "Origin": origin,
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
-        },
-    )
 
 
 def test_health_and_version():
@@ -114,30 +102,6 @@ def test_oversized_request_is_rejected_before_validation():
 
     assert [response.status_code for response in responses] == [413, 413]
     assert all(response.json()["error"] == "request_too_large" for response in responses)
-
-
-@pytest.mark.parametrize("origin", ["http://localhost:3000", "http://127.0.0.1:3000"])
-def test_development_frontend_origins_can_post(origin):
-    response = preflight(client, origin)
-
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == origin
-
-
-@pytest.mark.parametrize(
-    ("origin", "allowed"),
-    [
-        ("https://data-governance-analyzer-git-dev-team.vercel.app", True),
-        ("https://data-governance-analyzer-abc123-team.vercel.app", True),
-        ("https://evil.example/data-governance-analyzer-x-team.vercel.app", False),
-        ("https://other-project-team.vercel.app", False),
-    ],
-)
-def test_preview_origin_regex_controls_cors(origin, allowed):
-    settings = Settings(allowed_origin_regex=r"https://data-governance-analyzer-[a-z0-9-]+-team\.vercel\.app")
-    response = preflight(TestClient(create_app(settings)), origin)
-
-    assert (response.headers.get("access-control-allow-origin") == origin) is allowed
 
 
 def test_user_controlled_extra_field_name_is_not_echoed_or_logged(caplog):

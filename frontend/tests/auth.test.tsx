@@ -8,8 +8,13 @@ import { DRAFT_KEY } from "../lib/session";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
 describe("sign in", () => {
+  it("shows the server-provided expiry reason immediately", () => {
+    render(<LoginForm expired />);
+    expect(screen.getByRole("alert").textContent).toMatch(/session has ended/);
+  });
+
   it("uses accessible fields and does not reveal account existence", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ message: "Email or password is incorrect." }, { status: 401 })));
     render(<LoginForm />);
     fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "client@example.test" } });
     const password = screen.getByLabelText("Password") as HTMLInputElement;
@@ -23,7 +28,7 @@ describe("sign in", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("secret upstream details", { status: 503 })));
     render(<LoginForm />);
     fireEvent.submit(screen.getByRole("button", { name: "Sign in" }).closest("form")!);
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/not available/));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/unavailable/));
     expect(document.body.textContent).not.toContain("secret upstream details");
   });
 
