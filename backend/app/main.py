@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth import TokenVerifier, require_session
 from app.config import Settings
 from app.logging_config import configure_logging, logger
 from app.request_limits import RequestBodyLimitMiddleware
@@ -18,22 +19,30 @@ configure_logging()
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.token_verifier = TokenVerifier(settings)
+        yield
+
     app = FastAPI(
         title="Data Governance Readiness API",
         description="Transparent rule-based privacy risk-scoring service.",
         version=settings.version,
+        lifespan=lifespan,
     )
 
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=list(settings.allowed_origins),
-        allow_origin_regex=settings.allowed_origin_regex,
-        allow_credentials=False,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
-    )
+    @app.exception_handler(HTTPException)
+    async def handle_http_error(request: Request, exc: HTTPException) -> JSONResponse:
+        request_id = str(uuid.uuid4())
+        error = {401: "unauthorized", 503: "auth_unavailable"}.get(exc.status_code, "request_failed")
+        logger.warning("request_rejected", extra={"fields": {"requestId": request_id, "error": error}})
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": error, "message": exc.detail, "requestId": request_id},
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -69,7 +78,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def version() -> dict[str, str]:
         return {"version": settings.version}
 
-    @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"])
+    @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"],
+              dependencies=[Depends(require_session)])
     def create_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
         request_id = str(uuid.uuid4())
         # Results describe a sensitive use case; keep them out of browser and proxy caches.

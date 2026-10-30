@@ -8,7 +8,7 @@ People who have **not** worked on this project and are **not** privacy specialis
 
 ## Before you start
 
-1. Run the app: `cd frontend && npm run dev`, then open `http://localhost:3000`.
+1. Run the app with `./scripts/start-dev.sh`, open `http://localhost:3000/login`, and sign in with the team's test account before the participant arrives.
 2. Have a timer ready.
 3. Open a fresh tab for each person so no draft is restored.
 4. Tell them: **"I'm testing the tool, not you. If you get stuck, that's useful — say what you're thinking out loud."**

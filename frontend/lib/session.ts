@@ -10,7 +10,7 @@ const LEGACY_KEYS = ["governance-assessment-draft-v1"];
 
 type StoredDraft = { savedAt: number; input: AssessmentInput };
 
-function safely<T>(action: () => T, fallback?: T): T | undefined {
+export function safely<T>(action: () => T, fallback?: T): T | undefined {
   try {
     return action();
   } catch {

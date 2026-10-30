@@ -29,6 +29,7 @@ import {
 } from "@/lib/document-import";
 import { pairCapabilities, recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
+import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
 
 const STEPS: { label: string; icon: IconName }[] = [
@@ -140,7 +141,11 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-export function AssessmentWizard() {
+export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
+  account?: React.ReactNode;
+  draftOwner?: string;
+  onUnauthorized?: () => void;
+} = {}) {
   const [step, setStep] = useState(0);
   const [maxReached, setMaxReached] = useState(0);
   const [input, setInput] = useState<AssessmentInput>(EMPTY_INPUT);
@@ -192,6 +197,7 @@ export function AssessmentWizard() {
 
   useEffect(() => {
     purgeLegacyDrafts();
+    if (draftOwner) bindDraft(draftOwner);
     const restored = loadDraft();
     // Deferred: sessionStorage is client-only, and react-hooks/set-state-in-effect bans sync setState here.
     const restoreDraft = window.setTimeout(() => {
@@ -199,7 +205,7 @@ export function AssessmentWizard() {
       setDraftReady(true);
     }, 0);
     return () => window.clearTimeout(restoreDraft);
-  }, []);
+  }, [draftOwner]);
 
   useEffect(() => {
     if (!draftReady) return;
@@ -267,6 +273,11 @@ export function AssessmentWizard() {
       moveTo(2);
     } catch (failure) {
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
+      if (failure instanceof AssessmentServiceError && failure.status === 401) {
+        reset();
+        onUnauthorized?.();
+        return;
+      }
       setError(failure instanceof AssessmentServiceError && failure.status === 422
         ? "The assessment service could not accept these answers. Review them and try again."
         : "The assessment service is unavailable. Your answers are still in this tab—please try again.");
@@ -373,6 +384,7 @@ export function AssessmentWizard() {
         <div className="topbar">
           <Icon name="grid" size={18} />
           <b>{STEPS[step].label}</b>
+          {account}
         </div>
 
         <header className="page-header">

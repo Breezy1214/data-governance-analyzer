@@ -4,9 +4,11 @@ Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so i
 
 ## Decision
 
-v1.0 is **stateless**: assessments are not retained on the server, and there are no accounts or database. See [deployment.md](deployment.md).
-
-- No authentication is implemented for v1.0.
+Assessments remain **stateless**: answers and reports are not retained on the server.
+Supabase manages authenticated accounts and session metadata. The application has no
+local session database. Next.js stores Supabase session tokens in HttpOnly, SameSite=Lax
+cookies (Secure on hosted HTTPS deployments); browser JavaScript cannot read them.
+FastAPI verifies JWT signature, issuer, audience, expiry, and authenticated user claims.
 
 ## Field inventory
 
@@ -27,8 +29,13 @@ The API schema does not accept `description`; it remains exclusively in the brow
 ## Data flow
 
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.
-2. On **Assess risk**, the browser sends only the scored fields to `POST /assessments` in the request body. Nothing goes in the URL or query string. FastAPI is the only scoring implementation; if it is unavailable, the browser displays an error and does not produce a score.
-3. The API scores the request in memory and returns the result with `Cache-Control: no-store`. Nothing is written to a database.
+2. On **Assess risk**, the browser sends only the scored fields to same-origin `POST /api/assessments`.
+   The Next.js server forwards the request to FastAPI `POST /assessments` with the user's verified access token.
+   Nothing goes in the URL or query string. FastAPI verifies the session and is the only scoring implementation;
+   if it is unavailable, the browser displays an error and does not produce a score.
+3. The API scores the request in memory and returns the result with `Cache-Control: no-store`.
+   Assessment answers and results are not written to a database. Supabase separately retains
+   account/session metadata; authentication and token refresh can update that metadata.
 4. The PDF report is generated entirely in the browser (jsPDF) and downloaded with a generic filename (`data-governance-assessment.pdf`). It is never uploaded, and it carries no author or keyword metadata and no internal rule identifiers. See `frontend/lib/report.ts`.
 
 ## Session lifetime and deletion
@@ -43,16 +50,21 @@ The API schema does not accept `description`; it remains exclusively in the brow
 
 Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
 
+The draft timer is not the login lifetime. Logout clears drafts across tabs; login lifetime and
+token revocation are covered under "Supabase setup" in [deployment.md](deployment.md).
+
 ## Logs, analytics, URLs, and errors
 
 - **Application logs** (`backend/app/logging_config.py`) record only a random request ID, schema/rules versions, score, level, and fired rule IDs. Raw answers and free text are never logged. Covered by `test_scoring_logs_exclude_questionnaire_input`.
 - **Validation errors** report field names only, never submitted values or unknown field names. Covered by `test_invalid_input_returns_clear_client_error_without_echoing_input` and `test_user_controlled_extra_field_name_is_not_echoed_or_logged`.
-- **URLs:** assessment content never appears in paths or query strings. The only route is `/`.
+- **URLs:** assessment content and credentials never appear in paths or query strings.
+  Routes include `/`, `/login`, and same-origin `/api/*` handlers.
 - **Analytics and error reporting:** none are installed. Any tool added later must not capture request bodies, form values, or `sessionStorage`.
 
 ## Hosted environments
 
-- **Vercel (frontend):** static page. Input stays in the browser.
+- **Vercel (frontend):** dynamic server-rendered protected pages and same-origin API handlers.
+  Free-text descriptions stay in the browser; responses containing identity or assessments are not cached.
 - **Render (FastAPI):** Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
 
 ## What we tell users

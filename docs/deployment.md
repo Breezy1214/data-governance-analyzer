@@ -7,7 +7,11 @@
 | Next.js + TypeScript frontend | `next dev` | Vercel preview deployment | Vercel production deployment |
 | FastAPI service | Uvicorn | Render preview/staging service | Render web service |
 
-FastAPI calculates assessments in memory and is required for scoring. There is no database or authentication service. Render builds and runs the backend directly with Python (no Docker); local development runs it with Uvicorn.
+FastAPI calculates assessments in memory and is required for scoring. Supabase Auth manages
+accounts and sessions; assessment content is not stored in its database. Next.js uses
+`@supabase/ssr` with server-only HttpOnly cookies. FastAPI independently verifies Supabase
+access JWTs using the project's public signing keys. There is no application session database
+or shared frontend/backend secret. Render runs the backend directly with Python (no Docker).
 
 ## Frontend (Vercel)
 
@@ -44,11 +48,11 @@ vercel git connect https://github.com/bsu-capstone/data-governance-analyzer-3-f2
 Then add the API URL for each environment (the CLI prompts for the value, so it never lands in shell history):
 
 ```bash
-vercel env add NEXT_PUBLIC_API_BASE_URL production
+vercel env add API_BASE_URL production
 ```
 
 ```bash
-vercel env add NEXT_PUBLIC_API_BASE_URL preview
+vercel env add API_BASE_URL preview
 ```
 
 Vercel uses the repository's default branch (`main`) as the production branch. Trigger the first production build by pushing or merging to `main`, or with `vercel --prod` from the repository root.
@@ -59,36 +63,69 @@ Day-to-day flow: work lands on `dev` in `origin`, is reviewed, then merged into 
 
 | Name | Production | Preview | Notes |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Production FastAPI URL | Staging FastAPI URL (or production if no staging) | Public by design; embedded in the browser bundle at build time |
+| `API_BASE_URL` | Production FastAPI URL | Staging FastAPI URL | Server-only; use HTTPS on hosted environments |
+| `SUPABASE_URL` | Production Auth project origin | Staging Auth project origin | Must match the corresponding backend |
+| `SUPABASE_PUBLISHABLE_KEY` | Production publishable key | Staging publishable key | Not a service-role or secret key |
+| `APP_ORIGIN` | Optional canonical HTTPS origin | Optional canonical preview origin | Same-origin requests work without it; use for a trusted reverse proxy |
 
-`NEXT_PUBLIC_*` values are visible to every visitor, so never put secrets in them. Changing the value only takes effect after a redeploy. The frontend has no server-side secrets, and there is no browser scoring fallback: if the variable is missing the app shows "The assessment service is unavailable" without revealing configuration.
+Add the Supabase variables to both Vercel environments as well, then redeploy.
+None of these variables needs a `NEXT_PUBLIC_` prefix. Provider sessions stay in HttpOnly
+cookies and are never returned in browser JSON. Missing configuration produces a generic
+service-unavailable response, not a silent redirect to login. There is no browser scoring fallback.
 
-### Cross-origin access
+### Request boundaries
 
-The backend only accepts browser requests from approved origins:
+The browser calls only the same-origin Next.js `/api/*` routes. Next.js calls FastAPI
+server-to-server, so FastAPI no longer grants browser CORS access. This does not replace
+authorization: direct backend requests must carry a valid signed user access token.
+POST handlers check Origin and reject cross-site Fetch Metadata. They accept the request
+origin, optional `APP_ORIGIN`, and the exact Vercel-provided `VERCEL_URL`, never arbitrary
+Vercel subdomains. Reverse proxies must sanitize forwarded host headers.
 
-- `ALLOWED_ORIGINS`: exact origins, including the production URL `https://data-governance-analyzer.vercel.app`.
-- `ALLOWED_ORIGIN_REGEX`: optional full-match pattern for preview URLs, scoped to this project and team:
-  `https://data-governance-analyzer-[a-z0-9-]+-breezy1214s-projects\.vercel\.app`
+FastAPI enforces `MAX_REQUEST_BYTES`; assessment bodies are streamed to it rather than
+buffered and validated twice. Set platform-level request-body limits for the Next.js login
+route and edge abuse protection. Supabase owns login rate limiting; there is no shared
+application-wide login counter that can lock every user out.
 
-Leave `ALLOWED_ORIGIN_REGEX` unset on the production backend if previews use a separate staging backend.
+### Supabase setup
+
+Enable email/password authentication, provision a confirmed test account, and use an
+asymmetric signing key (ES256 or RS256). Legacy HS256 tokens are intentionally rejected;
+migrate signing keys before rollout. The backend validates issuer, audience, expiry,
+user/session identifiers, and the authenticated non-anonymous role.
+
+Agree the session lifetime, idle policy, account provisioning, and recovery procedure with
+the team. Configure supported session controls in Supabase; available controls depend on
+the plan. The browser's 30-minute draft timer is not an authentication lifetime.
+Sign-out revokes the current refresh session. Copied access JWTs remain valid until their
+expiry, so choose a short appropriate access-token lifetime. Immediate token revocation
+would need an additional online session/revocation check.
 
 ### Verification
 
 For both a preview and the production URL:
 
-1. Open the site; the assessment wizard loads without console errors.
-2. Complete an assessment; a score and explanation appear.
-3. In DevTools → Network, `POST /assessments` returns 200 and only the scored fields are sent (no free-text description).
-4. Download the PDF report.
+1. Without a session, opening the site redirects to sign-in; a direct backend assessment returns 401.
+2. Verify wrong credentials produce the same error regardless of account existence. Sign in with a confirmed account.
+3. Complete an assessment; `POST /api/assessments` returns 200 and only scored fields are sent (no free-text description).
+4. Switch tabs, return, and simulate a temporary session-check outage: the current step and result must remain.
+   Refresh, verify cookie renewal across access-token expiry, then download the browser-generated PDF.
 5. Record the deployment URL and commit SHA on SCRUM-18 / release notes.
+6. Sign out, verify private drafts clear across tabs, and confirm protected navigation redirects.
+   Verify expired refresh sessions prompt sign-in. Check Secure/HttpOnly cookies, no-store headers,
+   cross-site POST rejection, and 413 responses for oversized assessments.
+
+Automated tests use mocked Auth responses and real locally signed JWTs, not a live Supabase
+project. These deployed checks are still required; passing unit tests does not establish them.
 
 ### Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| "Assessment service is unavailable" on every submit | `NEXT_PUBLIC_API_BASE_URL` missing or wrong for that environment | Set it in Vercel for the right environment, then redeploy |
-| Browser console shows a CORS error | Frontend origin not in `ALLOWED_ORIGINS` / `ALLOWED_ORIGIN_REGEX` | Add the origin on the backend host and restart it |
+| "Assessment service is unavailable" on every submit | `API_BASE_URL` missing or wrong | Set it in Vercel for the right environment, then redeploy |
+| Authentication returns 503 | Missing Supabase configuration or Auth/JWKS outage | Check host configuration and provider status without logging credentials |
+| Backend exits during startup | Missing or invalid `SUPABASE_URL` | Set an HTTPS project origin before deployment |
+| Login POST returns 403 | Reverse-proxy origin mismatch | Configure the canonical `APP_ORIGIN`; do not disable origin checks |
 | First request is slow or times out | Backend host cold start | Retry; consider a paid instance for demos |
 | Build fails on `npm ci` | `package-lock.json` out of sync | Run `npm install` locally and commit the lockfile |
 | Push to `main` doesn't deploy | Vercel GitHub app lacks access to the org repo | Re-grant the app access to `bsu-capstone/data-governance-analyzer-3-f26` |
@@ -102,11 +139,18 @@ For both a preview and the production URL:
 
 The root `render.yaml` defines the FastAPI service as a native Python web service: Render runs `pip install .` and starts `uvicorn app.main:app --host 0.0.0.0 --port $PORT` from `backend/`, on Python 3.12. Set these environment variables in the host dashboard:
 
-- `ALLOWED_ORIGINS`: comma-separated exact frontend origins.
-- `ALLOWED_ORIGIN_REGEX`: optional regex for Vercel preview origins (see above).
+- `SUPABASE_URL`: HTTPS project origin matching the frontend's Supabase project.
+- `SUPABASE_JWT_AUDIENCE`: defaults to `authenticated`.
 - `MAX_REQUEST_BYTES`: maximum accepted request-body size; defaults to `16384` bytes. Keep the platform proxy limit at or below this value when possible.
 
 The service exposes `/health`, `/version`, `/docs`, and `POST /assessments`.
+
+Configuration is validated at application startup in every environment, including staging.
+The health endpoint indicates the process started; it is not a live Supabase availability check.
+Public signing keys are fetched lazily and cached for five minutes, with refresh for unknown key IDs.
+
+Remove the obsolete `NEXT_PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_ORIGIN_REGEX`
+settings from hosts.
 
 ## Secrets
 
@@ -115,3 +159,8 @@ The service exposes `/health`, `/version`, `/docs`, and `POST /assessments`.
 - Keep staging and production configuration separate.
 - Vercel build logs never print environment values; do not `echo` them in build scripts.
 - The backend logs request IDs, scores and invalid field names only — never assessment answers or free text.
+- Never enable request-body, Cookie, or Authorization-header logging on login/API routes or proxies.
+
+Implementation references: [Supabase SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client),
+[JWT signing keys](https://supabase.com/docs/guides/auth/signing-keys),
+and [PyJWT verification](https://pyjwt.readthedocs.io/en/stable/usage.html).

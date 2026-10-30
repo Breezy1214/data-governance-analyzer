@@ -12,7 +12,8 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 ## Local development
 
-From the repository root, run both services together:
+Install dependencies below and configure private environment files from the examples.
+On macOS/Linux, run both services together with the team's startup script:
 
 ```bash
 ./scripts/start-dev.sh
@@ -27,7 +28,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
 
 Check `http://localhost:8000/health` or `http://localhost:8000/version`.
@@ -41,7 +42,11 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. `NEXT_PUBLIC_API_BASE_URL` is required and the example configuration points it to `http://localhost:8000`.
+Open `http://localhost:3000/login`. Set server-only `API_BASE_URL`, `SUPABASE_URL`, and
+`SUPABASE_PUBLISHABLE_KEY` in the frontend environment. Set `SUPABASE_URL` in the backend
+environment. Use the same Supabase project with an asymmetric signing key (ES256 or RS256)
+and an existing confirmed account. Never use a service-role key or commit private environment
+files. Do not overwrite existing environment files when copying the examples.
 
 ## Quality checks
 
@@ -69,6 +74,10 @@ cd backend
 ## Deployment
 
 Deployment configuration and environment requirements are documented in [docs/deployment.md](docs/deployment.md). Do not commit credentials or production-sensitive data.
+
+Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
+FastAPI verifies access-token signatures through the project's JWKS endpoint.
+Real-provider and HTTPS smoke tests are required before deploying; see the deployment guide.
 
 ## SCRUM 12 Integration
 
