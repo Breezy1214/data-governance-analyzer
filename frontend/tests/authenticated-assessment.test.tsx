@@ -16,7 +16,7 @@ vi.mock("../components/AssessmentWizard", () => ({
   },
 }));
 
-const session = { user: { id: "user", email: "client@example.test" }, binding: "user" };
+const session = { user: { id: "user", email: "client@example.test" } };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); sessionStorage.clear(); router.replace.mockClear(); });
 
 describe("authenticated wizard lifecycle", () => {

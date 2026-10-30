@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
+import { AUTH_TIMEOUT_MS, clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
 
 export function LoginForm({ expired = false }: { expired?: boolean }) {
@@ -16,20 +16,26 @@ export function LoginForm({ expired = false }: { expired?: boolean }) {
     if (busy) return;
     const form = event.currentTarget;
     const fields = new FormData(form);
-    setBusy(true); setError("");
+    setBusy(true);
+    setError("");
     try {
-      const response = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: String(fields.get("email")).trim(), password: String(fields.get("password")) }),
-        cache: "no-store", signal: AbortSignal.timeout(15000) });
+        cache: "no-store",
+        signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         setError(typeof payload?.message === "string" ? payload.message : AUTH_MESSAGES.unavailable);
         return;
       }
-      clearPrivateState(); notifyAuthChange();
+      notifyAuthChange();
       window.location.replace("/");
-    } catch { setError("Unable to connect. Please try again."); }
-    finally {
+    } catch {
+      setError(AUTH_MESSAGES.offline);
+    } finally {
       const password = form.elements.namedItem("password");
       if (password instanceof HTMLInputElement) password.value = "";
       setBusy(false);

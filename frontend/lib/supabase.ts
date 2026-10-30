@@ -1,7 +1,7 @@
 import "server-only";
 import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
 
-export function supabaseConfig() {
+function supabaseConfig() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key || new URL(url).protocol !== "https:") {

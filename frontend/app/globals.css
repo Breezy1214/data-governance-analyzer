@@ -64,7 +64,6 @@
 .auth-note { font-size: 13px; }
 .account-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .account-controls span { overflow-wrap: anywhere; min-width: 0; }
-.auth-status { padding: 24px; color: var(--muted); }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }

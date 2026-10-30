@@ -14,7 +14,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def authenticated_scoring_contract():
     # These existing tests exercise scoring. Authentication uses separate, non-overridden apps in test_auth.py.
-    app.dependency_overrides[require_session] = lambda: {"user": {"id": "scoring-test"}}
+    app.dependency_overrides[require_session] = lambda: {"sub": "scoring-test"}
     yield
     app.dependency_overrides.clear()
 

@@ -32,6 +32,10 @@ def token(private_key, **overrides):
     return jwt.encode(claims, private_key, algorithm="ES256", headers={"kid": "test-key"})
 
 
+def post_assessment(client, authorization):
+    return client.post("/assessments", json=sample_payload(), headers={"Authorization": authorization})
+
+
 @pytest.fixture
 def client(private_key):
     app = create_app(Settings(supabase_url=PROJECT, environment="staging"))
@@ -43,8 +47,7 @@ def client(private_key):
 
 
 def test_staging_accepts_signed_access_token(client, private_key):
-    response = client.post("/assessments", json=sample_payload(),
-                           headers={"Authorization": f"Bearer {token(private_key)}"})
+    response = post_assessment(client, f"Bearer {token(private_key)}")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert client.get("/health").json()["environment"] == "staging"
@@ -52,9 +55,10 @@ def test_staging_accepts_signed_access_token(client, private_key):
 
 @pytest.mark.parametrize("header", ["", "Basic anything", "Bearer ", "Bearer invalid"])
 def test_missing_and_malformed_credentials_rejected(client, header):
-    response = client.post("/assessments", json=sample_payload(), headers={"Authorization": header})
+    response = post_assessment(client, header)
     assert response.status_code == 401
-    assert response.json() == {"message": "Please sign in again."}
+    assert response.json()["error"] == "unauthorized"
+    assert response.json()["message"] == "Please sign in again."
 
 
 @pytest.mark.parametrize("claims", [
@@ -63,35 +67,30 @@ def test_missing_and_malformed_credentials_rejected(client, header):
     {"is_anonymous": True}, {"exp": None}, {"iat": int(time.time()) + 3600},
 ])
 def test_invalid_claims_rejected(client, private_key, claims):
-    response = client.post("/assessments", json=sample_payload(),
-                           headers={"Authorization": f"Bearer {token(private_key, **claims)}"})
+    response = post_assessment(client, f"Bearer {token(private_key, **claims)}")
     assert response.status_code == 401
 
 
 def test_wrong_signature_rejected(client):
     forged = token(ec.generate_private_key(ec.SECP256R1()))
-    assert client.post("/assessments", json=sample_payload(),
-                       headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+    assert post_assessment(client, f"Bearer {forged}").status_code == 401
 
 
 def test_symmetric_tokens_are_not_accepted(client):
     forged = jwt.encode({"sub": "attacker"}, "not-a-real-key" * 4, algorithm="HS256")
-    assert client.post("/assessments", json=sample_payload(),
-                       headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+    assert post_assessment(client, f"Bearer {forged}").status_code == 401
 
 
 def test_jwks_outage_is_service_error_not_logout(client, private_key):
     client.app.state.token_verifier.keys.get_signing_key_from_jwt.side_effect = PyJWKClientConnectionError("private detail")
-    response = client.post("/assessments", json=sample_payload(),
-                           headers={"Authorization": f"Bearer {token(private_key)}"})
+    response = post_assessment(client, f"Bearer {token(private_key)}")
     assert response.status_code == 503
     assert "private detail" not in response.text
 
 
 def test_unknown_key_is_unauthorized(client, private_key):
     client.app.state.token_verifier.keys.get_signing_key_from_jwt.side_effect = PyJWKClientError("unknown")
-    assert client.post("/assessments", json=sample_payload(),
-                       headers={"Authorization": f"Bearer {token(private_key)}"}).status_code == 401
+    assert post_assessment(client, f"Bearer {token(private_key)}").status_code == 401
 
 
 @pytest.mark.parametrize("url", ["", "http://example.test", "https://user:secret@example.test", "https://example.test/path"])

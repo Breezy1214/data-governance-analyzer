@@ -141,9 +141,9 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-export function AssessmentWizard({ account, sessionBinding, onUnauthorized }: {
+export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
   account?: React.ReactNode;
-  sessionBinding?: string;
+  draftOwner?: string;
   onUnauthorized?: () => void;
 } = {}) {
   const [step, setStep] = useState(0);
@@ -197,7 +197,7 @@ export function AssessmentWizard({ account, sessionBinding, onUnauthorized }: {
 
   useEffect(() => {
     purgeLegacyDrafts();
-    if (sessionBinding) bindDraft(sessionBinding);
+    if (draftOwner) bindDraft(draftOwner);
     const restored = loadDraft();
     // Deferred: sessionStorage is client-only, and react-hooks/set-state-in-effect bans sync setState here.
     const restoreDraft = window.setTimeout(() => {
@@ -205,7 +205,7 @@ export function AssessmentWizard({ account, sessionBinding, onUnauthorized }: {
       setDraftReady(true);
     }, 0);
     return () => window.clearTimeout(restoreDraft);
-  }, [sessionBinding]);
+  }, [draftOwner]);
 
   useEffect(() => {
     if (!draftReady) return;

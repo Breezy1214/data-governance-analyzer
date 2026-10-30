@@ -8,5 +8,7 @@ export async function POST(request: Request) {
     const { error } = await client.auth.signOut({ scope: "local" });
     if (error) throw new AuthenticationError(503, AUTH_MESSAGES.unavailable);
     return json({ ok: true });
-  } catch (error) { return errorResponse(error); }
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

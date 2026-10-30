@@ -5,5 +5,5 @@ export const AUTH_MESSAGES = {
   forbidden: "This request could not be verified. Reload this page and try again.",
   rateLimited: "Too many attempts. Please try again later.",
   invalidInput: "Please enter a valid email address and password.",
+  offline: "Unable to connect. Please try again.",
 };
-export type AuthSession = { user: { id: string; email: string }; binding: string };

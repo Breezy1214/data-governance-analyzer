@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AuthSession } from "@/lib/auth-messages";
-import { AUTH_EVENT, clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
+import { AUTH_EVENT, AUTH_TIMEOUT_MS, clearPrivateState, notifyAuthChange, type AuthSession } from "@/lib/auth-client";
 import { AssessmentWizard } from "./AssessmentWizard";
 
 export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
@@ -18,7 +17,6 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
 
   useEffect(() => {
     if (blocked) return;
-    let alive = true;
     let checking = false;
     const controller = new AbortController();
     const check = async () => {
@@ -27,16 +25,16 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
       try {
         const response = await fetch("/api/session", {
           cache: "no-store",
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(AUTH_TIMEOUT_MS)]),
         });
-        if (!alive) return;
+        if (controller.signal.aborted) return;
         if (response.status === 401) { expire(); return; }
         if (!response.ok) throw new Error("Unavailable");
         const current: AuthSession = await response.json();
-        if (current.binding !== session.binding) { expire(); return; }
+        if (current.user.id !== session.user.id) { expire(); return; }
         setError("");
       } catch {
-        if (alive) setError("Session check unavailable. Your work is still here; we will retry.");
+        if (!controller.signal.aborted) setError("Session check unavailable. Your work is still here; we will retry.");
       } finally { checking = false; }
     };
     const storage = (event: StorageEvent) => { if (event.key === AUTH_EVENT) expire(); };
@@ -45,13 +43,12 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
     document.addEventListener("visibilitychange", check);
     window.addEventListener("storage", storage);
     return () => {
-      alive = false;
       controller.abort();
       clearInterval(interval);
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("storage", storage);
     };
-  }, [session.binding, expire, blocked]);
+  }, [session.user.id, expire, blocked]);
 
   async function logout() {
     setBlocked(true);
@@ -59,20 +56,20 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
     notifyAuthChange();
     setError("");
     try {
-      const response = await fetch("/api/logout", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(15000) });
+      const response = await fetch("/api/logout", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
       if (!response.ok) throw new Error("Unavailable");
-      router.replace("/login?reason=signed-out");
+      router.replace("/login");
     } catch {
       setError("Sign-out could not be confirmed. Please retry before leaving this device.");
     }
   }
 
   return <>
-    {error && <p className="auth-status" role="alert">{error}</p>}
+    {error && <p className="error" role="alert">{error}</p>}
     {blocked
       ? <main className="auth-page"><p role="status">Assessment locked.</p>
           <button className="secondary" onClick={logout}>Retry sign out</button></main>
-      : <AssessmentWizard sessionBinding={session.binding} onUnauthorized={expire}
+      : <AssessmentWizard draftOwner={session.user.id} onUnauthorized={expire}
           account={<div className="account-controls"><span>{session.user.email}</span>
             <button className="secondary" onClick={logout}>Sign out</button></div>} />}
   </>;

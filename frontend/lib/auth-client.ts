@@ -1,22 +1,24 @@
-import { clearDraft, purgeLegacyDrafts } from "./session";
+import { clearDraft, purgeLegacyDrafts, safely } from "./session";
+
+export type AuthSession = { user: { id: string; email: string } };
 
 export const AUTH_EVENT = "auth-changed";
+export const AUTH_TIMEOUT_MS = 15_000;
 const OWNER_KEY = "draft-owner";
 
 export function clearPrivateState() {
   clearDraft();
   purgeLegacyDrafts();
-  try { sessionStorage.removeItem(OWNER_KEY); } catch { /* Storage can be blocked. */ }
+  safely(() => sessionStorage.removeItem(OWNER_KEY));
 }
 
-export function bindDraft(binding: string) {
-  try {
-    if (sessionStorage.getItem(OWNER_KEY) !== binding) clearDraft();
-    sessionStorage.setItem(OWNER_KEY, binding);
-  } catch { clearDraft(); }
+export function bindDraft(ownerId: string) {
+  const owner = safely(() => sessionStorage.getItem(OWNER_KEY));
+  if (owner !== ownerId) clearDraft();
+  safely(() => sessionStorage.setItem(OWNER_KEY, ownerId));
 }
 
 export function notifyAuthChange() {
   // Only a random notification is persisted, never identity, credentials or answers.
-  try { localStorage.setItem(AUTH_EVENT, crypto.randomUUID()); } catch { /* Best effort across tabs. */ }
+  safely(() => localStorage.setItem(AUTH_EVENT, crypto.randomUUID()));
 }

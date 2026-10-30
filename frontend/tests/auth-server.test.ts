@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getSession: vi.fn(), getUser: vi.fn(), signInWithPassword: vi.fn(), signOut: vi.fn(),
+  getSession: vi.fn(), getClaims: vi.fn(), signInWithPassword: vi.fn(), signOut: vi.fn(),
   createServerClient: vi.fn(), setCookie: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.stubEnv("VERCEL_URL", "");
   mocks.createServerClient.mockReturnValue({ auth: mocks });
   mocks.getSession.mockResolvedValue({ data: { session: { access_token: "private-jwt" } }, error: null });
-  mocks.getUser.mockResolvedValue({ data: { user: { id: "user-id", email: "client@example.test", is_anonymous: false } }, error: null });
+  mocks.getClaims.mockResolvedValue({ data: { claims: { sub: "user-id", email: "client@example.test", is_anonymous: false } }, error: null });
   mocks.signInWithPassword.mockResolvedValue({ error: null });
   mocks.signOut.mockResolvedValue({ error: null });
 });
@@ -111,7 +111,7 @@ describe("Supabase authentication routes", () => {
     vi.stubGlobal("fetch", fetchMock);
     const response = await assess(request("assessments", undefined, { schemaVersion: "2.0" }));
     expect(response.status).toBe(200);
-    expect(mocks.getUser).toHaveBeenCalledWith("private-jwt");
+    expect(mocks.getClaims).toHaveBeenCalledWith("private-jwt");
     const [url, options] = fetchMock.mock.calls[0];
     expect(url.toString()).toBe("http://localhost:8000/assessments");
     expect(options.headers.Authorization).toBe("Bearer private-jwt");
@@ -127,7 +127,7 @@ describe("Supabase authentication routes", () => {
   });
 
   it("does not trust an unverified cookie session", async () => {
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 401 } });
+    mocks.getClaims.mockResolvedValue({ data: null, error: { status: 400, name: "AuthInvalidJwtError" } });
     const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
     expect((await assess(request("assessments"))).status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -140,7 +140,7 @@ describe("Supabase authentication routes", () => {
   });
 
   it("keeps authentication outages distinct from being signed out", async () => {
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 503 } });
+    mocks.getClaims.mockResolvedValue({ data: null, error: { status: 503 } });
     await expect(currentSession()).rejects.toThrow(/unavailable/);
     expect((await session()).status).toBe(503);
   });
@@ -159,16 +159,32 @@ describe("Supabase authentication routes", () => {
   });
 
   it("refreshes cookies on both the downstream request and browser response", async () => {
-    mocks.getUser.mockImplementation(async () => {
+    mocks.getClaims.mockImplementation(async () => {
       mocks.createServerClient.mock.calls[0][2].cookies.setAll([
         { name: "session", value: "refreshed", options: { httpOnly: true, sameSite: "lax", path: "/" } },
       ]);
-      return { data: { user: { id: "user-id" } }, error: null };
+      return { data: { claims: { sub: "user-id" } }, error: null };
     });
     const req = new NextRequest("https://example.test/");
     const response = await proxy(req);
     expect(req.cookies.get("session")?.value).toBe("refreshed");
     expect(response.cookies.get("session")?.value).toBe("refreshed");
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("leaves outage reporting to the page instead of failing in the proxy", async () => {
+    mocks.getClaims.mockRejectedValue(new Error("auth down"));
+    const response = await proxy(new NextRequest("https://example.test/"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("ignores cookie writes that Server Components cannot perform", async () => {
+    mocks.setCookie.mockImplementation(() => { throw new Error("read-only cookies"); });
+    mocks.getSession.mockImplementation(async () => {
+      mocks.createServerClient.mock.calls[0][2].cookies.setAll([{ name: "session", value: "refreshed", options: {} }]);
+      return { data: { session: { access_token: "private-jwt" } }, error: null };
+    });
+    expect(await currentSession()).toEqual({ user: { id: "user-id", email: "client@example.test" } });
   });
 });

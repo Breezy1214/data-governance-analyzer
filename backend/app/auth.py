@@ -10,6 +10,11 @@ from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 
 from app.config import Settings
 
+ALGORITHMS = ["RS256", "ES256"]
+SIGN_IN_AGAIN = "Please sign in again."
+AUTH_UNAVAILABLE = "Authentication service is temporarily unavailable."
+MAX_TOKEN_LENGTH = 16 * 1024
+
 
 class TokenVerifier:
     def __init__(self, settings: Settings):
@@ -20,14 +25,11 @@ class TokenVerifier:
 
     def verify(self, bearer_token: str) -> dict:
         try:
-            header = jwt.get_unverified_header(bearer_token)
-            if header.get("alg") not in ("RS256", "ES256"):
-                raise jwt.InvalidAlgorithmError()
             signing_key = self.keys.get_signing_key_from_jwt(bearer_token)
             claims = jwt.decode(
-                bearer_token, signing_key.key, algorithms=["RS256", "ES256"],
+                bearer_token, signing_key.key, algorithms=ALGORITHMS,
                 issuer=self.issuer, audience=self.audience,
-                options={"require": ["exp", "iat", "sub", "iss", "aud", "session_id"]},
+                options={"require": ["exp", "iat", "sub", "session_id"]},
             )
             uuid.UUID(claims["sub"])
             uuid.UUID(claims["session_id"])
@@ -35,16 +37,13 @@ class TokenVerifier:
                 raise jwt.InvalidTokenError()
             return claims
         except PyJWKClientConnectionError:
-            raise HTTPException(503, "Authentication service is temporarily unavailable.") from None
-        except (jwt.InvalidTokenError, PyJWKClientError, ValueError, TypeError, KeyError):
-            raise HTTPException(401, "Please sign in again.") from None
+            raise HTTPException(503, AUTH_UNAVAILABLE) from None
+        except (jwt.InvalidTokenError, PyJWKClientError, ValueError, TypeError, AttributeError):
+            raise HTTPException(401, SIGN_IN_AGAIN) from None
 
 
 def require_session(request: Request) -> dict:
     scheme, _, bearer_token = request.headers.get("authorization", "").partition(" ")
-    if scheme.lower() != "bearer" or not bearer_token or len(bearer_token) > 16384:
-        raise HTTPException(401, "Please sign in again.")
-    verifier = getattr(request.app.state, "token_verifier", None)
-    if verifier is None:
-        raise HTTPException(503, "Authentication service is temporarily unavailable.")
-    return verifier.verify(bearer_token)
+    if scheme.lower() != "bearer" or not bearer_token or len(bearer_token) > MAX_TOKEN_LENGTH:
+        raise HTTPException(401, SIGN_IN_AGAIN)
+    return request.app.state.token_verifier.verify(bearer_token)

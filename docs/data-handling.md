@@ -1,8 +1,5 @@
 # Data handling and retention (v1.0)
 
-> Authentication is required and session metadata is stored separately from assessments.
-> Assessment answers remain unsaved on the server. Logout and account changes also clear local drafts.
-
 Implements SCRUM-16. The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
 
 ## Decision
@@ -53,14 +50,8 @@ The API schema does not accept `description`; it remains exclusively in the brow
 
 Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
 
-Draft inactivity and login lifetime are different policies. The single wizard timer clears
-drafts after 30 minutes but does not revoke a Supabase session. Configure session inactivity,
-absolute lifetime, and access-token expiry in Supabase, subject to the project's plan.
-Logout revokes the current refresh session, clears cookies, and clears drafts across tabs.
-Already-issued access JWTs remain usable until expiry; offline JWT verification does not
-provide immediate revocation. Use a short, agreed access-token lifetime and do not claim
-instant revocation of a copied token. Expired/revoked sessions prompt sign-in when refresh
-fails. A failed network check alone leaves the mounted wizard and its results intact.
+The draft timer is not the login lifetime. Logout clears drafts across tabs; login lifetime and
+token revocation are covered under "Supabase setup" in [deployment.md](deployment.md).
 
 ## Logs, analytics, URLs, and errors
 

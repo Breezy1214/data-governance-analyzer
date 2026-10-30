@@ -149,10 +149,8 @@ Configuration is validated at application startup in every environment, includin
 The health endpoint indicates the process started; it is not a live Supabase availability check.
 Public signing keys are fetched lazily and cached for five minutes, with refresh for unknown key IDs.
 
-Remove obsolete `NEXT_PUBLIC_API_BASE_URL`, `FRONTEND_SHARED_KEY`, `SESSION_ENCRYPTION_KEY`,
-`AUTH_DATABASE_PATH`, `AUTH_IDLE_SECONDS`, `AUTH_MAX_SECONDS`, and CORS settings from hosts.
-Any SQLite session files from earlier local prototypes are no longer read; securely remove them
-according to the team's retention policy. Existing prototype logins must sign in again.
+Remove the obsolete `NEXT_PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, and `ALLOWED_ORIGIN_REGEX`
+settings from hosts.
 
 ## Secrets
 

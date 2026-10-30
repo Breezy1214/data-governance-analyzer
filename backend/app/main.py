@@ -32,10 +32,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
+
     @app.exception_handler(HTTPException)
     async def handle_http_error(request: Request, exc: HTTPException) -> JSONResponse:
+        request_id = str(uuid.uuid4())
+        error = {401: "unauthorized", 503: "auth_unavailable"}.get(exc.status_code, "request_failed")
+        logger.warning("request_rejected", extra={"fields": {"requestId": request_id, "error": error}})
         return JSONResponse(
-            status_code=exc.status_code, content={"message": exc.detail},
+            status_code=exc.status_code,
+            content={"error": error, "message": exc.detail, "requestId": request_id},
             headers={"Cache-Control": "no-store"},
         )
 
