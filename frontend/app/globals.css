@@ -70,7 +70,6 @@ button, input, textarea, select { font: inherit; }
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 /* Programmatic focus targets (step headings) are not controls, so they get no ring. */
 [tabindex="-1"]:focus { outline: none; }
-.capability-panel :focus-visible { outline-color: var(--focus-ring-on-dark); }
 
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .skip-link { position: absolute; left: -9999px; top: 0; z-index: 10; background: var(--brand); color: var(--white); padding: 12px 18px; border-radius: 10px; }
@@ -121,9 +120,10 @@ button, input, textarea, select { font: inherit; }
 .stat-detail { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .stat-detail b { color: var(--ink); font-weight: 600; }
 
-.step-panel { grid-column: 2; min-width: 0; animation: enter .35s ease both; }
+/* The panel spans the workspace unless the stat rail sits beside it. */
+.step-panel { grid-column: 1 / -1; max-width: 1040px; min-width: 0; animation: enter .35s ease both; }
+.stat-rail ~ .step-panel { grid-column: 2; max-width: none; }
 @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
-.section-number { margin: 0 0 6px; color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .workspace h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
 .workspace h2 em { color: var(--accent-strong); font-style: normal; }
 .workspace .risk-result h2 em { color: var(--risk-color); }
@@ -190,9 +190,9 @@ textarea::placeholder { color: var(--muted); }
 .select-field { display: block; padding-top: 22px; border-top: 1px solid var(--line); }
 
 /* Panels set data-risk; colour is always paired with a label and a shape. */
-[data-risk="low"] { --risk-color: var(--risk-low); --risk-shape: circle(50%); }
-[data-risk="medium"] { --risk-color: var(--risk-medium); --risk-shape: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
-[data-risk="high"] { --risk-color: var(--risk-high); --risk-shape: polygon(50% 0, 100% 100%, 0 100%); }
+[data-risk="low"] { --risk-color: var(--risk-low); --risk-bg: var(--success-bg); --risk-shape: circle(50%); }
+[data-risk="medium"] { --risk-color: var(--risk-medium); --risk-bg: var(--warning-bg); --risk-shape: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+[data-risk="high"] { --risk-color: var(--risk-high); --risk-bg: var(--danger-bg); --risk-shape: polygon(50% 0, 100% 100%, 0 100%); }
 .risk-label { display: inline-flex; align-items: center; gap: 8px; color: var(--risk-color); }
 .risk-icon { display: inline-block; flex: 0 0 auto; width: 11px; height: 11px; background: var(--risk-color); clip-path: var(--risk-shape); }
 
@@ -219,36 +219,48 @@ textarea::placeholder { color: var(--muted); }
 .factor-bar i { display: block; height: 100%; border-radius: inherit; background: var(--risk-color); }
 .method-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
-.recommendation-outcome { margin: 0 0 24px; padding: 14px 18px; border-left: 4px solid var(--risk-color); border-radius: 10px; background: var(--paper); }
-.recommendation-outcome b { font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .08em; }
-.recommendation-outcome p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-.recommendation-list { list-style: none; margin: 0; padding: 0; }
-.recommendation-list li { display: grid; grid-template-columns: 48px 1fr; padding: 16px 0; border-top: 1px solid var(--line); }
-.recommendation-list > li > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--brand-soft); color: var(--brand); font-family: var(--font-mono), monospace; font-size: 12px; font-weight: 600; }
-.recommendation-list h4 { margin: 4px 0 6px; font-size: 16px; font-weight: 600; }
-.recommendation-list p { margin: 0; font-size: 14px; line-height: 1.55; }
-.recommendation-list .recommendation-rationale { margin-top: 8px; color: var(--muted); font-size: 13px; }
-.recommendation-list .recommendation-rationale b { color: var(--ink); }
-.recommendation-list .recommendation-trace { margin-top: 8px; color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 11px; }
-/* A Karlsgate capability shown with the safeguard it delivers. */
-.capability-fit { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--brand-soft); }
-.recommendation-list .capability-fit p:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.recommendation-list .capability-fit p + p { margin-top: 6px; font-size: 13px; }
-.capability-fit .badge { background: var(--surface); }
-.empty-state { padding: 18px; border: 1px solid var(--control-line); border-radius: 12px; color: var(--muted); line-height: 1.55; }
-.capability-panel { margin: 18px 0; padding: 26px; border-radius: 16px; background: var(--ink); color: var(--on-ink-strong); }
-.capability-panel .section-number { color: var(--accent); }
-.workspace .capability-panel h3 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
-.capability-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 12px; }
-.capability-list li { padding: 14px 16px; border: 1px solid var(--ink-line); border-radius: 12px; }
-.capability-list b { display: block; margin-bottom: 5px; color: var(--accent); font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .06em; }
-.capability-list p { margin: 0; color: var(--on-ink); font-size: 14px; line-height: 1.55; }
-.capability-panel > p:not(.section-number) { margin: 0; color: var(--on-ink); font-size: 14px; line-height: 1.6; }
+/* Recommendations step: one outcome summary, then a scannable list with details on demand. */
+.step-panel > .card + .card { margin-top: 18px; }
+.outcome-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.risk-pill { padding: 6px 12px; border-radius: 99px; background: var(--risk-bg); font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .08em; }
+.outcome-counts { color: var(--muted); font-size: 13px; }
+.outcome-guidance { margin: 14px 0 0; font-size: 17px; font-weight: 500; line-height: 1.5; }
 /* A caution rather than a failure, so it uses the warning state. */
-.limitations { margin: 18px 0; padding: 14px 18px; border-left: 3px solid var(--warning); border-radius: 10px; background: var(--warning-bg); }
-.workspace .limitations h3 { margin: 0 0 6px; color: var(--warning); font-size: 16px; font-weight: 600; }
-.limitations p { margin: 6px 0 0; color: var(--ink); font-size: 13px; line-height: 1.55; }
-.summary { margin-top: 18px; }
+.limitations { margin-top: 18px; padding: 12px 16px; border-left: 3px solid var(--warning); border-radius: 10px; background: var(--warning-bg); }
+.workspace .limitations h3 { margin: 0; color: var(--warning); font-size: 14px; font-weight: 600; }
+.limitations p { margin: 4px 0 0; color: var(--ink); font-size: 13px; line-height: 1.55; }
+
+.recommendation-list { list-style: none; margin: 0; padding: 0; }
+.recommendation-list > li { display: grid; grid-template-columns: 44px minmax(0, 1fr); padding: 18px 0; border-top: 1px solid var(--line); }
+.recommendation-list > li:last-child { padding-bottom: 4px; }
+.recommendation-index { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--brand-soft); color: var(--brand); font-family: var(--font-mono), monospace; font-size: 12px; font-weight: 600; }
+.recommendation-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 4px 0 4px; }
+.recommendation-list h4 { margin: 0; font-size: 16px; font-weight: 600; }
+.recommendation-list p { margin: 0; line-height: 1.55; }
+.recommendation-action { color: var(--muted); font-size: 14px; }
+.capability-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 99px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.capability-tag .badge { padding: 2px 7px; border-radius: 99px; background: var(--surface); }
+.recommendation-why { margin-top: 10px; }
+.recommendation-why summary { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.recommendation-why summary::-webkit-details-marker { display: none; }
+.recommendation-why summary::before { content: "▸" / ""; transition: transform .18s; }
+.recommendation-why[open] summary::before { transform: rotate(90deg); }
+.recommendation-why summary:hover { color: var(--brand-hover); }
+.recommendation-why > div { display: grid; gap: 10px; margin-top: 10px; padding-left: 14px; border-left: 2px solid var(--line); color: var(--muted); font-size: 13px; }
+.recommendation-why b { color: var(--ink); font-weight: 600; }
+.recommendation-trace { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.recommendation-trace b { margin-right: 2px; }
+.recommendation-trace ul { display: contents; list-style: none; }
+.recommendation-trace li { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.safeguards .method-note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.empty-state { padding: 18px; border: 1px solid var(--control-line); border-radius: 12px; color: var(--muted); line-height: 1.55; }
+
+.workspace .card-title:has(+ .lede) { margin-bottom: 0; }
+.capability-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.capability-list li { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.capability-list b { display: block; margin-bottom: 4px; font-size: 15px; font-weight: 600; }
+.capability-list p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.capability-list .recommendation-reason { margin-top: 8px; font-size: 12px; }
 .summary summary { font-weight: 600; cursor: pointer; }
 .summary summary:hover { color: var(--brand); }
 .summary dl { margin: 16px 0 0; }
@@ -259,7 +271,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 
 @media (max-width: 1180px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
-  .step-panel { grid-column: 1; }
+  .stat-rail ~ .step-panel { grid-column: 1; }
   .stat-rail { position: static; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 }
 

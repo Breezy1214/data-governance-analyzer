@@ -110,7 +110,8 @@ function statsFor(step: number, input: AssessmentInput, result: AssessmentResult
       { title: "Yes answers", badge: "So far", value: answers.filter((answer) => answer === "yes").length, detail: <>Of <b>{BINARY_FIELDS.length}</b> handling questions</> },
     ];
   }
-  if (!result) return [];
+  // The recommendations step carries its own summary.
+  if (!result || step === 3) return [];
   return [
     { title: "Safeguards", badge: "Next step", value: result.recommendationDetails.length, detail: <>Tailored to <b>this use case</b></> },
     { title: "Capability fit", badge: "Mapped", value: result.karlsgateRecommendations.length, detail: <>Privacy-enhancing <b>controls</b></> },
@@ -551,10 +552,17 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
               <div className="card">
-                <div className="recommendation-outcome">
-                  <b className="risk-label"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
-                  <p>{result.guidance}</p>
+                <div className="outcome-head">
+                  <b className="risk-label risk-pill"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
+                  <span className="outcome-counts">
+                    {result.recommendationDetails.length} safeguards · {result.karlsgateRecommendations.length} Karlsgate controls
+                  </span>
                 </div>
+                <p className="outcome-guidance">{result.guidance}</p>
+                {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
+              </div>
+
+              <div className="card safeguards">
                 <h3 className="card-title">General safeguards</h3>
                 {result.recommendationDetails.length > 0 ? (
                   <ol className="recommendation-list">
@@ -566,18 +574,24 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                       const capability = capabilities?.byAction.get(item.action);
                       return (
                         <li key={item.id}>
-                          <span>{String(item.priority).padStart(2, "0")}</span>
+                          <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
                           <div>
-                            <h4>{item.title}</h4>
-                            <p>{item.action}</p>
-                            <p className="recommendation-rationale"><b>Why this applies:</b> {item.rationale}</p>
-                            <p className="recommendation-trace"><b>Triggered by:</b> {factorLabels.join(", ")}</p>
-                            {capability && (
-                              <div className="capability-fit">
-                                <p><span className="badge">Karlsgate</span><b>{capability.label}</b></p>
-                                <p>{capability.text}</p>
+                            <div className="recommendation-head">
+                              <h4>{item.title}</h4>
+                              {capability && <span className="capability-tag"><span className="badge">Karlsgate</span>{capability.label}</span>}
+                            </div>
+                            <p className="recommendation-action">{item.action}</p>
+                            <details className="recommendation-why">
+                              <summary>Why this applies</summary>
+                              <div>
+                                <p>{item.rationale}</p>
+                                <div className="recommendation-trace">
+                                  <b>Triggered by:</b>
+                                  <ul>{factorLabels.map((label) => <li key={label}>{label}</li>)}</ul>
+                                </div>
+                                {capability && <p className="capability-fit"><b>How Karlsgate helps:</b> {capability.text}</p>}
                               </div>
-                            )}
+                            </details>
                           </div>
                         </li>
                       );
@@ -586,12 +600,13 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                 ) : (
                   <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
                 )}
+                <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
               </div>
+
               {capabilities && capabilities.remaining.length > 0 && (
-                <div className="capability-panel">
-                  <p className="section-number">Karlsgate capability fit</p>
-                  <h3>{capabilities.byAction.size > 0 ? "Further privacy-enhancing controls" : "Applicable privacy-enhancing controls"}</h3>
-                  <p>Only capabilities whose documented applicability rules are satisfied are shown.</p>
+                <div className="card">
+                  <h3 className="card-title">{capabilities.byAction.size > 0 ? "Further privacy-enhancing controls" : "Applicable privacy-enhancing controls"}</h3>
+                  <p className="lede">Karlsgate capabilities whose documented applicability rules are satisfied.</p>
                   <ul className="capability-list">
                     {capabilities.remaining.map((capability) => (
                       <li key={capability.id}><b>{capability.label}</b><p>{capability.text}</p>
@@ -601,8 +616,6 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                   </ul>
                 </div>
               )}
-              <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
-              {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
               <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation mapping version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}
               <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
