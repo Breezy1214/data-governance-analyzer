@@ -1,6 +1,6 @@
 import { clearDraft, purgeLegacyDrafts, safely } from "./session";
 
-export type AuthSession = { user: { id: string; email: string } };
+export type AuthSession = { user: { id: string; email: string; role?: "user" | "admin" } };
 
 export const AUTH_EVENT = "auth-changed";
 export const AUTH_TIMEOUT_MS = 15_000;

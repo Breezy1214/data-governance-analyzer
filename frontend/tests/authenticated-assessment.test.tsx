@@ -20,6 +20,12 @@ const session = { user: { id: "user", email: "client@example.test" } };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); sessionStorage.clear(); router.replace.mockClear(); });
 
 describe("authenticated wizard lifecycle", () => {
+  it("shows admin navigation only for an admin session", () => {
+    const { rerender } = render(<AuthenticatedAssessment session={session} />);
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
+    rerender(<AuthenticatedAssessment session={{ user: { ...session.user, role: "admin" } }} />);
+    expect(screen.getByRole("link", { name: "Admin" }).getAttribute("href")).toBe("/admin");
+  });
   it("keeps the mounted result across visibility checks and temporary outages", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => Response.json(session));
     vi.stubGlobal("fetch", fetchMock);

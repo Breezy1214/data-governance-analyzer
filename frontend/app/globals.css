@@ -64,6 +64,19 @@
 .auth-note { font-size: 13px; }
 .account-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .account-controls span { overflow-wrap: anywhere; min-width: 0; }
+.admin-page { width: min(100% - 40px, 1040px); margin: 40px auto; }
+.admin-page h1 { font-size: 32px; line-height: 1.2; letter-spacing: 0; }
+.admin-page h2 { font-size: 24px; }
+.admin-page p { line-height: 1.6; }
+.admin-heading, .admin-heading nav, .admin-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.admin-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 16px; align-items: end; }
+.admin-page label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.admin-page input, .admin-page select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--control-line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.admin-page button { min-height: 44px; }
+.admin-accounts { list-style: none; padding: 0; display: grid; gap: 16px; }
+.admin-accounts h3 { overflow-wrap: anywhere; }
+.admin-password { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 16px; }
+.admin-password label { flex: 1 1 250px; }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }

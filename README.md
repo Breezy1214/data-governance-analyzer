@@ -2,6 +2,12 @@
 
 A guided, plain-language assessment for identifying privacy and governance risks before a proposed data use case moves forward.
 
+## Login and administrator setup
+
+See [Create login accounts and an administrator](README_SUPABASE.md) for the Supabase setup,
+first admin account, and team email/password instructions. Admins can use every assessment
+feature and manage accounts at `/admin`. Credentials and the server-only admin key stay outside Git.
+
 ## Architecture
 
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS; collects answers and renders backend results

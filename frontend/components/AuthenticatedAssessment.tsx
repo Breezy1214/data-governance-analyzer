@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AUTH_EVENT, AUTH_TIMEOUT_MS, clearPrivateState, notifyAuthChange, type AuthSession } from "@/lib/auth-client";
 import { AssessmentWizard } from "./AssessmentWizard";
 
@@ -71,6 +72,7 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
           <button className="secondary" onClick={logout}>Retry sign out</button></main>
       : <AssessmentWizard draftOwner={session.user.id} onUnauthorized={expire}
           account={<div className="account-controls"><span>{session.user.email}</span>
+            {session.user.role === "admin" && <Link href="/admin">Admin</Link>}
             <button className="secondary" onClick={logout}>Sign out</button></div>} />}
   </>;
 }
