@@ -1,6 +1,6 @@
 # Scoring correctness and performance verification
 
-This document records the reproducible evidence for SCRUM-14. The scoring rubric under test is v1.0.
+This document records the reproducible evidence for SCRUM-14. The scoring rubric under test is [v2.0](risk-scoring-rubric-v2.0.md). The timing below was recorded against v1.0 and should be rerun after approval.
 
 ## Correctness matrix
 
@@ -11,8 +11,8 @@ The automated suite verifies:
 - every supported scoring factor, including every intended-use value;
 - mutual exclusion of direct-identifier and high-sensitivity scoring;
 - deterministic output and score capping;
-- safeguard priority, rationale, and links to contributing factors;
-- conditional privacy-enhancing capability applicability;
+- recommendation priority, rationale, and links to the answers that selected them;
+- catalog text with no first-person wording, and HTTPS sources for all regulatory references;
 - API validation, response structure, cache prevention, and privacy-safe logs.
 
 Run the full backend verification from the repository root:

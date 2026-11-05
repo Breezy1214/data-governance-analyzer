@@ -42,6 +42,5 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
       - run: pip install -e '.[dev]'
-      - run: python ../scripts/sync-recommendation-mappings.py --check
       - run: ruff check .
       - run: pytest

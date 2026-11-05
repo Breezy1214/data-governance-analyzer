@@ -74,7 +74,7 @@ The observed developer walkthrough took about 2.5–3 minutes per scenario, cons
 ## What the scenarios surfaced
 
 - The flow is self-explanatory step to step: each screen states what to do, and the primary action is always bottom-right (full width at phone size).
-- Scoring matched the rubric exactly in all three scenarios, so what the interface shows is trustworthy against `docs/risk-scoring-rubric-v1.0.md`.
+- Scoring matched the rubric exactly in all three scenarios, so what the interface shows is trustworthy against rubric v1.0.
 - The capability panel is markedly clearer since each control gained its approved description; in scenario 1 a reader sees what "protected matching" actually means rather than a bare label.
 - No dead ends: every step can be left forwards or backwards, and "Start over" clears everything.
 

@@ -1,18 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssessmentInput } from "../lib/assessment";
-import { DISCLAIMER, ReportModel, buildReportModel, downloadAssessmentReport, renderAssessmentPdf } from "../lib/report";
-import { assessmentResult } from "./assessment-fixture";
-
-const input: AssessmentInput = {
-  description: "Share loyalty member emails and health survey answers with a research partner.",
-  dataTypes: ["emails", "health"],
-  externalAccess: "yes",
-  rawExchange: "yes",
-  dataMovement: "yes",
-  combined: "yes",
-  secondaryUse: "yes",
-  purpose: "research",
-};
+import { DISCLAIMER, ReportModel, buildReportModel, downloadAssessmentReport, formatCheckedOn, renderAssessmentPdf } from "../lib/report";
+import { assessmentResult, completeInput as input } from "./assessment-fixture";
 
 const result = assessmentResult;
 const model = buildReportModel(input, result);
@@ -33,8 +22,7 @@ describe("report model", () => {
       "Questionnaire responses",
       "Risk assessment",
       "Contributing risk factors",
-      "Recommended safeguards",
-      "Karlsgate capability fit",
+      "Recommended actions",
       "Specialist review required",
       "Disclaimer",
     ]);
@@ -45,44 +33,39 @@ describe("report model", () => {
     expect(flat).toContain(result.level);
     expect(flat).toContain(result.guidance);
     expect(model.meta).toContainEqual({ label: "Scoring rules version", value: result.rulesVersion });
-    expect(model.meta).toContainEqual({ label: "Recommendation mapping version", value: result.mappingVersion });
-    expect(model.meta).toContainEqual({ label: "Mapping approval", value: "Approved" });
+    expect(model.meta).toContainEqual({ label: "Recommendation catalog version", value: result.mappingVersion });
+    expect(model.meta).toContainEqual({ label: "Catalog approval", value: "Approved" });
+    expect(model.meta).toContainEqual({ label: "Sources checked", value: "November 4, 2026" });
   });
 
   it("carries the use case, every answer, and every recommendation", () => {
     expect(flat).toContain(input.description);
     expect(flat).toContain("Email addresses, Health information");
-    expect(flat).toContain("Research");
-    result.recommendationDetails.forEach((item) => {
+    expect(flat).toContain("Patient or clinical research");
+    expect(flat).toContain("Hashed or tokenized");
+    expect(flat).toContain("HIPAA");
+    result.recommendations.forEach((item) => {
       expect(flat).toContain(item.action);
       expect(flat).toContain(item.rationale);
-      item.riskFactorIds.forEach((ruleId) => {
-        expect(flat).toContain(result.factors.find((factor) => factor.ruleId === ruleId)?.label);
-      });
+      item.basedOn.forEach((label) => expect(flat).toContain(label));
     });
     result.factors.forEach((factor) => expect(flat).toContain(factor.label));
   });
 
-  it("lists each Karlsgate capability once, beside the safeguard it delivers", () => {
-    result.karlsgateRecommendations.forEach((item) => expect(flat.split(item.text)).toHaveLength(2));
-    const safeguards = model.sections.find((section) => section.heading === "Recommended safeguards");
-    const capabilityFit = model.sections.find((section) => section.heading === "Karlsgate capability fit");
-    const inSafeguards = JSON.stringify(safeguards);
-    ["Protected matching", "Re-identification risk remediation", "De-identification", "Data minimization"]
-      .forEach((label) => expect(inSafeguards).toContain(`Karlsgate capability: ${label}.`));
-    expect(capabilityFit).toEqual({
-      heading: "Karlsgate capability fit",
-      kind: "list",
-      items: [expect.stringMatching(/^Governance policy execution: .* Baseline control for every assessment\.$/)],
-    });
+  it("links regulatory references to their sources", () => {
+    const actions = model.sections.find((section) => section.heading === "Recommended actions");
+    const [first] = actions && actions.kind === "list" ? actions.items : [];
+    const [reference] = result.recommendations[0].references;
+    expect(first).toContain(`Regulatory reference: ${reference.statement} Source: ${reference.sourceTitle}, ${reference.sourceUrl}`);
   });
 
-  it("drops the capability section when every capability is paired with a safeguard", () => {
-    const paired = buildReportModel(input, {
-      ...result,
-      karlsgateRecommendations: result.karlsgateRecommendations.filter((item) => item.id !== "GOVERNANCE_EXECUTION"),
-    });
-    expect(headingsOf(paired)).not.toContain("Karlsgate capability fit");
+  it("marks a recommendation that applies to every assessment", () => {
+    expect(flat).toContain("Applies to every assessment.");
+  });
+
+  it("formats the source check date without shifting the day", () => {
+    expect(formatCheckedOn("2026-11-04")).toBe("November 4, 2026");
+    expect(formatCheckedOn("not a date")).toBe("not a date");
   });
 
   it("omits internal rule identifiers and categories", () => {
@@ -103,7 +86,7 @@ describe("report model", () => {
   });
 
   it("labels an unanswered question instead of leaving it blank", () => {
-    const partial = buildReportModel({ ...input, combined: "" }, result);
+    const partial = buildReportModel({ ...input, combined: "", regulations: [] }, result);
     expect(JSON.stringify(partial)).toContain("Not answered");
   });
 });

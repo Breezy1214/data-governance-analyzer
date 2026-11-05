@@ -1,0 +1,261 @@
+{
+  "version": "2.0",
+  "approvalStatus": "approved",
+  "source": "docs/recommendation-mapping-v2.0.md",
+  "sourcesCheckedOn": "2026-11-04",
+  "rulesVersions": [
+    "2.0"
+  ],
+  "sources": {
+    "GDPR_RECITAL_26": {
+      "publisher": "GDPR Recital 26",
+      "title": "GDPR Recital 26 (text reprinted at gdpr-info.eu)",
+      "url": "https://gdpr-info.eu/recitals/no-26/"
+    },
+    "HHS_DEIDENTIFICATION": {
+      "publisher": "U.S. Department of Health and Human Services",
+      "title": "Guidance Regarding Methods for De-identification of Protected Health Information",
+      "url": "https://www.hhs.gov/hipaa/for-professionals/special-topics/de-identification/index.html"
+    },
+    "CA_AG_CCPA": {
+      "publisher": "California Attorney General",
+      "title": "California Consumer Privacy Act (CCPA)",
+      "url": "https://oag.ca.gov/privacy/ccpa"
+    }
+  },
+  "recommendations": [
+    {
+      "id": "AVOID_READABLE_IDENTIFIERS",
+      "title": "Stop handing over readable identifiers",
+      "action": "Replace the exchange of readable identifiers with a matching method that lets each party keep its identifiers in its own environment.",
+      "rationale": "Encryption only protects data in transit. Once a recipient decrypts it, they hold fully identified records and you can no longer control how those records are reused. Matching methods that compare single-use hashes through a neutral party let both sides find what they have in common without handing over identifiers.",
+      "triggers": [
+        "IDENTIFIERS_CLEARTEXT",
+        "IDENTIFIERS_UNKNOWN",
+        "IDENTIFIERS_DECRYPTED"
+      ]
+    },
+    {
+      "id": "TREAT_HASHES_AS_PERSONAL_DATA",
+      "title": "Treat hashes and tokens as personal data",
+      "action": "Handle hashed or tokenized identifiers as personal data, and use single-use salted keys instead of stable hashes.",
+      "rationale": "The same input always produces the same hash, so stored hashes can be matched against a lookup table and linked back to people later, without the original partners knowing.",
+      "triggers": [
+        "IDENTIFIERS_HASHED"
+      ],
+      "references": [
+        {
+          "sourceId": "GDPR_RECITAL_26",
+          "statement": "Recital 26 says pseudonymised data that could be attributed to a person using additional information should be treated as information on an identifiable person."
+        },
+        {
+          "sourceId": "HHS_DEIDENTIFICATION",
+          "statement": "HHS guidance says parts or derivatives of listed identifiers cannot be disclosed under the HIPAA Safe Harbor method, and that a re-identification code should not be derived from information about the individual."
+        }
+      ]
+    },
+    {
+      "id": "CONFIRM_CLEAN_ROOM_TERMS",
+      "title": "Confirm what the clean room actually protects",
+      "action": "Confirm in writing what leaves your environment, who operates the clean room, and what obligations that operator accepts.",
+      "rationale": "Sending readable identifiers into a clean room is a change of custody every time, and both parties have to trust the same operator, so that operator's access and duties need to be explicit.",
+      "triggers": [
+        "IDENTIFIERS_CLEAN_ROOM"
+      ]
+    },
+    {
+      "id": "DE_IDENTIFY_SENSITIVE_RECORDS",
+      "title": "De-identify sensitive records",
+      "action": "De-identify sensitive records before they leave the originating system, and have a specialist confirm the method.",
+      "rationale": "Regulated or high-impact information increases potential harm if directly identifying values remain exposed. Values that replace identifiers can still carry re-identification risk, so they need protecting too.",
+      "triggers": [
+        "DATA_SENSITIVITY_HIGH"
+      ],
+      "references": [
+        {
+          "sourceId": "HHS_DEIDENTIFICATION",
+          "statement": "HHS guidance describes two ways to meet the HIPAA de-identification standard for health information: Expert Determination and Safe Harbor."
+        }
+      ]
+    },
+    {
+      "id": "LIMIT_CUSTODY_CHANGES",
+      "title": "Limit changes of custody",
+      "action": "Check whether the use case works without moving identifiable data. If it must move, record who holds it at each step and how it is returned or deleted.",
+      "rationale": "Each change of custody adds a party whose handling you can no longer directly control. The strongest position is that identifying information never changes hands before, during, or after the exchange.",
+      "triggers": [
+        "CUSTODY_CHANGE"
+      ]
+    },
+    {
+      "id": "VERIFY_RULE_ENFORCEMENT",
+      "title": "Verify who enforces the rules",
+      "action": "Ask the operator to show how the agreed rules are enforced, and confirm your organization can verify that enforcement itself.",
+      "rationale": "A promise from a platform is weaker than a control the data owner can check. Approval for internal analytics also doesn't make a platform safe for work with outside partners.",
+      "triggers": [
+        "ENVIRONMENT_NOT_OWNED"
+      ]
+    },
+    {
+      "id": "USE_PARTNER_SPECIFIC_KEYS",
+      "title": "Use keys specific to each partner",
+      "action": "Use match keys that are unique to each partner or exchange, and retire keys once they have been shared.",
+      "rationale": "A key reused across partners or over time can link a person's records well beyond the approved purpose. Keys unique to each party are still pseudonymous, so they need protecting too.",
+      "triggers": [
+        "REUSABLE_KEYS"
+      ]
+    },
+    {
+      "id": "SET_MINIMUM_MATCH_COUNT",
+      "title": "Set a minimum result size",
+      "action": "Set a minimum match count, and suppress results below it before anyone sees them.",
+      "rationale": "A very small result can reveal who a person is by elimination, even with no name attached. Returning no matches below the minimum closes that gap.",
+      "triggers": [
+        "SMALL_RESULTS"
+      ]
+    },
+    {
+      "id": "REVIEW_COMBINATION_RISK",
+      "title": "Reduce combination risk",
+      "action": "Measure and reduce re-identification risk before combining datasets.",
+      "rationale": "Linking datasets can reveal a person or sensitive attribute even when each source appears limited on its own. The risk comes from combinations of attributes as well as identifiers, and it extends to people outside the overlap.",
+      "triggers": [
+        "COMBINED_REIDENTIFICATION"
+      ]
+    },
+    {
+      "id": "DELETE_AFTER_EXCHANGE",
+      "title": "Agree what gets deleted afterward",
+      "action": "Agree which keys, hashes, tokens, and copies each party must delete after the exchange, and get confirmation that they did.",
+      "rationale": "Anything kept after the exchange can be used to re-identify people later.",
+      "triggers": [
+        "RETAINED_ARTIFACTS"
+      ]
+    },
+    {
+      "id": "GATE_SECONDARY_USE",
+      "title": "Gate any secondary use",
+      "action": "Create a separate approval gate for any secondary use.",
+      "rationale": "Reuse beyond the stated purpose can exceed the original notice, consent, contract, or policy basis.",
+      "triggers": [
+        "SECONDARY_USE"
+      ]
+    },
+    {
+      "id": "SHARE_ONLY_THE_MATCH_RESULT",
+      "title": "Share only the match result you need",
+      "action": "Define exactly what each party receives from the match, and make sure records that do not match stay hidden.",
+      "rationale": "Overlap and enrichment work only needs the agreed result, not a view of the other party's full dataset. Each party can receive something different, so agree on it before matching starts.",
+      "triggers": [
+        "PURPOSE_OVERLAP",
+        "PURPOSE_ENRICHMENT"
+      ]
+    },
+    {
+      "id": "CONFIRM_RESEARCH_BASIS",
+      "title": "Confirm the basis for health research",
+      "action": "Confirm the de-identification method or authorization that applies before linking patient or clinical records.",
+      "rationale": "Linking health records over time adds detail that can make a patient easier to identify.",
+      "triggers": [
+        "PURPOSE_HEALTH_RESEARCH"
+      ],
+      "references": [
+        {
+          "sourceId": "HHS_DEIDENTIFICATION",
+          "statement": "HHS guidance describes two ways to meet the HIPAA de-identification standard for health information: Expert Determination and Safe Harbor."
+        }
+      ]
+    },
+    {
+      "id": "LIMIT_FRAUD_CHECK_SCOPE",
+      "title": "Limit fraud checks to the signal needed",
+      "action": "Limit the check to the match signal the investigation needs, and record the legal basis for sharing it.",
+      "rationale": "Fraud and anti-money-laundering checks can justify sharing, but only for the specific question being asked.",
+      "triggers": [
+        "PURPOSE_FRAUD"
+      ]
+    },
+    {
+      "id": "CHECK_ADVERTISING_OPT_OUTS",
+      "title": "Check notice and opt-outs for advertising",
+      "action": "Confirm that notice and opt-out choices are honored before using identifiers for audiences or measurement.",
+      "rationale": "Using personal data for advertising can trigger specific consumer rights.",
+      "triggers": [
+        "PURPOSE_ADVERTISING"
+      ],
+      "references": [
+        {
+          "sourceId": "CA_AG_CCPA",
+          "statement": "The California Attorney General explains that consumers can tell a business to stop selling or sharing their personal information, and defines sharing as using it to target ads based on activity across websites."
+        }
+      ]
+    },
+    {
+      "id": "DOCUMENT_AI_TRAINING_DATA",
+      "title": "Document AI training data",
+      "action": "Record where training data came from, how deletion requests will be handled, and whether identifiers are needed at all.",
+      "rationale": "Once data has trained a model, it is hard to trace or remove.",
+      "triggers": [
+        "PURPOSE_AI"
+      ]
+    },
+    {
+      "id": "STANDARDIZE_IDENTIFIERS",
+      "title": "Standardize identifiers before matching",
+      "action": "Standardize identifier formats across sources before matching, then test the result on a small sample.",
+      "rationale": "Inconsistent formats cause missed matches and false ones, and both can lead to wrong decisions about people. Normalizing values before match keys are created improves match quality.",
+      "triggers": [
+        "IDENTIFIERS_INCONSISTENT"
+      ]
+    },
+    {
+      "id": "PLAN_REPEATABLE_ONBOARDING",
+      "title": "Plan onboarding for each partner",
+      "action": "Set up a repeatable review and agreement for each partner, with its own permitted uses and result rules.",
+      "rationale": "Each added partner brings its own boundary, and the first partner's approval doesn't automatically cover the next one. Reusable workflows stop every new partner from adding the same manual work.",
+      "triggers": [
+        "PARTICIPANTS_MULTIPLE"
+      ]
+    },
+    {
+      "id": "RESTRICT_ACCESS",
+      "title": "Restrict and review access",
+      "action": "Limit access to named roles and review permissions regularly.",
+      "rationale": "Named ownership and periodic review reduce unnecessary exposure throughout the approved use.",
+      "baseline": true,
+      "triggers": [
+        "PARTICIPANTS_ONE",
+        "PARTICIPANTS_MULTIPLE"
+      ]
+    },
+    {
+      "id": "MINIMIZE_FIELDS",
+      "title": "Minimize the data",
+      "action": "Collect and share only the fields required for the approved purpose.",
+      "rationale": "Using fewer fields reduces the impact of every identified data-sensitivity and purpose risk.",
+      "baseline": true,
+      "triggers": [
+        "DATA_SENSITIVITY_DIRECT",
+        "DATA_SENSITIVITY_HIGH",
+        "PURPOSE_ANALYTICS"
+      ]
+    },
+    {
+      "id": "SET_LIFECYCLE_RESPONSIBILITIES",
+      "title": "Set lifecycle responsibilities",
+      "action": "Set retention, deletion, and incident-response responsibilities before launch.",
+      "rationale": "A defined lifecycle limits how long risk persists and makes ownership clear if an incident occurs.",
+      "baseline": true
+    },
+    {
+      "id": "RECORD_THE_DECISION",
+      "title": "Record the decision",
+      "action": "Record the approved purpose, data owner, and control evidence in the governance register.",
+      "rationale": "A reviewable record connects the approved use and its safeguards to the risks identified in this assessment. Contracts and paperwork support this, but where possible the rules should also be built into the system.",
+      "baseline": true,
+      "triggers": [
+        "PURPOSE_OTHER"
+      ]
+    }
+  ]
+}

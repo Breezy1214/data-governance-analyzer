@@ -179,7 +179,7 @@ textarea::placeholder { color: var(--muted); }
 .question-block legend + * { clear: both; }
 .question-block p { margin: 6px 0 14px; color: var(--muted); font-size: 13px; }
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
-.binary-row { display: flex; gap: 8px; }
+.binary-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s, background .18s; }
 .choice:hover { border-color: var(--brand); background: var(--surface-hover); }
 /* Selection is shown by the tick as well as the fill, not colour alone. */
@@ -234,12 +234,14 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-list > li { display: grid; grid-template-columns: 44px minmax(0, 1fr); padding: 18px 0; border-top: 1px solid var(--line); }
 .recommendation-list > li:last-child { padding-bottom: 4px; }
 .recommendation-index { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--brand-soft); color: var(--brand); font-family: var(--font-mono), monospace; font-size: 12px; font-weight: 600; }
-.recommendation-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 4px 0 4px; }
-.recommendation-list h4 { margin: 0; font-size: 16px; font-weight: 600; }
+.recommendation-list h4 { margin: 4px 0; font-size: 16px; font-weight: 600; }
 .recommendation-list p { margin: 0; line-height: 1.55; }
 .recommendation-action { color: var(--muted); font-size: 14px; }
-.capability-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 99px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 600; white-space: nowrap; }
-.capability-tag .badge { padding: 2px 7px; border-radius: 99px; background: var(--surface); }
+.recommendation-references { margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font-size: 13px; line-height: 1.55; }
+.recommendation-references h5 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.recommendation-references ul { display: grid; gap: 6px; margin: 0; padding-left: 16px; color: var(--muted); }
+.recommendation-references a { color: var(--brand); font-weight: 600; }
+.recommendation-references a:hover { color: var(--brand-hover); }
 .recommendation-why { margin-top: 10px; }
 .recommendation-why summary { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
 .recommendation-why summary::-webkit-details-marker { display: none; }
@@ -253,14 +255,7 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-trace ul { display: contents; list-style: none; }
 .recommendation-trace li { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
 .safeguards .method-note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
-.empty-state { padding: 18px; border: 1px solid var(--control-line); border-radius: 12px; color: var(--muted); line-height: 1.55; }
 
-.workspace .card-title:has(+ .lede) { margin-bottom: 0; }
-.capability-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-.capability-list li { padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
-.capability-list b { display: block; margin-bottom: 4px; font-size: 15px; font-weight: 600; }
-.capability-list p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-.capability-list .recommendation-reason { margin-top: 8px; font-size: 12px; }
 .summary summary { font-weight: 600; cursor: pointer; }
 .summary summary:hover { color: var(--brand); }
 .summary dl { margin: 16px 0 0; }

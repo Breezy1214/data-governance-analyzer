@@ -1,4 +1,9 @@
-"""Versioned risk-to-control mappings, independent of scoring weights."""
+"""Versioned answer-to-recommendation catalog, independent of scoring weights.
+
+Recommendations are selected by the rules and signals an assessment fires, and
+may cite regulatory guidance. The catalog is a reviewed snapshot; nothing here
+calls an external service at request time.
+"""
 
 from __future__ import annotations
 
@@ -8,23 +13,43 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.scoring.models import KarlsgateRecommendation, RecommendationResult, SafeguardRecommendation
-from app.scoring.rules import get_ruleset
+from app.scoring.models import Recommendation, RecommendationResult, Reference
+from app.scoring.rules import duplicates, get_ruleset
 
-CURRENT_MAPPING_VERSION = "1.1"
-MAPPING_FILES = {"1.0": "v1.0.json", "1.1": "v1.1.json"}
+CURRENT_MAPPING_VERSION = "2.0"
+MAPPING_FILES = {"2.0": "v2.0.json"}
+
+
+class CatalogSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    publisher: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    url: str = Field(pattern=r"^https://")
+
+
+class CatalogCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    sourceId: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
 
 
 class CatalogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str = Field(min_length=1)
-    text: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    # Selected on every assessment when baseline, otherwise when any trigger fires.
+    # Fired triggers are always reported as the basis for the recommendation.
+    baseline: bool = False
+    triggers: tuple[str, ...] = ()
+    references: tuple[CatalogCitation, ...] = ()
 
-
-class CapabilityEntry(CatalogEntry):
-    label: str = Field(min_length=1)
-    conditionId: str = Field(min_length=1)
-    anyOfAllFactors: tuple[tuple[str, ...], ...] = Field(min_length=1)
+    @model_validator(mode="after")
+    def must_be_selectable(self) -> CatalogEntry:
+        if not self.baseline and not self.triggers:
+            raise ValueError("A recommendation needs a trigger or baseline")
+        return self
 
 
 class MappingCatalog(BaseModel):
@@ -32,33 +57,26 @@ class MappingCatalog(BaseModel):
     version: str
     approvalStatus: Literal["pending", "approved"]
     source: str
+    sourcesCheckedOn: str
     rulesVersions: tuple[str, ...] = Field(min_length=1)
-    baselineSafeguardIds: tuple[str, ...]
-    safeguards: tuple[CatalogEntry, ...] = Field(min_length=1)
-    factorSafeguards: dict[str, tuple[str, ...]]
-    karlsgate: tuple[CapabilityEntry, ...]
+    sources: dict[str, CatalogSource]
+    recommendations: tuple[CatalogEntry, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_references(self) -> MappingCatalog:
-        safeguard_ids = {entry.id for entry in self.safeguards}
-        if len(safeguard_ids) != len(self.safeguards):
-            raise ValueError("Duplicate safeguard IDs")
-        if len({entry.id for entry in self.karlsgate}) != len(self.karlsgate):
-            raise ValueError("Duplicate capability IDs")
-        references = set(self.baselineSafeguardIds)
-        for safeguards in self.factorSafeguards.values():
-            if not safeguards:
-                raise ValueError("Every factor needs at least one safeguard")
-            references.update(safeguards)
-        if references - safeguard_ids:
-            raise ValueError("Unknown safeguard reference")
-        for entry in self.karlsgate:
-            for clause in entry.anyOfAllFactors:
-                if set(clause) - self.factorSafeguards.keys():
-                    raise ValueError("Unknown applicability factor")
+        repeated = duplicates(tuple(entry.id for entry in self.recommendations))
+        if repeated:
+            raise ValueError(f"Duplicate recommendation IDs: {repeated}")
+        referenced = set()
+        for entry in self.recommendations:
+            referenced.update(entry.triggers)
+            if any(citation.sourceId not in self.sources for citation in entry.references):
+                raise ValueError("Unknown source reference")
         for version in self.rulesVersions:
-            if {rule.id for rule in get_ruleset(version).rules} != self.factorSafeguards.keys():
-                raise ValueError("Mapping must cover exactly the supported scoring factors")
+            ruleset = get_ruleset(version)
+            known = {item.id for item in (*ruleset.rules, *ruleset.signals)}
+            if referenced != known:
+                raise ValueError("Catalog must cover exactly the supported rules and signals")
         return self
 
 
@@ -73,39 +91,43 @@ def get_mapping(version: str = CURRENT_MAPPING_VERSION) -> MappingCatalog:
     return catalog
 
 
+def _reference(source: CatalogSource, citation: CatalogCitation) -> Reference:
+    return Reference(
+        publisher=source.publisher,
+        statement=citation.statement,
+        sourceTitle=source.title,
+        sourceUrl=source.url,
+    )
+
+
 def map_recommendations(
-    factor_ids: list[str],
+    active_labels: dict[str, str],
     rules_version: str,
     mapping_version: str = CURRENT_MAPPING_VERSION,
 ) -> RecommendationResult:
+    """Select catalog entries for the fired rules and signals, given as ``{id: label}``."""
     catalog = get_mapping(mapping_version)
     if rules_version not in catalog.rulesVersions:
         raise ValueError("Mapping does not support these scoring rules")
-    active = list(dict.fromkeys(factor_ids))
-    if set(active) - catalog.factorSafeguards.keys():
-        raise ValueError("Risk factor has no supported safeguard mapping")
 
-    general = []
-    for entry in catalog.safeguards:
-        related = [factor for factor in active if entry.id in catalog.factorSafeguards[factor]]
-        if related or entry.id in catalog.baselineSafeguardIds:
-            general.append(SafeguardRecommendation(id=entry.id, text=entry.text, factorIds=related))
-
-    karlsgate = []
-    for entry in catalog.karlsgate:
-        # OR across clauses, AND within each clause; an empty clause means baseline applicability.
-        matched = [clause for clause in entry.anyOfAllFactors if all(factor in active for factor in clause)]
-        if not matched:
+    selected = []
+    for entry in catalog.recommendations:
+        based_on = [label for item, label in active_labels.items() if item in entry.triggers]
+        if not entry.baseline and not based_on:
             continue
-        related = [factor for factor in active if any(factor in clause for clause in matched)]
-        karlsgate.append(KarlsgateRecommendation(
-            id=entry.id, label=entry.label, text=entry.text,
-            conditionId=entry.conditionId, factorIds=related,
+        selected.append(Recommendation(
+            id=entry.id,
+            priority=len(selected) + 1,
+            title=entry.title,
+            action=entry.action,
+            rationale=entry.rationale,
+            basedOn=based_on,
+            references=[_reference(catalog.sources[citation.sourceId], citation) for citation in entry.references],
         ))
 
     return RecommendationResult(
         mappingVersion=catalog.version,
         mappingApprovalStatus=catalog.approvalStatus,
-        generalSafeguards=general,
-        karlsgateRecommendations=karlsgate,
+        sourcesCheckedOn=catalog.sourcesCheckedOn,
+        recommendations=selected,
     )

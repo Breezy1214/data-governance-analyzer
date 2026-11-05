@@ -1,19 +1,27 @@
 import {
   AssessmentInput,
   AssessmentResult,
-  BINARY_FIELDS,
+  CHOICE_FIELDS,
+  CHOICE_QUESTIONS,
+  ChoiceField,
   DATA_TYPE_LABELS,
   PURPOSE_LABELS,
   QUESTION_LABELS,
+  REGULATION_LABELS,
+  Recommendation,
   RiskLevel,
 } from "./assessment";
-import { pairCapabilities, recommendationReason } from "./recommendations";
 import { PALETTE, RISK_COLORS } from "./theme";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
 
 export const DISCLAIMER =
-  "This report is decision support, not legal advice. It does not determine compliance with HIPAA, PCI DSS, or any other regulation. Specialist legal, privacy, and security review may still be required.";
+  "This report is decision support, not legal advice. It does not determine compliance with HIPAA, PCI DSS, GDPR, CCPA/CPRA, or any other regulation. Specialist legal, privacy, and security review may still be required.";
+
+// Attribution wording, shared by the app and the report so the two can't drift apart.
+export const BASED_ON_LABEL = "Based on your answers:";
+export const EVERY_ASSESSMENT_LABEL = "Applies to every assessment.";
+export const REFERENCE_HEADING = "Regulatory reference";
 
 export type ReportSection =
   | { heading: string; kind: "paragraph"; body: string }
@@ -32,13 +40,25 @@ export function formatAssessedAt(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+/** Catalog check dates have no time, so they are read as local dates to avoid shifting a day. */
+export function formatCheckedOn(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function recommendationText(item: Recommendation): string {
+  const basis = item.basedOn.length ? `${BASED_ON_LABEL} ${item.basedOn.join(", ")}.` : EVERY_ASSESSMENT_LABEL;
+  const references = item.references.map((entry) =>
+    `${REFERENCE_HEADING}: ${entry.statement} Source: ${entry.sourceTitle}, ${entry.sourceUrl}`);
+  return [item.action, `Why this applies: ${item.rationale}`, basis, ...references].join(" ");
+}
+
 export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
 ): ReportModel {
-  const factorLabels = new Map(result.factors.map((factor) => [factor.ruleId, factor.label]));
-  // Same pairing as the app: a capability is listed once, with the safeguard it delivers.
-  const capabilities = pairCapabilities(result);
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: input.description.trim() },
     {
@@ -49,8 +69,12 @@ export function buildReportModel(
           label: "Information involved",
           value: input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ") || "None selected",
         },
-        ...BINARY_FIELDS.map((key) => ({ label: QUESTION_LABELS[key], value: answerLabel(input[key]) })),
         { label: QUESTION_LABELS.purpose, value: PURPOSE_LABELS[input.purpose] },
+        ...CHOICE_FIELDS.map((field) => ({ label: CHOICE_QUESTIONS[field].legend, value: answerLabel(field, input) })),
+        {
+          label: QUESTION_LABELS.regulations,
+          value: input.regulations.map((item) => REGULATION_LABELS[item]).join(", ") || "Not answered",
+        },
       ],
     },
     {
@@ -70,25 +94,12 @@ export function buildReportModel(
         : ["No risk factors applied to this use case."],
     },
     {
-      heading: "Recommended safeguards",
+      heading: "Recommended actions",
       kind: "list",
       ordered: true,
-      items: result.recommendationDetails.map((item) => {
-        const triggers = item.riskFactorIds.map((ruleId) => factorLabels.get(ruleId)).filter(Boolean);
-        const capability = capabilities.byAction.get(item.action);
-        const fit = capability ? ` Karlsgate capability: ${capability.label}. ${capability.text}` : "";
-        return `${item.action} Why this applies: ${item.rationale} Triggered by: ${triggers.join(", ")}.${fit}`;
-      }),
+      items: result.recommendations.map(recommendationText),
     },
   ];
-
-  if (capabilities.remaining.length) {
-    sections.push({
-      heading: "Karlsgate capability fit",
-      kind: "list",
-      items: capabilities.remaining.map((item) => `${item.label}: ${item.text} ${recommendationReason(item, result.factors)}`),
-    });
-  }
 
   if (result.limitations.length) {
     sections.push({
@@ -105,18 +116,18 @@ export function buildReportModel(
     meta: [
       { label: "Assessed", value: formatAssessedAt(result.assessedAt) },
       { label: "Scoring rules version", value: result.rulesVersion },
-      { label: "Recommendation mapping version", value: result.mappingVersion },
-      { label: "Mapping approval", value: result.mappingApprovalStatus === "approved" ? "Approved" : "Stakeholder approval pending" },
+      { label: "Recommendation catalog version", value: result.mappingVersion },
+      { label: "Catalog approval", value: result.mappingApprovalStatus === "approved" ? "Approved" : "Approval pending" },
+      { label: "Sources checked", value: formatCheckedOn(result.sourcesCheckedOn) },
     ],
     risk: { level: result.level, score: result.score },
     sections,
   };
 }
 
-function answerLabel(value: string): string {
-  if (value === "yes") return "Yes";
-  if (value === "no") return "No";
-  return "Not answered";
+function answerLabel(field: ChoiceField, input: AssessmentInput): string {
+  const options: Record<string, string> = CHOICE_QUESTIONS[field].options;
+  return options[input[field]] ?? "Not answered";
 }
 
 const PAGE = { width: 595.28, height: 841.89 }; // A4 in points

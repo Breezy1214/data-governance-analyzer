@@ -1,33 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AssessmentInput,
   AssessmentResult,
   AssessmentServiceError,
-  BINARY_FIELDS,
+  CHOICE_FIELDS,
+  CHOICE_QUESTIONS,
+  ChoiceField,
   DATA_TYPE_LABELS,
   DESCRIPTION_MAX_LENGTH,
   DataType,
   EMPTY_INPUT,
   PURPOSE_LABELS,
+  QUESTION_COUNT,
   QUESTION_LABELS,
   Purpose,
+  REGULATION_LABELS,
   RISK_THRESHOLDS,
+  Reference,
+  Regulation,
   RiskLevel,
-  YesNo,
   requestAssessment,
+  toggleRegulation,
   validateDescription,
   validateQuestions,
 } from "@/lib/assessment";
-import { downloadAssessmentReport, formatAssessedAt } from "@/lib/report";
+import { BASED_ON_LABEL, EVERY_ASSESSMENT_LABEL, REFERENCE_HEADING, downloadAssessmentReport, formatAssessedAt, formatCheckedOn } from "@/lib/report";
 import {
   ACCEPTED_FILE_TYPES,
   ACCEPTED_LABEL,
   DocumentImportError,
   extractDocumentText,
 } from "@/lib/document-import";
-import { pairCapabilities, recommendationReason } from "@/lib/recommendations";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
@@ -55,21 +60,47 @@ function Choice({ selected, children, onClick }: { selected: boolean; children: 
   );
 }
 
-function BinaryQuestion({ legend, value, onChange, detail }: {
-  legend: string;
-  value: YesNo | "";
-  onChange: (value: YesNo) => void;
-  detail?: string;
+function ChoiceQuestion({ field, value, onChange }: {
+  field: ChoiceField;
+  value: string;
+  onChange: (value: string) => void;
 }) {
+  const { legend, detail, options } = CHOICE_QUESTIONS[field];
+  const entries = Object.entries(options);
   return (
     <fieldset className="question-block">
       <legend>{legend}</legend>
-      {detail && <p>{detail}</p>}
-      <div className="binary-row">
-        <Choice selected={value === "yes"} onClick={() => onChange("yes")}>Yes</Choice>
-        <Choice selected={value === "no"} onClick={() => onChange("no")}>No</Choice>
+      <p>{detail}</p>
+      <div className={entries.length > 3 ? "choice-grid" : "binary-row"}>
+        {entries.map(([key, label]) => (
+          <Choice key={key} selected={value === key} onClick={() => onChange(key)}>{label}</Choice>
+        ))}
       </div>
     </fieldset>
+  );
+}
+
+const QUESTION_GROUPS: { title: string; fields: ChoiceField[] }[] = [
+  { title: "Who is involved", fields: ["participants", "environmentControl"] },
+  { title: "How identifiers are handled", fields: ["identifierProtection", "custodyChange", "reusableKeys", "retainedArtifacts"] },
+  { title: "What the results could reveal", fields: ["smallResults", "combined", "secondaryUse"] },
+];
+
+function ReferenceList({ items }: { items: Reference[] }) {
+  return items.length > 0 && (
+    <div className="recommendation-references">
+      <h5>{REFERENCE_HEADING}</h5>
+      <ul>
+        {items.map((entry) => (
+          <li key={entry.statement}>
+            {entry.statement}{" "}
+            <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer">
+              Source: {entry.sourceTitle}<span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -86,7 +117,7 @@ function StatCard({ title, badge, value, unit, detail }: Stat) {
 }
 
 const INTRO_STATS: Stat[] = [
-  { title: "Questions", badge: "Step 2", value: Object.keys(QUESTION_LABELS).length, detail: <>About data, <b>access</b> and use</> },
+  { title: "Questions", badge: "Step 2", value: QUESTION_COUNT, detail: <>About data, <b>access</b> and use</> },
   { title: "Risk score", badge: "Step 3", value: "0–100", detail: <>Across <b>{RISK_BANDS.length}</b> risk bands</> },
   { title: "Draft retention", badge: "This tab", value: IDLE_MINUTES, unit: "min", detail: <>Cleared when <b>idle</b></> },
   { title: "Answers stored", badge: "Private", value: 0, detail: <>Answers are <b>scored, not stored</b></> },
@@ -95,26 +126,28 @@ const INTRO_STATS: Stat[] = [
 function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null): Stat[] {
   if (step === 0) return INTRO_STATS;
   if (step === 1) {
-    const answers = BINARY_FIELDS.map((field) => input[field]);
-    const answered = (input.dataTypes.length > 0 ? 1 : 0) + answers.filter(Boolean).length;
+    const answers = CHOICE_FIELDS.map((field) => input[field]);
+    // The intended use always has a value, so it counts as answered.
+    const answered = 1 + (input.dataTypes.length > 0 ? 1 : 0) + (input.regulations.length > 0 ? 1 : 0) + answers.filter(Boolean).length;
     const complete = validateQuestions(input) === null;
+    const unknowns = answers.filter((answer) => answer === "notSure").length + (input.regulations.includes("notSure") ? 1 : 0);
     return [
       {
         title: "Questions answered",
         badge: complete ? "Complete" : "In progress",
         value: answered,
-        unit: `/ ${BINARY_FIELDS.length + 1}`,
+        unit: `/ ${QUESTION_COUNT}`,
         detail: complete ? <>Ready to <b>assess</b></> : <>All required <b>before scoring</b></>,
       },
       { title: "Data types", badge: "Question 1", value: input.dataTypes.length, unit: `/ ${Object.keys(DATA_TYPE_LABELS).length}`, detail: <>Types <b>selected</b> so far</> },
-      { title: "Yes answers", badge: "So far", value: answers.filter((answer) => answer === "yes").length, detail: <>Of <b>{BINARY_FIELDS.length}</b> handling questions</> },
+      { title: "Not sure", badge: "So far", value: unknowns, detail: <>Counted as the <b>riskier</b> answer</> },
     ];
   }
   // The recommendations step carries its own summary.
   if (!result || step === 3) return [];
   return [
-    { title: "Safeguards", badge: "Next step", value: result.recommendationDetails.length, detail: <>Tailored to <b>this use case</b></> },
-    { title: "Capability fit", badge: "Mapped", value: result.karlsgateRecommendations.length, detail: <>Privacy-enhancing <b>controls</b></> },
+    { title: "Recommendations", badge: "Next step", value: result.recommendations.length, detail: <>Tailored to <b>your answers</b></> },
+    { title: "Risk factors", badge: "Found", value: result.factors.length, detail: <>Driving <b>this score</b></> },
     { title: "Specialist review", badge: "Flagged", value: result.limitations.length, detail: <>Areas needing <b>expert sign-off</b></> },
   ];
 }
@@ -164,11 +197,6 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
   const pendingReport = useRef<AbortController | null>(null);
   const pendingImport = useRef<AbortController | null>(null);
   const [draftReady, setDraftReady] = useState(false);
-  const factorLabelsById = useMemo(
-    () => new Map(result?.factors.map((factor) => [factor.ruleId, factor.label]) ?? []),
-    [result],
-  );
-  const capabilities = useMemo(() => result && pairCapabilities(result), [result]);
 
   const cancelPendingWork = useCallback(() => {
     pendingAssessment.current?.abort();
@@ -345,6 +373,14 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
 
   const progress = ((step + 1) / STEPS.length) * 100;
   const stats = statsFor(step, input, result);
+  const renderChoice = (field: ChoiceField) => (
+    <ChoiceQuestion
+      key={field}
+      field={field}
+      value={input[field]}
+      onChange={(value) => update(field, value as AssessmentInput[ChoiceField])}
+    />
+  );
 
   return (
     <div className="app">
@@ -393,9 +429,11 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
             <h1>Readiness Assessment</h1>
             <p>Describe a data initiative in plain language. We’ll surface governance concerns and the controls needed to proceed.</p>
           </div>
-          <div className="header-chips">
-            <span className="chip">Rubric v1.0</span>
-          </div>
+          {result && (
+            <div className="header-chips">
+              <span className="chip">Rubric v{result.rulesVersion} · {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}</span>
+            </div>
+          )}
         </header>
 
         <section className="workspace" id="assessment">
@@ -481,6 +519,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
               <p className="lede">Answer based on the planned operating model—not the best-case outcome.</p>
 
               <div className="card">
+                <h3 className="card-title">The data</h3>
                 <fieldset className="question-block">
                   <legend>{QUESTION_LABELS.dataTypes}</legend>
                   <p>Select every type that applies.</p>
@@ -491,18 +530,33 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                   </div>
                 </fieldset>
 
-                <BinaryQuestion legend={QUESTION_LABELS.externalAccess} detail="Another organization means anyone outside your own—a partner, vendor, agency, or research group." value={input.externalAccess} onChange={(value) => update("externalAccess", value)} />
-                <BinaryQuestion legend={QUESTION_LABELS.rawExchange} detail="Raw means unmasked values that directly identify a person." value={input.rawExchange} onChange={(value) => update("rawExchange", value)} />
-                <BinaryQuestion legend={QUESTION_LABELS.dataMovement} detail="For example, copying it to a partner’s system, a different cloud account, a spreadsheet, or a laptop." value={input.dataMovement} onChange={(value) => update("dataMovement", value)} />
-                <BinaryQuestion legend={QUESTION_LABELS.combined} detail="Joining datasets can make someone identifiable even when neither set identified them on its own." value={input.combined} onChange={(value) => update("combined", value)} />
-                <BinaryQuestion legend={QUESTION_LABELS.secondaryUse} detail="Reuse means using the data later for something other than the purpose you described above." value={input.secondaryUse} onChange={(value) => update("secondaryUse", value)} />
-
                 <label className="select-field" htmlFor="purpose">
                   <span>{QUESTION_LABELS.purpose}</span>
                   <select id="purpose" value={input.purpose} onChange={(event) => update("purpose", event.target.value as Purpose)}>
                     {(Object.entries(PURPOSE_LABELS) as [Purpose, string][]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                   </select>
                 </label>
+              </div>
+
+              {QUESTION_GROUPS.map(({ title, fields }) => (
+                <div className="card" key={title}>
+                  <h3 className="card-title">{title}</h3>
+                  {fields.map(renderChoice)}
+                </div>
+              ))}
+
+              <div className="card">
+                <h3 className="card-title">Rules and readiness</h3>
+                <fieldset className="question-block">
+                  <legend>{QUESTION_LABELS.regulations}</legend>
+                  <p>Select every one that may apply. This adds specialist-review notes and does not change the score.</p>
+                  <div className="choice-grid">
+                    {(Object.entries(REGULATION_LABELS) as [Regulation, string][]).map(([key, label]) => (
+                      <Choice key={key} selected={input.regulations.includes(key)} onClick={() => update("regulations", toggleRegulation(input.regulations, key))}>{label}</Choice>
+                    ))}
+                  </div>
+                </fieldset>
+                {renderChoice("identifierConsistency")}
               </div>
               {error && <p className="error" role="alert">{error}</p>}
               <div className="actions"><button className="secondary" type="button" onClick={() => moveTo(0)}>← Back</button><button className="primary" type="button" disabled={loading} onClick={assess}>{loading ? "Assessing…" : "Assess risk"} <span>→</span></button></div>
@@ -555,7 +609,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                 <div className="outcome-head">
                   <b className="risk-label risk-pill"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
                   <span className="outcome-counts">
-                    {result.recommendationDetails.length} safeguards · {result.karlsgateRecommendations.length} Karlsgate controls
+                    {result.recommendations.length} recommendations
                   </span>
                 </div>
                 <p className="outcome-guidance">{result.guidance}</p>
@@ -563,60 +617,35 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
               </div>
 
               <div className="card safeguards">
-                <h3 className="card-title">General safeguards</h3>
-                {result.recommendationDetails.length > 0 ? (
-                  <ol className="recommendation-list">
-                    {result.recommendationDetails.map((item) => {
-                      const factorLabels = item.riskFactorIds.flatMap((ruleId) => {
-                        const label = factorLabelsById.get(ruleId);
-                        return label ? [label] : [];
-                      });
-                      const capability = capabilities?.byAction.get(item.action);
-                      return (
-                        <li key={item.id}>
-                          <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
+                <h3 className="card-title">Recommended actions</h3>
+                <ol className="recommendation-list">
+                  {result.recommendations.map((item) => (
+                    <li key={item.id}>
+                      <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
+                      <div>
+                        <h4>{item.title}</h4>
+                        <p className="recommendation-action">{item.action}</p>
+                        <ReferenceList items={item.references} />
+                        <details className="recommendation-why">
+                          <summary>Why this applies</summary>
                           <div>
-                            <div className="recommendation-head">
-                              <h4>{item.title}</h4>
-                              {capability && <span className="capability-tag"><span className="badge">Karlsgate</span>{capability.label}</span>}
-                            </div>
-                            <p className="recommendation-action">{item.action}</p>
-                            <details className="recommendation-why">
-                              <summary>Why this applies</summary>
-                              <div>
-                                <p>{item.rationale}</p>
-                                <div className="recommendation-trace">
-                                  <b>Triggered by:</b>
-                                  <ul>{factorLabels.map((label) => <li key={label}>{label}</li>)}</ul>
-                                </div>
-                                {capability && <p className="capability-fit"><b>How Karlsgate helps:</b> {capability.text}</p>}
+                            <p>{item.rationale}</p>
+                            {item.basedOn.length > 0 ? (
+                              <div className="recommendation-trace">
+                                <b>{BASED_ON_LABEL}</b>
+                                <ul>{item.basedOn.map((label) => <li key={label}>{label}</li>)}</ul>
                               </div>
-                            </details>
+                            ) : <p>{EVERY_ASSESSMENT_LABEL}</p>}
                           </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                ) : (
-                  <p className="empty-state">No tailored safeguards were returned. Apply standard access, minimization, retention, and governance controls before proceeding.</p>
-                )}
-                <p className="method-note">Recommendation mapping v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "stakeholder approved" : "stakeholder approval pending"}.</p>
+                        </details>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <p className="method-note">Recommendation catalog v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}. Sources checked {formatCheckedOn(result.sourcesCheckedOn)}.</p>
               </div>
 
-              {capabilities && capabilities.remaining.length > 0 && (
-                <div className="card">
-                  <h3 className="card-title">{capabilities.byAction.size > 0 ? "Further privacy-enhancing controls" : "Applicable privacy-enhancing controls"}</h3>
-                  <p className="lede">Karlsgate capabilities whose documented applicability rules are satisfied.</p>
-                  <ul className="capability-list">
-                    {capabilities.remaining.map((capability) => (
-                      <li key={capability.id}><b>{capability.label}</b><p>{capability.text}</p>
-                        <p className="recommendation-reason">{recommendationReason(capability, result.factors)}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation mapping version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
+              <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation catalog version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}
               <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>

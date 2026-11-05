@@ -6,7 +6,7 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS; collects answers and renders backend results
 - `backend/` — FastAPI service and the single source of truth for assessment scoring
-- `docs/` — versioned scoring rubric, capability language, deployment guidance, [data handling and retention](docs/data-handling.md), the [accessibility review](docs/accessibility-review.md), and the [usability scenarios](docs/usability-scenarios.md)
+- `docs/` — versioned scoring rubric, recommendation catalog and sources, deployment guidance, [data handling and retention](docs/data-handling.md), the [accessibility review](docs/accessibility-review.md), and the [usability scenarios](docs/usability-scenarios.md)
 - [Scoring verification](docs/scoring-verification.md) — the SCRUM-14 correctness matrix, reproducible commands, performance conditions, results, and limitations
 - `.github/workflows/ci.yml` — frontend and backend quality gates
 
@@ -79,9 +79,8 @@ Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookie
 FastAPI verifies access-token signatures through the project's JWKS endpoint.
 Real-provider and HTTPS smoke tests are required before deploying; see the deployment guide.
 
-## SCRUM 12 Integration
+## Recommendations
 
-The approved risk-to-safeguard mapping is integrated with assessment API schema v2.
-See [mapping v1.1](docs/recommendation-mapping-v1.1.md) for approval, applicability,
-and result traceability. Scoring remains server-only; general safeguards and
-Karlsgate-specific recommendations are kept separate.
+Assessments use API schema 3.0, [rubric v2.0](docs/risk-scoring-rubric-v2.0.md), and
+[recommendation catalog v2.0](docs/recommendation-mapping-v2.0.md).
+Scoring and recommendations are server-only, and recommendations link to regulatory guidance where it applies.
