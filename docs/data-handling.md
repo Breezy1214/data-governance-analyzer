@@ -67,6 +67,19 @@ token revocation are covered under "Supabase setup" in [deployment.md](deploymen
   Free-text descriptions stay in the browser; responses containing identity or assessments are not cached.
 - **Render (FastAPI):** Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
 
+## Administrator account data
+
+The `/admin` page shows authorized admins a paginated list of account IDs, email addresses,
+application roles, and disabled status. Every admin request checks the current Auth user and
+server-controlled `app_metadata.app_role`; user-editable metadata cannot grant access.
+Creating or changing an account sends its details to Supabase Auth. Passwords are cleared
+from submitted form fields, not logged or stored by this app, and never included in responses.
+Supabase stores account credentials and metadata under its own retention policy.
+
+Admin access does not add assessment storage or access to other users' browser drafts.
+An issued assessment access token may remain valid until expiry after disabling an account;
+the admin routes also perform a live user/role check. See [admin setup](../README_SUPABASE.md).
+
 ## What we tell users
 
 The describe step explains that the description stays in the browser, questionnaire answers are sent for scoring without server storage, and the draft clears after 30 minutes of inactivity. The draft also clears on tab close and on start over; the copy leaves those out as self-evident. If retention changes, update that copy in `frontend/components/AssessmentWizard.tsx` in the same change.
