@@ -24,33 +24,33 @@ def test_health_and_version():
     assert client.get("/version").json()["version"] == "0.1.0"
 
 
-def test_assessment_returns_transparent_score_with_attribution():
+def test_assessment_returns_transparent_score():
     response = client.post("/assessments", json=sample_payload())
     assert response.status_code == 200
     body = response.json()
-    assert body["score"] == 38
-    assert body["level"] == "MEDIUM"
-    assert body["schemaVersion"] == "2.0"
-    assert body["rulesVersion"] == "1.0"
-    assert body["mappingVersion"] == "1.1"
+    assert body["score"] == 28
+    assert body["level"] == "LOW"
+    assert body["schemaVersion"] == "3.0"
+    assert body["rulesVersion"] == "2.0"
+    assert body["mappingVersion"] == "2.0"
     assert body["mappingApprovalStatus"] == "approved"
-    assert {item["text"] for item in body["generalSafeguards"]} <= {
-        item["action"] for item in body["recommendationDetails"]
-    }
-    matching = next(item for item in body["karlsgateRecommendations"] if item["id"] == "PROTECTED_MATCHING")
-    assert matching["conditionId"] == "EXTERNAL_AND_RAW_OR_MATCHING"
-    assert matching["factorIds"] == ["EXTERNAL_ACCESS", "PURPOSE_MATCHING"]
-    assert "Protected matching" in body["capabilities"]
+    assert body["sourcesCheckedOn"] == "2026-11-04"
     assert {factor["ruleId"] for factor in body["factors"]} == {
         "DATA_SENSITIVITY_DIRECT",
-        "EXTERNAL_ACCESS",
-        "PURPOSE_MATCHING",
+        "PARTICIPANTS_ONE",
+        "PURPOSE_OVERLAP",
     }
-    assert "recommendations" not in body
-    assert [item["priority"] for item in body["recommendationDetails"]] == list(
-        range(1, len(body["recommendationDetails"]) + 1)
-    )
-    assert all(item["rationale"] and item["riskFactorIds"] for item in body["recommendationDetails"])
+    for retired in ("recommendationDetails", "generalSafeguards", "capabilities"):
+        assert retired not in body
+    assert [item["priority"] for item in body["recommendations"]] == list(range(1, len(body["recommendations"]) + 1))
+    assert all(item["rationale"] and item["action"] for item in body["recommendations"])
+
+
+def test_recommendations_come_from_the_backend_with_regulatory_references_only():
+    response = client.post("/assessments", json=sample_payload(identifierProtection="hashedTokenized"))
+    item = next(entry for entry in response.json()["recommendations"] if entry["id"] == "TREAT_HASHES_AS_PERSONAL_DATA")
+    assert item["basedOn"] == ["Identifiers exchanged as hashes or tokens"]
+    assert {entry["publisher"] for entry in item["references"]} >= {"GDPR Recital 26"}
 
 
 def test_high_risk_regulated_use_includes_limitations():
@@ -58,9 +58,13 @@ def test_high_risk_regulated_use_includes_limitations():
         "/assessments",
         json=sample_payload(
             dataTypes=["health", "financial"],
-            rawExchange="yes",
-            dataMovement="yes",
+            participants="multiplePartners",
+            identifierProtection="cleartext",
+            custodyChange="yes",
+            environmentControl="thirdParty",
+            reusableKeys="yes",
             combined="yes",
+            retainedArtifacts="yes",
             secondaryUse="yes",
             purpose="ai",
         ),

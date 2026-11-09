@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { createSupabaseClient } from "./supabase";
 import { AUTH_MESSAGES } from "./auth-messages";
 import type { AuthSession } from "./auth-client";
-import { appRole } from "./app-role";
 
 export const NO_STORE = { "Cache-Control": "no-store, private" };
 
@@ -45,7 +44,7 @@ export async function authenticatedSession() {
   if (claimsError) throw sessionError(claimsError);
   const claims = data?.claims;
   if (!claims || claims.is_anonymous || !claims.email) throw new AuthenticationError(401, AUTH_MESSAGES.expired);
-  const payload: AuthSession = { user: { id: claims.sub, email: claims.email, role: appRole(claims.app_metadata) } };
+  const payload: AuthSession = { user: { id: claims.sub, email: claims.email } };
   return { accessToken: session.access_token, payload };
 }
 

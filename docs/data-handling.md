@@ -15,13 +15,19 @@ FastAPI verifies JWT signature, issuer, audience, expiry, and authenticated user
 | Field | Purpose | Sent to API | Stored |
 | --- | --- | --- | --- |
 | `description` | Gives the person context and appears in their on-screen record and downloaded report. Not scored. | **No** | This tab's `sessionStorage` only |
-| `dataTypes` | Data-sensitivity rules (`DATA_SENSITIVITY_*`), de-identification, and HIPAA/PCI limitations | Yes | This tab's `sessionStorage` only |
-| `externalAccess` | `EXTERNAL_ACCESS` rule and protected-matching fit | Yes | This tab's `sessionStorage` only |
-| `rawExchange` | `RAW_EXCHANGE` rule and protected-matching fit | Yes | This tab's `sessionStorage` only |
-| `dataMovement` | `DATA_MOVEMENT` rule | Yes | This tab's `sessionStorage` only |
-| `combined` | `COMBINED_REIDENTIFICATION` rule and re-identification remediation | Yes | This tab's `sessionStorage` only |
+| `dataTypes` | Data-sensitivity rules (`DATA_SENSITIVITY_*`), de-identification guidance, and HIPAA/PCI limitations | Yes | This tab's `sessionStorage` only |
+| `purpose` | `PURPOSE_*` rules and purpose-specific guidance | Yes | This tab's `sessionStorage` only |
+| `participants` | `PARTICIPANTS_*` rules and partner onboarding guidance | Yes | This tab's `sessionStorage` only |
+| `environmentControl` | `ENVIRONMENT_NOT_OWNED` rule and enforcement guidance | Yes | This tab's `sessionStorage` only |
+| `identifierProtection` | `IDENTIFIERS_*` rules and identifier-handling guidance | Yes | This tab's `sessionStorage` only |
+| `custodyChange` | `CUSTODY_CHANGE` rule and custody guidance | Yes | This tab's `sessionStorage` only |
+| `reusableKeys` | `REUSABLE_KEYS` rule and match-key guidance | Yes | This tab's `sessionStorage` only |
+| `retainedArtifacts` | `RETAINED_ARTIFACTS` rule and deletion guidance | Yes | This tab's `sessionStorage` only |
+| `smallResults` | `SMALL_RESULTS` rule and minimum-result guidance | Yes | This tab's `sessionStorage` only |
+| `combined` | `COMBINED_REIDENTIFICATION` rule and combination guidance | Yes | This tab's `sessionStorage` only |
 | `secondaryUse` | `SECONDARY_USE` rule and secondary-use approval gate | Yes | This tab's `sessionStorage` only |
-| `purpose` | `PURPOSE_*` rules and protected-matching fit | Yes | This tab's `sessionStorage` only |
+| `regulations` | Specialist-review notes. Not scored. | Yes | This tab's `sessionStorage` only |
+| `identifierConsistency` | `IDENTIFIERS_INCONSISTENT` signal and data-preparation guidance. Not scored. | Yes | This tab's `sessionStorage` only |
 | `schemaVersion` | API contract versioning | Yes | No |
 
 The API schema does not accept `description`; it remains exclusively in the browser for the on-screen record and local PDF report.
@@ -66,19 +72,6 @@ token revocation are covered under "Supabase setup" in [deployment.md](deploymen
 - **Vercel (frontend):** dynamic server-rendered protected pages and same-origin API handlers.
   Free-text descriptions stay in the browser; responses containing identity or assessments are not cached.
 - **Render (FastAPI):** Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
-
-## Administrator account data
-
-The `/admin` page shows authorized admins a paginated list of account IDs, email addresses,
-application roles, and disabled status. Every admin request checks the current Auth user and
-server-controlled `app_metadata.app_role`; user-editable metadata cannot grant access.
-Creating or changing an account sends its details to Supabase Auth. Passwords are cleared
-from submitted form fields, not logged or stored by this app, and never included in responses.
-Supabase stores account credentials and metadata under its own retention policy.
-
-Admin access does not add assessment storage or access to other users' browser drafts.
-An issued assessment access token may remain valid until expiry after disabling an account;
-the admin routes also perform a live user/role check. See [admin setup](../README_SUPABASE.md).
 
 ## What we tell users
 

@@ -66,14 +66,9 @@ Day-to-day flow: work lands on `dev` in `origin`, is reviewed, then merged into 
 | `API_BASE_URL` | Production FastAPI URL | Staging FastAPI URL | Server-only; use HTTPS on hosted environments |
 | `SUPABASE_URL` | Production Auth project origin | Staging Auth project origin | Must match the corresponding backend |
 | `SUPABASE_PUBLISHABLE_KEY` | Production publishable key | Staging publishable key | Not a service-role or secret key |
-| `SUPABASE_SECRET_KEY` | Production server-only secret key | Staging server-only secret key | Only for admin account management; never public or sent to FastAPI |
 | `APP_ORIGIN` | Optional canonical HTTPS origin | Optional canonical preview origin | Same-origin requests work without it; use for a trusted reverse proxy |
 
 Add the Supabase variables to both Vercel environments as well, then redeploy.
-See [the login and admin setup guide](../README_SUPABASE.md) for creating confirmed accounts
-and granting the first admin role. Admin pages and routes authorize against current Auth
-app metadata on every request. Ordinary users cannot manage accounts. The separate admin
-client does not reuse SSR cookies and never exposes its secret key to the browser.
 None of these variables needs a `NEXT_PUBLIC_` prefix. Provider sessions stay in HttpOnly
 cookies and are never returned in browser JSON. Missing configuration produces a generic
 service-unavailable response, not a silent redirect to login. There is no browser scoring fallback.

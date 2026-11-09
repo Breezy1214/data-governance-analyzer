@@ -2,14 +2,21 @@ from app.scoring import AssessmentRequest
 
 
 def sample_payload(**overrides):
+    """A partner overlap check with the lowest-risk answers for everything else (score 28)."""
     payload = {
         "dataTypes": ["emails"],
-        "externalAccess": "yes",
-        "rawExchange": "no",
-        "dataMovement": "no",
+        "purpose": "overlap",
+        "participants": "onePartner",
+        "identifierProtection": "notExchanged",
+        "custodyChange": "no",
+        "environmentControl": "own",
+        "reusableKeys": "no",
+        "smallResults": "no",
         "combined": "no",
+        "retainedArtifacts": "no",
         "secondaryUse": "no",
-        "purpose": "matching",
+        "regulations": ["none"],
+        "identifierConsistency": "yes",
     }
     payload.update(overrides)
     return payload

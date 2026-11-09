@@ -6,12 +6,22 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA_VERSION = "2.0"
+SCHEMA_VERSION = "3.0"
 
-DataType = Literal["names", "emails", "phone", "gov", "health", "financial"]
-Purpose = Literal["matching", "ai", "analytics", "marketing", "research", "other"]
+DataType = Literal["names", "emails", "phone", "postal", "device", "adId", "gov", "health", "financial"]
+Purpose = Literal["overlap", "enrichment", "healthResearch", "fraud", "advertising", "ai", "analytics", "other"]
+Participants = Literal["internal", "onePartner", "multiplePartners"]
+IdentifierProtection = Literal["notExchanged", "cleartext", "hashedTokenized", "encryptedDecrypted", "cleanRoom", "notSure"]
+EnvironmentControl = Literal["own", "partner", "thirdParty", "notSure"]
+Regulation = Literal["gdpr", "hipaa", "ccpa", "none", "notSure"]
 YesNo = Literal["yes", "no"]
+YesNoUnsure = Literal["yes", "no", "notSure"]
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
+
+
+def _require_unique(values: list[str], name: str) -> None:
+    if len(values) != len(set(values)):
+        raise ValueError(f"{name} must be unique")
 
 
 class AssessmentRequest(BaseModel):
@@ -19,20 +29,33 @@ class AssessmentRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schemaVersion: Literal["2.0"] = SCHEMA_VERSION
-    dataTypes: list[DataType] = Field(min_length=1, max_length=6)
-    externalAccess: YesNo
-    rawExchange: YesNo
-    dataMovement: YesNo
-    combined: YesNo
-    secondaryUse: YesNo
+    schemaVersion: Literal["3.0"] = SCHEMA_VERSION
+    dataTypes: list[DataType] = Field(min_length=1, max_length=9)
     purpose: Purpose
+    participants: Participants
+    identifierProtection: IdentifierProtection
+    custodyChange: YesNoUnsure
+    environmentControl: EnvironmentControl
+    reusableKeys: YesNoUnsure
+    smallResults: YesNoUnsure
+    combined: YesNo
+    retainedArtifacts: YesNoUnsure
+    secondaryUse: YesNo
+    regulations: list[Regulation] = Field(min_length=1, max_length=5)
+    identifierConsistency: YesNoUnsure
 
     @field_validator("dataTypes")
     @classmethod
     def data_types_must_be_unique(cls, value: list[DataType]) -> list[DataType]:
-        if len(value) != len(set(value)):
-            raise ValueError("data types must be unique")
+        _require_unique(value, "data types")
+        return value
+
+    @field_validator("regulations")
+    @classmethod
+    def regulations_must_be_consistent(cls, value: list[Regulation]) -> list[Regulation]:
+        _require_unique(value, "regulations")
+        if len(value) > 1 and {"none", "notSure"} & set(value):
+            raise ValueError("'none' and 'notSure' cannot be combined with other regulations")
         return value
 
 
@@ -43,31 +66,30 @@ class RiskFactor(BaseModel):
     points: int
 
 
-class RecommendationDetail(BaseModel):
+class Reference(BaseModel):
+    """Regulatory guidance a recommendation cites."""
+
+    publisher: str
+    statement: str
+    sourceTitle: str
+    sourceUrl: str
+
+
+class Recommendation(BaseModel):
     id: str
     priority: int = Field(ge=1)
     title: str
     action: str
     rationale: str
-    riskFactorIds: list[str] = Field(min_length=1)
-
-
-class SafeguardRecommendation(BaseModel):
-    id: str
-    text: str
-    factorIds: list[str]
-
-
-class KarlsgateRecommendation(SafeguardRecommendation):
-    label: str
-    conditionId: str
+    basedOn: list[str]
+    references: list[Reference]
 
 
 class RecommendationResult(BaseModel):
     mappingVersion: str
     mappingApprovalStatus: Literal["pending", "approved"]
-    generalSafeguards: list[SafeguardRecommendation]
-    karlsgateRecommendations: list[KarlsgateRecommendation]
+    sourcesCheckedOn: str
+    recommendations: list[Recommendation]
 
 
 class AssessmentResponse(RecommendationResult):
@@ -79,7 +101,5 @@ class AssessmentResponse(RecommendationResult):
     level: RiskLevel
     guidance: str
     factors: list[RiskFactor]
-    recommendationDetails: list[RecommendationDetail]
-    capabilities: list[str]
     limitations: list[str]
     assessedAt: str

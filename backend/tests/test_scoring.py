@@ -3,9 +3,13 @@ from helpers import sample_request
 from pydantic import ValidationError
 
 from app.scoring import score_assessment
-from app.scoring.rules import RULESET_V1_0, RiskThresholds
+from app.scoring.rules import RULESET_V2_0, RiskThresholds
 
 ASSESSED_AT = "2026-01-01T00:00:00+00:00"
+
+
+def factor_ids(result):
+    return {factor.ruleId for factor in result.factors}
 
 
 @pytest.mark.parametrize(
@@ -17,145 +21,144 @@ def test_threshold_boundaries(score, expected_level):
 
 
 def test_low_risk_internal_analytics_with_only_email_addresses():
-    request = sample_request(
-        dataTypes=["emails"],
-        externalAccess="no",
-        rawExchange="no",
-        dataMovement="no",
-        combined="no",
-        secondaryUse="no",
-        purpose="analytics",
-    )
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
-    assert result.score == 16  # direct identifiers (14) + analytics (2)
+    result = score_assessment(sample_request(participants="internal", purpose="analytics"), assessed_at=ASSESSED_AT)
+    assert result.score == 14  # direct identifiers (12) + analytics (2)
     assert result.level == "LOW"
-    assert {f.ruleId for f in result.factors} == {"DATA_SENSITIVITY_DIRECT", "PURPOSE_ANALYTICS"}
+    assert factor_ids(result) == {"DATA_SENSITIVITY_DIRECT", "PURPOSE_ANALYTICS"}
 
 
-def test_medium_risk_partner_matching_use_case():
-    request = sample_request()
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
-    assert result.score == 38
+def test_medium_risk_partner_matching_with_hashed_identifiers():
+    result = score_assessment(sample_request(identifierProtection="hashedTokenized"), assessed_at=ASSESSED_AT)
+    assert result.score == 40  # direct (12) + one partner (12) + hashed (12) + overlap (4)
     assert result.level == "MEDIUM"
-    assert "Protected matching" in result.capabilities
 
 
 def test_high_risk_regulated_data_caps_at_100():
-    request = sample_request(
-        dataTypes=["health", "financial"],
-        rawExchange="yes",
-        dataMovement="yes",
-        combined="yes",
-        secondaryUse="yes",
-        purpose="ai",
+    result = score_assessment(
+        sample_request(
+            dataTypes=["health", "financial"],
+            participants="multiplePartners",
+            identifierProtection="cleartext",
+            custodyChange="yes",
+            environmentControl="thirdParty",
+            reusableKeys="yes",
+            smallResults="yes",
+            combined="yes",
+            retainedArtifacts="yes",
+            secondaryUse="yes",
+            purpose="ai",
+        ),
+        assessed_at=ASSESSED_AT,
     )
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
     assert result.score == 100
     assert result.level == "HIGH"
     assert len(result.limitations) == 2
 
 
 def test_high_risk_boundary_exactly_at_threshold():
-    # 28 (regulated data) + 2 (analytics) + 18 (external access) + 12 (data movement) = 60
-    request = sample_request(
-        dataTypes=["gov"],
-        externalAccess="yes",
-        rawExchange="no",
-        dataMovement="yes",
-        combined="no",
-        secondaryUse="no",
-        purpose="analytics",
+    boundary = score_assessment(
+        sample_request(dataTypes=["gov"], identifierProtection="cleartext", purpose="other"),
+        assessed_at=ASSESSED_AT,
     )
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
-    assert result.score == 60
-    assert result.level == "HIGH"
+    assert boundary.score == 60  # gov (24) + one partner (12) + cleartext (18) + other (6)
+    assert boundary.level == "HIGH"
 
 
 def test_data_sensitivity_rules_are_mutually_exclusive():
-    request = sample_request(dataTypes=["names", "health"])
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
-    rule_ids = {f.ruleId for f in result.factors}
-    assert "DATA_SENSITIVITY_HIGH" in rule_ids
-    assert "DATA_SENSITIVITY_DIRECT" not in rule_ids
+    result = score_assessment(sample_request(dataTypes=["names", "health"]), assessed_at=ASSESSED_AT)
+    assert "DATA_SENSITIVITY_HIGH" in factor_ids(result)
+    assert "DATA_SENSITIVITY_DIRECT" not in factor_ids(result)
+
+
+@pytest.mark.parametrize("data_type", ["postal", "device", "adId"])
+def test_new_identifier_types_score_as_direct_identifiers(data_type):
+    result = score_assessment(sample_request(dataTypes=[data_type]), assessed_at=ASSESSED_AT)
+    assert "DATA_SENSITIVITY_DIRECT" in factor_ids(result)
 
 
 def test_every_factor_carries_a_stable_rule_id_and_points_sum_to_score():
-    request = sample_request()
-    result = score_assessment(request, assessed_at=ASSESSED_AT)
+    result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
     assert all(factor.ruleId for factor in result.factors)
     assert sum(factor.points for factor in result.factors) == result.score
 
 
-@pytest.mark.parametrize(
-    "expected_rule_id,overrides",
-    [
-        ("DATA_SENSITIVITY_HIGH", {"dataTypes": ["health"], "externalAccess": "no", "purpose": "analytics"}),
-        ("DATA_SENSITIVITY_DIRECT", {"dataTypes": ["emails"], "externalAccess": "no", "purpose": "analytics"}),
-        ("EXTERNAL_ACCESS", {"externalAccess": "yes", "purpose": "analytics"}),
-        ("RAW_EXCHANGE", {"externalAccess": "no", "rawExchange": "yes", "purpose": "analytics"}),
-        ("DATA_MOVEMENT", {"externalAccess": "no", "dataMovement": "yes", "purpose": "analytics"}),
-        ("COMBINED_REIDENTIFICATION", {"externalAccess": "no", "combined": "yes", "purpose": "analytics"}),
-        ("SECONDARY_USE", {"externalAccess": "no", "secondaryUse": "yes", "purpose": "analytics"}),
-        ("PURPOSE_ANALYTICS", {"externalAccess": "no", "purpose": "analytics"}),
-        ("PURPOSE_RESEARCH", {"externalAccess": "no", "purpose": "research"}),
-        ("PURPOSE_MATCHING", {"externalAccess": "no", "purpose": "matching"}),
-        ("PURPOSE_OTHER", {"externalAccess": "no", "purpose": "other"}),
-        ("PURPOSE_MARKETING", {"externalAccess": "no", "purpose": "marketing"}),
-        ("PURPOSE_AI", {"externalAccess": "no", "purpose": "ai"}),
-    ],
-)
-def test_every_supported_factor_is_exercised_and_maps_to_a_safeguard(expected_rule_id, overrides):
+FACTOR_CASES = [
+    ("DATA_SENSITIVITY_HIGH", {"dataTypes": ["health"]}),
+    ("DATA_SENSITIVITY_DIRECT", {"dataTypes": ["emails"]}),
+    ("PARTICIPANTS_ONE", {"participants": "onePartner"}),
+    ("PARTICIPANTS_MULTIPLE", {"participants": "multiplePartners"}),
+    ("IDENTIFIERS_CLEARTEXT", {"identifierProtection": "cleartext"}),
+    ("IDENTIFIERS_UNKNOWN", {"identifierProtection": "notSure"}),
+    ("IDENTIFIERS_HASHED", {"identifierProtection": "hashedTokenized"}),
+    ("IDENTIFIERS_DECRYPTED", {"identifierProtection": "encryptedDecrypted"}),
+    ("IDENTIFIERS_CLEAN_ROOM", {"identifierProtection": "cleanRoom"}),
+    ("CUSTODY_CHANGE", {"custodyChange": "yes"}),
+    ("ENVIRONMENT_NOT_OWNED", {"environmentControl": "partner"}),
+    ("REUSABLE_KEYS", {"reusableKeys": "yes"}),
+    ("SMALL_RESULTS", {"smallResults": "yes"}),
+    ("COMBINED_REIDENTIFICATION", {"combined": "yes"}),
+    ("RETAINED_ARTIFACTS", {"retainedArtifacts": "yes"}),
+    ("SECONDARY_USE", {"secondaryUse": "yes"}),
+    ("PURPOSE_ANALYTICS", {"purpose": "analytics"}),
+    ("PURPOSE_OVERLAP", {"purpose": "overlap"}),
+    ("PURPOSE_FRAUD", {"purpose": "fraud"}),
+    ("PURPOSE_ENRICHMENT", {"purpose": "enrichment"}),
+    ("PURPOSE_HEALTH_RESEARCH", {"purpose": "healthResearch"}),
+    ("PURPOSE_OTHER", {"purpose": "other"}),
+    ("PURPOSE_ADVERTISING", {"purpose": "advertising"}),
+    ("PURPOSE_AI", {"purpose": "ai"}),
+]
+
+
+def test_factor_cases_cover_the_whole_ruleset():
+    assert {rule_id for rule_id, _ in FACTOR_CASES} == {rule.id for rule in RULESET_V2_0.rules}
+
+
+@pytest.mark.parametrize("expected_rule_id,overrides", FACTOR_CASES)
+def test_every_supported_factor_is_exercised_and_selects_a_recommendation(expected_rule_id, overrides):
     result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
+    factor = next(item for item in result.factors if item.ruleId == expected_rule_id)
+    assert any(factor.label in item.basedOn for item in result.recommendations)
 
-    assert expected_rule_id in {factor.ruleId for factor in result.factors}
-    assert any(expected_rule_id in detail.riskFactorIds for detail in result.recommendationDetails)
+
+@pytest.mark.parametrize("field,risky", [
+    ("custodyChange", "yes"),
+    ("reusableKeys", "yes"),
+    ("smallResults", "yes"),
+    ("retainedArtifacts", "yes"),
+    ("environmentControl", "partner"),
+    ("identifierProtection", "cleartext"),
+])
+def test_not_sure_scores_the_same_as_the_riskier_answer(field, risky):
+    unsure = score_assessment(sample_request(**{field: "notSure"}), assessed_at=ASSESSED_AT)
+    answered = score_assessment(sample_request(**{field: risky}), assessed_at=ASSESSED_AT)
+    assert unsure.score == answered.score > score_assessment(sample_request(), assessed_at=ASSESSED_AT).score
 
 
-def test_recommendations_are_prioritized_explained_and_traceable():
-    result = score_assessment(
-        sample_request(
-            dataTypes=["health"],
-            rawExchange="yes",
-            dataMovement="yes",
-            combined="yes",
-            secondaryUse="yes",
-            purpose="ai",
-        ),
+def test_unscored_answers_do_not_change_the_score():
+    base = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
+    other = score_assessment(
+        sample_request(identifierConsistency="no", regulations=["gdpr", "ccpa"]),
         assessed_at=ASSESSED_AT,
     )
-
-    assert [detail.priority for detail in result.recommendationDetails] == list(
-        range(1, len(result.recommendationDetails) + 1)
-    )
-    assert all(detail.rationale and detail.riskFactorIds for detail in result.recommendationDetails)
-    assert {detail.id for detail in result.recommendationDetails} >= {
-        "PROTECTED_MATCHING",
-        "REIDENTIFICATION_REVIEW",
-        "DEIDENTIFY_SENSITIVE_DATA",
-        "SECONDARY_USE_GATE",
+    assert other.score == base.score
+    assert {item.id for item in other.recommendations} - {item.id for item in base.recommendations} == {
+        "STANDARDIZE_IDENTIFIERS"
     }
+    assert len(other.limitations) == 2
 
 
-def test_privacy_enhancing_capabilities_are_conditional_while_general_safeguards_remain():
-    low_result = score_assessment(
-        sample_request(
-            externalAccess="no",
-            rawExchange="no",
-            dataMovement="no",
-            combined="no",
-            secondaryUse="no",
-            purpose="analytics",
-        ),
-        assessed_at=ASSESSED_AT,
-    )
-
-    assert low_result.capabilities == ["Data minimization", "Governance policy execution"]
-    assert {detail.id for detail in low_result.recommendationDetails} == {
-        "ROLE_BASED_ACCESS",
-        "FIELD_MINIMIZATION",
-        "RETENTION_AND_RESPONSE",
-        "GOVERNANCE_RECORD",
-    }
+@pytest.mark.parametrize("overrides,expected", [
+    ({"dataTypes": ["health"]}, "HIPAA"),
+    ({"regulations": ["hipaa"]}, "HIPAA"),
+    ({"dataTypes": ["financial"]}, "PCI DSS"),
+    ({"regulations": ["gdpr"]}, "GDPR"),
+    ({"regulations": ["ccpa"]}, "CCPA"),
+    ({"regulations": ["notSure"]}, "not yet confirmed"),
+])
+def test_limitations_follow_data_types_and_selected_rules(overrides, expected):
+    result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
+    assert any(expected in item for item in result.limitations)
 
 
 def test_identical_input_produces_identical_output_for_same_rules_version():
@@ -167,8 +170,8 @@ def test_identical_input_produces_identical_output_for_same_rules_version():
 
 def test_response_reports_current_rules_version():
     result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
-    assert result.rulesVersion == RULESET_V1_0.version
-    assert result.schemaVersion == "2.0"
+    assert result.rulesVersion == RULESET_V2_0.version
+    assert result.schemaVersion == "3.0"
 
 
 def test_rejects_empty_data_types():
@@ -189,3 +192,15 @@ def test_rejects_unknown_purpose():
 def test_rejects_unsupported_extra_fields():
     with pytest.raises(ValidationError):
         sample_request(unexpectedField="value")
+
+
+@pytest.mark.parametrize("regulations", [[], ["gdpr", "gdpr"], ["none", "gdpr"], ["notSure", "hipaa"], ["none", "notSure"]])
+def test_rejects_inconsistent_regulations(regulations):
+    with pytest.raises(ValidationError):
+        sample_request(regulations=regulations)
+
+
+@pytest.mark.parametrize("field", ["externalAccess", "rawExchange", "dataMovement"])
+def test_rejects_retired_questions(field):
+    with pytest.raises(ValidationError):
+        sample_request(**{field: "yes"})

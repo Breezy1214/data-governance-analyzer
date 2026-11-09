@@ -3,8 +3,7 @@ import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { BINARY_FIELDS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
-import { CAPABILITY_COPY } from "../lib/recommendations";
+import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 
@@ -36,9 +35,12 @@ function describeUseCase(description = "Share loyalty member emails with a partn
 
 function completeQuestions(dataType = /email addresses/i) {
   fireEvent.click(screen.getByRole("button", { name: dataType }));
-  BINARY_FIELDS.forEach((key) => {
-    const group = screen.getByRole("group", { name: new RegExp(QUESTION_LABELS[key].slice(0, 24), "i") });
-    fireEvent.click(within(group).getByRole("button", { name: "Yes" }));
+  const regulations = screen.getByRole("group", { name: QUESTION_LABELS.regulations });
+  fireEvent.click(within(regulations).getByRole("button", { name: "Not sure" }));
+  CHOICE_FIELDS.forEach((key) => {
+    const group = screen.getByRole("group", { name: CHOICE_QUESTIONS[key].legend });
+    const [first] = Object.values(CHOICE_QUESTIONS[key].options);
+    fireEvent.click(within(group).getByRole("button", { name: first }));
   });
 }
 
@@ -196,37 +198,47 @@ describe("assessment flow accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
     await screen.findByText(/controls before approval/i);
-    expect(screen.getByRole("heading", { name: "General safeguards" })).toBeTruthy();
-    expect(container.querySelector(".capability-list .recommendation-reason")?.textContent).toMatch(/Baseline control/);
-    expect(screen.getByText(/Recommendation mapping v1.1: stakeholder approved/)).toBeTruthy();
-    expect(screen.getByText("Recommendation mapping version")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Recommended actions" })).toBeTruthy();
+    expect(screen.getByText(/Recommendation catalog v2.0: approved. Sources checked November 4, 2026/)).toBeTruthy();
+    expect(screen.getByText("Recommendation catalog version")).toBeTruthy();
     await expectNoViolations(container);
   });
 
-  it("explains each recommended control in approved plain language", async () => {
-    const { container } = render(<AssessmentWizard />);
+  it("shows recommendations as the app's own advice and links regulatory sources", async () => {
+    render(<AssessmentWizard />);
     answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     await screen.findByText(/what drives this score/i);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
+    await screen.findByText(/controls before approval/i);
 
-    await waitFor(() => expect(container.querySelector(".capability-list")).not.toBeNull());
-    // Each capability appears once: beside the safeguard it delivers, or in the panel.
-    assessmentResult.karlsgateRecommendations.forEach((capability) => {
-      expect(CAPABILITY_COPY[capability.label]).toBe(capability.text);
-      expect(screen.getAllByText(capability.label)).toHaveLength(1);
-      expect(screen.getAllByText(capability.text)).toHaveLength(1);
-    });
-    const list = container.querySelector(".recommendation-list") as HTMLElement;
-    expect(within(list).getByText("Protected matching")).toBeTruthy();
-    expect(within(container.querySelector(".capability-list") as HTMLElement).getByText("Governance policy execution")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Regulatory reference" })).toBeTruthy();
+
+    const [reference] = assessmentResult.recommendations[0].references;
+    const link = screen.getByRole("link", { name: new RegExp(`Source: ${reference.sourceTitle.slice(0, 13)}`) });
+    expect(link.getAttribute("href")).toBe(reference.sourceUrl);
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
 
     expect(screen.getByText(/HIGH RISK · 100\/100/i)).toBeTruthy();
-    assessmentResult.recommendationDetails.forEach((recommendation) => {
+    assessmentResult.recommendations.forEach((recommendation) => {
       expect(screen.getByText(recommendation.title)).toBeTruthy();
       expect(screen.getByText(recommendation.rationale, { exact: false })).toBeTruthy();
     });
-    expect(screen.getAllByText(/Triggered by:/i)).toHaveLength(assessmentResult.recommendationDetails.length);
+    expect(screen.getAllByText(/Based on your answers:/i)).toHaveLength(2);
+    expect(screen.getByText("Applies to every assessment.")).toBeTruthy();
+    expect(screen.getByText("3 recommendations")).toBeTruthy();
+  });
+
+  it("replaces None of these or Not sure when a named rule is chosen", () => {
+    render(<AssessmentWizard />);
+    describeUseCase();
+    const group = screen.getByRole("group", { name: QUESTION_LABELS.regulations });
+    const button = (name: string) => within(group).getByRole("button", { name });
+    fireEvent.click(button("None of these"));
+    expect(button("None of these").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button("HIPAA"));
+    expect(button("None of these").getAttribute("aria-pressed")).toBe("false");
+    expect(button("HIPAA").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("does not rely on colour alone to convey the risk level", async () => {

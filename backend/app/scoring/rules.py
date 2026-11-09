@@ -1,9 +1,9 @@
 """Central, versioned scoring configuration.
 
 Every weight, threshold, and applicability rule here is derived from the
-approved rubric in ``docs/risk-scoring-rubric-v1.0.md``. To add or change a
-rule (e.g. for a new rubric version), define a new ``RuleSet`` below and
-register it in ``RULESETS`` -- the engine never needs to change.
+rubric in ``docs/risk-scoring-rubric-v2.0.md``. To add or change a rule (e.g.
+for a new rubric version), define a new ``RuleSet`` below and register it in
+``RULESETS`` -- the engine never needs to change.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Callable
 from app.scoring.models import AssessmentRequest, RiskLevel
 
 HIGH_SENSITIVITY_TYPES = frozenset({"gov", "health", "financial"})
-DIRECT_IDENTIFIER_TYPES = frozenset({"names", "emails", "phone"})
+DIRECT_IDENTIFIER_TYPES = frozenset({"names", "emails", "phone", "postal", "device", "adId"})
 
 Predicate = Callable[[AssessmentRequest], bool]
 
@@ -31,22 +31,21 @@ class Rule:
 
 
 @dataclass(frozen=True)
-class Limitation:
-    """A caveat surfaced when a regulated data category is involved."""
+class Signal:
+    """An unscored answer that selects a recommendation without changing the risk score."""
 
     id: str
-    copy: str
+    label: str
     applies: Predicate
 
 
 @dataclass(frozen=True)
-class RecommendationRule:
+class Limitation:
+    """A caveat surfaced when a regulated data category or named regulation is involved."""
+
     id: str
-    title: str
-    action: str
-    rationale: str
+    copy: str
     applies: Predicate
-    risk_factor_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -69,8 +68,8 @@ class RuleSet:
     thresholds: RiskThresholds
     guidance_by_level: Mapping[RiskLevel, str]
     rules: tuple[Rule, ...]
+    signals: tuple[Signal, ...]
     limitations: tuple[Limitation, ...]
-    recommendations: tuple[RecommendationRule, ...]
 
 
 def _has_high_sensitivity(payload: AssessmentRequest) -> bool:
@@ -83,22 +82,16 @@ def _has_direct_identifiers_only(payload: AssessmentRequest) -> bool:
     )
 
 
-def _uses_protected_matching(payload: AssessmentRequest) -> bool:
-    return payload.externalAccess == "yes" and (payload.rawExchange == "yes" or payload.purpose == "matching")
+def _protection_is(value: str) -> Predicate:
+    return lambda payload: payload.identifierProtection == value
 
 
-PURPOSE_RULE_IDS = (
-    "PURPOSE_ANALYTICS",
-    "PURPOSE_RESEARCH",
-    "PURPOSE_MATCHING",
-    "PURPOSE_OTHER",
-    "PURPOSE_MARKETING",
-    "PURPOSE_AI",
-)
+def _purpose_is(value: str) -> Predicate:
+    return lambda payload: payload.purpose == value
 
 
-RULESET_V1_0 = RuleSet(
-    version="1.0",
+RULESET_V2_0 = RuleSet(
+    version="2.0",
     score_cap=100,
     thresholds=RiskThresholds(low_max=29, medium_max=59),
     guidance_by_level={
@@ -106,116 +99,67 @@ RULESET_V1_0 = RuleSet(
         "MEDIUM": "Proceed only after the listed controls and an accountable review are in place.",
         "HIGH": "Pause implementation until privacy, security, and governance controls are approved.",
     },
-    # Tuple order is the factor display order.
+    # Tuple order is the factor display order. "Not sure" scores like the riskier answer.
     rules=(
-        Rule("DATA_SENSITIVITY_HIGH", "data_sensitivity", "Regulated or highly sensitive information", 28, _has_high_sensitivity),
-        Rule("DATA_SENSITIVITY_DIRECT", "data_sensitivity", "Direct personal identifiers", 14, _has_direct_identifiers_only),
-        Rule("EXTERNAL_ACCESS", "access", "Access by another organization", 18, lambda p: p.externalAccess == "yes"),
-        Rule("RAW_EXCHANGE", "access", "Raw identifier exchange", 18, lambda p: p.rawExchange == "yes"),
-        Rule("DATA_MOVEMENT", "movement", "Data leaves its controlled environment", 12, lambda p: p.dataMovement == "yes"),
-        Rule("COMBINED_REIDENTIFICATION", "reidentification", "Re-identification potential from data combination", 12, lambda p: p.combined == "yes"),
-        Rule("SECONDARY_USE", "purpose", "Reuse beyond the stated purpose", 12, lambda p: p.secondaryUse == "yes"),
-        Rule("PURPOSE_ANALYTICS", "purpose", "Intended use: Internal analytics", 2, lambda p: p.purpose == "analytics"),
-        Rule("PURPOSE_RESEARCH", "purpose", "Intended use: Research", 4, lambda p: p.purpose == "research"),
-        Rule("PURPOSE_MATCHING", "purpose", "Intended use: Customer or record matching", 6, lambda p: p.purpose == "matching"),
-        Rule("PURPOSE_OTHER", "purpose", "Intended use: Other", 6, lambda p: p.purpose == "other"),
-        Rule("PURPOSE_MARKETING", "purpose", "Intended use: Marketing or advertising", 8, lambda p: p.purpose == "marketing"),
-        Rule("PURPOSE_AI", "purpose", "Intended use: AI model training or development", 10, lambda p: p.purpose == "ai"),
+        Rule("DATA_SENSITIVITY_HIGH", "data_sensitivity", "Regulated or highly sensitive information", 24, _has_high_sensitivity),
+        Rule("DATA_SENSITIVITY_DIRECT", "data_sensitivity", "Direct personal identifiers", 12, _has_direct_identifiers_only),
+        Rule("PARTICIPANTS_ONE", "access", "One outside organization takes part", 12, lambda p: p.participants == "onePartner"),
+        Rule("PARTICIPANTS_MULTIPLE", "access", "Several outside organizations take part", 16, lambda p: p.participants == "multiplePartners"),
+        Rule("IDENTIFIERS_CLEARTEXT", "identifiers", "Identifiers exchanged in readable form", 18, _protection_is("cleartext")),
+        Rule("IDENTIFIERS_UNKNOWN", "identifiers", "Identifier protection not yet known", 18, _protection_is("notSure")),
+        Rule("IDENTIFIERS_HASHED", "identifiers", "Identifiers exchanged as hashes or tokens", 12, _protection_is("hashedTokenized")),
+        Rule("IDENTIFIERS_DECRYPTED", "identifiers", "Identifiers encrypted, then decrypted by the recipient", 12, _protection_is("encryptedDecrypted")),
+        Rule("IDENTIFIERS_CLEAN_ROOM", "identifiers", "Identifiers sent into a clean room", 6, _protection_is("cleanRoom")),
+        Rule("CUSTODY_CHANGE", "custody", "Data may end up in another party's custody", 10, lambda p: p.custodyChange != "no"),
+        Rule("ENVIRONMENT_NOT_OWNED", "custody", "Your organization may not control the environment or enforce the rules", 6, lambda p: p.environmentControl != "own"),
+        Rule("REUSABLE_KEYS", "reidentification", "Match keys may be reused across partners or over time", 8, lambda p: p.reusableKeys != "no"),
+        Rule("SMALL_RESULTS", "reidentification", "Results may be small enough to single someone out", 6, lambda p: p.smallResults != "no"),
+        Rule("COMBINED_REIDENTIFICATION", "reidentification", "Re-identification potential from data combination", 8, lambda p: p.combined == "yes"),
+        Rule("RETAINED_ARTIFACTS", "lifecycle", "Keys, hashes, tokens, or copies may be kept afterward", 8, lambda p: p.retainedArtifacts != "no"),
+        Rule("SECONDARY_USE", "purpose", "Reuse beyond the stated purpose", 8, lambda p: p.secondaryUse == "yes"),
+        Rule("PURPOSE_ANALYTICS", "purpose", "Intended use: Internal analytics", 2, _purpose_is("analytics")),
+        Rule("PURPOSE_OVERLAP", "purpose", "Intended use: Overlap analysis", 4, _purpose_is("overlap")),
+        Rule("PURPOSE_FRAUD", "purpose", "Intended use: Fraud or anti-money-laundering checks", 4, _purpose_is("fraud")),
+        Rule("PURPOSE_ENRICHMENT", "purpose", "Intended use: Data enrichment", 6, _purpose_is("enrichment")),
+        Rule("PURPOSE_HEALTH_RESEARCH", "purpose", "Intended use: Patient or clinical research", 6, _purpose_is("healthResearch")),
+        Rule("PURPOSE_OTHER", "purpose", "Intended use: Other", 6, _purpose_is("other")),
+        Rule("PURPOSE_ADVERTISING", "purpose", "Intended use: Advertising audience or measurement", 8, _purpose_is("advertising")),
+        Rule("PURPOSE_AI", "purpose", "Intended use: AI model training", 8, _purpose_is("ai")),
+    ),
+    signals=(
+        Signal("IDENTIFIERS_INCONSISTENT", "Identifier formats may differ across sources", lambda p: p.identifierConsistency != "yes"),
     ),
     limitations=(
         Limitation(
             "HIPAA_REVIEW",
-            "HIPAA applicability and required agreements need specialist review; this MVP does not determine compliance.",
-            lambda p: "health" in p.dataTypes,
+            "HIPAA applicability and required agreements need specialist review; this tool does not determine compliance.",
+            lambda p: "health" in p.dataTypes or "hipaa" in p.regulations,
         ),
         Limitation(
             "PCI_REVIEW",
-            "PCI DSS scope depends on the exact account data involved; this MVP does not determine compliance.",
+            "PCI DSS scope depends on the exact account data involved; this tool does not determine compliance.",
             lambda p: "financial" in p.dataTypes,
         ),
-    ),
-    # Tuple order is the user-visible priority order. Each rule names the
-    # scoring factors that explain why it appears; the engine returns only
-    # factor ids that actually fired for the assessment.
-    recommendations=(
-        RecommendationRule(
-            "PROTECTED_MATCHING",
-            "Protect cross-party matching",
-            "Use protected matching instead of transferring raw identifiers.",
-            "Another organization will participate in matching or receive identifiable data, so identifiers should remain protected across that boundary.",
-            _uses_protected_matching,
-            ("EXTERNAL_ACCESS", "RAW_EXCHANGE", "PURPOSE_MATCHING"),
+        Limitation(
+            "GDPR_REVIEW",
+            "GDPR or UK GDPR applicability, lawful basis, and cross-border transfers need specialist review; this tool does not determine compliance.",
+            lambda p: "gdpr" in p.regulations,
         ),
-        RecommendationRule(
-            "REIDENTIFICATION_REVIEW",
-            "Reduce combination risk",
-            "Measure and remediate re-identification risk before combining datasets.",
-            "Linking datasets can reveal a person or sensitive attribute even when each source appears limited on its own.",
-            lambda p: p.combined == "yes",
-            ("COMBINED_REIDENTIFICATION",),
+        Limitation(
+            "CCPA_REVIEW",
+            "CCPA/CPRA obligations, including sale and sharing opt-outs, need specialist review; this tool does not determine compliance.",
+            lambda p: "ccpa" in p.regulations,
         ),
-        RecommendationRule(
-            "DEIDENTIFY_SENSITIVE_DATA",
-            "De-identify sensitive records",
-            "De-identify sensitive records before they leave the originating system.",
-            "Regulated or high-impact information increases potential harm if directly identifying values remain exposed.",
-            _has_high_sensitivity,
-            ("DATA_SENSITIVITY_HIGH", "DATA_MOVEMENT"),
-        ),
-        RecommendationRule(
-            "SECONDARY_USE_GATE",
-            "Gate any secondary use",
-            "Create a separate approval gate for any secondary use.",
-            "Reuse beyond the stated purpose can exceed the original notice, consent, contract, or policy basis.",
-            lambda p: p.secondaryUse == "yes",
-            ("SECONDARY_USE",),
-        ),
-        RecommendationRule(
-            "ROLE_BASED_ACCESS",
-            "Restrict and review access",
-            "Limit access to named roles and review permissions regularly.",
-            "Named ownership and periodic review reduce unnecessary exposure throughout the approved use.",
-            lambda p: True,
-            ("EXTERNAL_ACCESS", "RAW_EXCHANGE", "DATA_MOVEMENT", *PURPOSE_RULE_IDS),
-        ),
-        RecommendationRule(
-            "FIELD_MINIMIZATION",
-            "Minimize the data",
-            "Collect and share only the fields required for the approved purpose.",
-            "Using fewer fields reduces the impact of every identified data-sensitivity and purpose risk.",
-            lambda p: True,
-            ("DATA_SENSITIVITY_HIGH", "DATA_SENSITIVITY_DIRECT", *PURPOSE_RULE_IDS),
-        ),
-        RecommendationRule(
-            "RETENTION_AND_RESPONSE",
-            "Set lifecycle responsibilities",
-            "Set retention, deletion, and incident-response responsibilities before launch.",
-            "A defined lifecycle limits how long risk persists and makes ownership clear if an incident occurs.",
-            lambda p: True,
-            ("DATA_MOVEMENT", "SECONDARY_USE", *PURPOSE_RULE_IDS),
-        ),
-        RecommendationRule(
-            "GOVERNANCE_RECORD",
-            "Record the decision",
-            "Record the approved purpose, data owner, and control evidence in the governance register.",
-            "A reviewable record connects the approved use and its safeguards to the risks identified in this assessment.",
-            lambda p: True,
-            (
-                "DATA_SENSITIVITY_HIGH",
-                "DATA_SENSITIVITY_DIRECT",
-                "EXTERNAL_ACCESS",
-                "RAW_EXCHANGE",
-                "DATA_MOVEMENT",
-                "COMBINED_REIDENTIFICATION",
-                "SECONDARY_USE",
-                *PURPOSE_RULE_IDS,
-            ),
+        Limitation(
+            "REGULATIONS_UNKNOWN",
+            "The rules that apply to this use case are not yet confirmed; ask your privacy or legal team before proceeding.",
+            lambda p: "notSure" in p.regulations,
         ),
     ),
 )
 
 
-def _duplicates(values: tuple[str, ...]) -> set[str]:
+def duplicates(values: tuple[str, ...]) -> set[str]:
     return {value for value, count in Counter(values).items() if count > 1}
 
 
@@ -225,49 +169,19 @@ def _validate_ruleset(ruleset: RuleSet) -> None:
     if not 0 <= ruleset.thresholds.low_max < ruleset.thresholds.medium_max < ruleset.score_cap:
         raise ValueError(f"Invalid thresholds for ruleset {ruleset.version}")
 
-    rule_ids = tuple(rule.id for rule in ruleset.rules)
-    recommendation_ids = tuple(rule.id for rule in ruleset.recommendations)
-    duplicate_ids = {
-        "rules": _duplicates(rule_ids),
-        "recommendations": _duplicates(recommendation_ids),
-    }
-    collisions = {kind: values for kind, values in duplicate_ids.items() if values}
-    if collisions:
-        raise ValueError(f"Duplicate identifiers in ruleset {ruleset.version}: {collisions}")
-
-    duplicate_references = {
-        recommendation.id: duplicates
-        for recommendation in ruleset.recommendations
-        if (duplicates := _duplicates(recommendation.risk_factor_ids))
-    }
-    if duplicate_references:
-        raise ValueError(
-            f"Duplicate safeguard factor mappings in ruleset {ruleset.version}: {duplicate_references}"
-        )
-
-    known_rule_ids = set(rule_ids)
-    mapped_rule_ids = {
-        rule_id
-        for recommendation in ruleset.recommendations
-        for rule_id in recommendation.risk_factor_ids
-    }
-    unknown_rule_ids = mapped_rule_ids - known_rule_ids
-    unmapped_rule_ids = known_rule_ids - mapped_rule_ids
-    if unknown_rule_ids or unmapped_rule_ids:
-        raise ValueError(
-            f"Invalid safeguard mapping in ruleset {ruleset.version}: "
-            f"unknown={sorted(unknown_rule_ids)}, unmapped={sorted(unmapped_rule_ids)}"
-        )
+    duplicate_ids = duplicates(tuple(item.id for item in (*ruleset.rules, *ruleset.signals)))
+    if duplicate_ids:
+        raise ValueError(f"Duplicate identifiers in ruleset {ruleset.version}: {duplicate_ids}")
 
     expected_levels = {"LOW", "MEDIUM", "HIGH"}
     if set(ruleset.guidance_by_level) != expected_levels:
         raise ValueError(f"Incomplete guidance in ruleset {ruleset.version}")
 
 
-_validate_ruleset(RULESET_V1_0)
+_validate_ruleset(RULESET_V2_0)
 
-RULESETS: Mapping[str, RuleSet] = {RULESET_V1_0.version: RULESET_V1_0}
-CURRENT_RULES_VERSION = RULESET_V1_0.version
+RULESETS: Mapping[str, RuleSet] = {RULESET_V2_0.version: RULESET_V2_0}
+CURRENT_RULES_VERSION = RULESET_V2_0.version
 
 
 def get_ruleset(version: str | None = None) -> RuleSet:

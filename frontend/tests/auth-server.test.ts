@@ -185,6 +185,6 @@ describe("Supabase authentication routes", () => {
       mocks.createServerClient.mock.calls[0][2].cookies.setAll([{ name: "session", value: "refreshed", options: {} }]);
       return { data: { session: { access_token: "private-jwt" } }, error: null };
     });
-    expect(await currentSession()).toEqual({ user: { id: "user-id", email: "client@example.test", role: "user" } });
+    expect(await currentSession()).toEqual({ user: { id: "user-id", email: "client@example.test" } });
   });
 });

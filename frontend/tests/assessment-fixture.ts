@@ -1,129 +1,88 @@
 import { vi } from "vitest";
-import type { AssessmentResult } from "../lib/assessment";
-import { mapRecommendations, type RecommendationResult } from "../lib/recommendations";
+import { AssessmentInput, AssessmentResult, EMPTY_INPUT } from "../lib/assessment";
 
-const baseResult: Omit<AssessmentResult, keyof RecommendationResult> = {
-  schemaVersion: "2.0",
-  rulesVersion: "1.0",
+/** Answers matching `assessmentResult` below; every question is complete. */
+export const completeInput: AssessmentInput = {
+  ...EMPTY_INPUT,
+  description: "Match loyalty member emails and health survey answers with a research partner.",
+  dataTypes: ["emails", "health"],
+  purpose: "healthResearch",
+  regulations: ["hipaa"],
+  participants: "onePartner",
+  environmentControl: "thirdParty",
+  identifierProtection: "hashedTokenized",
+  custodyChange: "yes",
+  reusableKeys: "notSure",
+  retainedArtifacts: "yes",
+  smallResults: "no",
+  combined: "yes",
+  secondaryUse: "yes",
+  identifierConsistency: "no",
+};
+
+export const assessmentResult: AssessmentResult = {
+  schemaVersion: "3.0",
+  rulesVersion: "2.0",
+  mappingVersion: "2.0",
+  mappingApprovalStatus: "approved",
+  sourcesCheckedOn: "2026-11-04",
   score: 100,
   level: "HIGH",
   guidance: "Pause implementation until privacy, security, and governance controls are approved.",
   factors: [
-    {
-      ruleId: "DATA_SENSITIVITY_HIGH",
-      category: "data_sensitivity",
-      label: "Regulated or highly sensitive information",
-      points: 28,
-    },
-    {
-      ruleId: "EXTERNAL_ACCESS",
-      category: "access",
-      label: "Access by another organization",
-      points: 18,
-    },
-    {
-      ruleId: "RAW_EXCHANGE",
-      category: "access",
-      label: "Raw identifier exchange",
-      points: 18,
-    },
-    { ruleId: "DATA_MOVEMENT", category: "movement", label: "Data leaves its controlled environment", points: 12 },
-    { ruleId: "COMBINED_REIDENTIFICATION", category: "reidentification", label: "Re-identification potential from data combination", points: 12 },
-    { ruleId: "SECONDARY_USE", category: "purpose", label: "Reuse beyond the stated purpose", points: 12 },
-    { ruleId: "PURPOSE_RESEARCH", category: "purpose", label: "Intended use: Research", points: 4 },
+    { ruleId: "DATA_SENSITIVITY_HIGH", category: "data_sensitivity", label: "Regulated or highly sensitive information", points: 24 },
+    { ruleId: "PARTICIPANTS_ONE", category: "access", label: "One outside organization takes part", points: 12 },
+    { ruleId: "IDENTIFIERS_HASHED", category: "identifiers", label: "Identifiers exchanged as hashes or tokens", points: 12 },
+    { ruleId: "CUSTODY_CHANGE", category: "custody", label: "Data may end up in another party's custody", points: 10 },
+    { ruleId: "ENVIRONMENT_NOT_OWNED", category: "custody", label: "Your organization may not control the environment or enforce the rules", points: 6 },
+    { ruleId: "REUSABLE_KEYS", category: "reidentification", label: "Match keys may be reused across partners or over time", points: 8 },
+    { ruleId: "COMBINED_REIDENTIFICATION", category: "reidentification", label: "Re-identification potential from data combination", points: 8 },
+    { ruleId: "RETAINED_ARTIFACTS", category: "lifecycle", label: "Keys, hashes, tokens, or copies may be kept afterward", points: 8 },
+    { ruleId: "SECONDARY_USE", category: "purpose", label: "Reuse beyond the stated purpose", points: 8 },
+    { ruleId: "PURPOSE_HEALTH_RESEARCH", category: "purpose", label: "Intended use: Patient or clinical research", points: 6 },
   ],
-  recommendationDetails: [
+  recommendations: [
     {
-      id: "PROTECTED_MATCHING",
+      id: "TREAT_HASHES_AS_PERSONAL_DATA",
       priority: 1,
-      title: "Protect cross-party matching",
-      action: "Use protected matching instead of transferring raw identifiers.",
-      rationale: "Another organization will participate in matching or receive identifiable data, so identifiers should remain protected across that boundary.",
-      riskFactorIds: ["EXTERNAL_ACCESS", "RAW_EXCHANGE"],
+      title: "Treat hashes and tokens as personal data",
+      action: "Handle hashed or tokenized identifiers as personal data, and use single-use salted keys instead of stable hashes.",
+      rationale: "The same input always produces the same hash, so a stable hash can work as a lasting identifier for a person.",
+      basedOn: ["Identifiers exchanged as hashes or tokens"],
+      references: [
+        {
+          publisher: "GDPR Recital 26",
+          statement: "Recital 26 says pseudonymised data should be treated as information on an identifiable person.",
+          sourceTitle: "GDPR Recital 26 (text reprinted at gdpr-info.eu)",
+          sourceUrl: "https://gdpr-info.eu/recitals/no-26/",
+        },
+      ],
     },
     {
-      id: "REIDENTIFICATION_REVIEW",
+      id: "GATE_SECONDARY_USE",
       priority: 2,
-      title: "Reduce combination risk",
-      action: "Measure and remediate re-identification risk before combining datasets.",
-      rationale: "Linking datasets can reveal a person or sensitive attribute even when each source appears limited on its own.",
-      riskFactorIds: ["COMBINED_REIDENTIFICATION"],
-    },
-    {
-      id: "DEIDENTIFY_SENSITIVE_DATA",
-      priority: 3,
-      title: "De-identify sensitive records",
-      action: "De-identify sensitive records before they leave the originating system.",
-      rationale: "Regulated or high-impact information increases potential harm if directly identifying values remain exposed.",
-      riskFactorIds: ["DATA_SENSITIVITY_HIGH", "DATA_MOVEMENT"],
-    },
-    {
-      id: "SECONDARY_USE_GATE",
-      priority: 4,
       title: "Gate any secondary use",
       action: "Create a separate approval gate for any secondary use.",
       rationale: "Reuse beyond the stated purpose can exceed the original notice, consent, contract, or policy basis.",
-      riskFactorIds: ["SECONDARY_USE"],
+      basedOn: ["Reuse beyond the stated purpose"],
+      references: [],
     },
     {
-      id: "ROLE_BASED_ACCESS",
-      priority: 5,
-      title: "Restrict and review access",
-      action: "Limit access to named roles and review permissions regularly.",
-      rationale: "Named ownership and periodic review reduce unnecessary exposure throughout the approved use.",
-      riskFactorIds: ["EXTERNAL_ACCESS", "RAW_EXCHANGE", "DATA_MOVEMENT", "PURPOSE_RESEARCH"],
-    },
-    {
-      id: "FIELD_MINIMIZATION",
-      priority: 6,
-      title: "Minimize the data",
-      action: "Collect and share only the fields required for the approved purpose.",
-      rationale: "Using fewer fields reduces the impact of every identified data-sensitivity and purpose risk.",
-      riskFactorIds: ["DATA_SENSITIVITY_HIGH", "PURPOSE_RESEARCH"],
-    },
-    {
-      id: "RETENTION_AND_RESPONSE",
-      priority: 7,
+      id: "SET_LIFECYCLE_RESPONSIBILITIES",
+      priority: 3,
       title: "Set lifecycle responsibilities",
       action: "Set retention, deletion, and incident-response responsibilities before launch.",
       rationale: "A defined lifecycle limits how long risk persists and makes ownership clear if an incident occurs.",
-      riskFactorIds: ["DATA_MOVEMENT", "SECONDARY_USE", "PURPOSE_RESEARCH"],
+      basedOn: [],
+      references: [],
     },
-    {
-      id: "GOVERNANCE_RECORD",
-      priority: 8,
-      title: "Record the decision",
-      action: "Record the approved purpose, data owner, and control evidence in the governance register.",
-      rationale: "A reviewable record connects the approved use and its safeguards to the risks identified in this assessment.",
-      riskFactorIds: [
-        "DATA_SENSITIVITY_HIGH",
-        "EXTERNAL_ACCESS",
-        "RAW_EXCHANGE",
-        "DATA_MOVEMENT",
-        "COMBINED_REIDENTIFICATION",
-        "SECONDARY_USE",
-        "PURPOSE_RESEARCH",
-      ],
-    },
-  ],
-  capabilities: [
-    "Protected matching",
-    "Re-identification risk remediation",
-    "De-identification",
-    "Data minimization",
-    "Governance policy execution",
   ],
   limitations: [
-    "HIPAA applicability and required agreements need specialist review; this MVP does not determine compliance.",
-    "PCI DSS scope depends on the exact account data involved; this MVP does not determine compliance.",
+    "HIPAA applicability and required agreements need specialist review; this tool does not determine compliance.",
   ],
   assessedAt: "2026-09-23T15:00:00.000Z",
 };
 
-export const assessmentResult: AssessmentResult = {
-  ...baseResult,
-  ...mapRecommendations(baseResult.factors.map((factor) => factor.ruleId), baseResult.rulesVersion),
-};
 /** A fetch that never settles until its request is aborted. */
 export function hangingFetch(_url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
   return new Promise((_resolve, reject) => {

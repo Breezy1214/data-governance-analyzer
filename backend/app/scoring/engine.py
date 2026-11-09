@@ -14,7 +14,6 @@ from app.scoring.models import (
     SCHEMA_VERSION,
     AssessmentRequest,
     AssessmentResponse,
-    RecommendationDetail,
     RiskFactor,
 )
 from app.scoring.recommendations import map_recommendations
@@ -39,36 +38,9 @@ def score_assessment(
     level = ruleset.thresholds.level_for(score)
     guidance = ruleset.guidance_by_level[level]
 
-    mapped = map_recommendations([factor.ruleId for factor in factors], ruleset.version)
-
-    fired_rule_ids = {factor.ruleId for factor in factors}
-    recommendation_rules = [rule for rule in ruleset.recommendations if rule.applies(request)]
-    recommendation_details = [
-        RecommendationDetail(
-            id=rule.id,
-            priority=priority,
-            title=rule.title,
-            action=rule.action,
-            rationale=rule.rationale,
-            riskFactorIds=[rule_id for rule_id in rule.risk_factor_ids if rule_id in fired_rule_ids],
-        )
-        for priority, rule in enumerate(recommendation_rules, start=1)
-    ]
-
-    # Preserve v2 priorities/rationales, then include any catalog safeguard not
-    # already represented (e.g. internal raw exchange without vendor matching).
-    actions = {item.action for item in recommendation_details}
-    for safeguard in mapped.generalSafeguards:
-        if safeguard.text not in actions and safeguard.factorIds:
-            recommendation_details.append(RecommendationDetail(
-                id=safeguard.id,
-                priority=len(recommendation_details) + 1,
-                title="Additional safeguard",
-                action=safeguard.text,
-                rationale="This safeguard addresses the identified risk factors listed below.",
-                riskFactorIds=safeguard.factorIds,
-            ))
-            actions.add(safeguard.text)
+    active_labels = {factor.ruleId: factor.label for factor in factors}
+    active_labels.update({signal.id: signal.label for signal in ruleset.signals if signal.applies(request)})
+    mapped = map_recommendations(active_labels, ruleset.version)
 
     limitations = [lim.copy for lim in ruleset.limitations if lim.applies(request)]
 
@@ -80,8 +52,6 @@ def score_assessment(
         level=level,
         guidance=guidance,
         factors=factors,
-        recommendationDetails=recommendation_details,
-        capabilities=[item.label for item in mapped.karlsgateRecommendations],
         limitations=limitations,
         assessedAt=assessed_at or datetime.now(timezone.utc).isoformat(),
     )

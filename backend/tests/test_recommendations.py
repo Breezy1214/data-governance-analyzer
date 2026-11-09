@@ -1,127 +1,160 @@
+import re
 from itertools import product
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
+from helpers import sample_request
 from pydantic import ValidationError
 
-from app.scoring import AssessmentRequest, score_assessment
+from app.scoring import score_assessment
 from app.scoring.recommendations import MappingCatalog, get_mapping, map_recommendations
-from app.scoring.rules import get_ruleset
+
+BASELINE = {"RESTRICT_ACCESS", "MINIMIZE_FIELDS", "SET_LIFECYCLE_RESPONSIBILITIES", "RECORD_THE_DECISION"}
+FIRST_PERSON = re.compile(r"\b(we|our|ours|us|we're|we'll)\b", re.IGNORECASE)
 
 
-@pytest.mark.parametrize("factor,safeguard", [
-    ("DATA_SENSITIVITY_HIGH", "DEIDENTIFY_RECORDS"),
-    ("DATA_SENSITIVITY_DIRECT", "FIELD_MINIMIZATION"),
-    ("EXTERNAL_ACCESS", "ACCESS_CONTROL"),
-    ("RAW_EXCHANGE", "PRIVATE_MATCHING"),
-    ("DATA_MOVEMENT", "RETENTION_DELETION"),
-    ("COMBINED_REIDENTIFICATION", "REIDENTIFICATION_REVIEW"),
-    ("SECONDARY_USE", "SECONDARY_USE_APPROVAL"),
-    ("PURPOSE_ANALYTICS", "FIELD_MINIMIZATION"),
-    ("PURPOSE_RESEARCH", "PURPOSE_ACCOUNTABILITY"),
-    ("PURPOSE_MATCHING", "PRIVATE_MATCHING"),
-    ("PURPOSE_OTHER", "PURPOSE_ACCOUNTABILITY"),
-    ("PURPOSE_MARKETING", "RETENTION_DELETION"),
-    ("PURPOSE_AI", "RETENTION_DELETION"),
+def recommendation_ids(**overrides):
+    return {item.id for item in score_assessment(sample_request(**overrides)).recommendations}
+
+
+@pytest.mark.parametrize("overrides,expected", [
+    ({"identifierProtection": "cleartext"}, "AVOID_READABLE_IDENTIFIERS"),
+    ({"identifierProtection": "encryptedDecrypted"}, "AVOID_READABLE_IDENTIFIERS"),
+    ({"identifierProtection": "notSure"}, "AVOID_READABLE_IDENTIFIERS"),
+    ({"identifierProtection": "hashedTokenized"}, "TREAT_HASHES_AS_PERSONAL_DATA"),
+    ({"identifierProtection": "cleanRoom"}, "CONFIRM_CLEAN_ROOM_TERMS"),
+    ({"dataTypes": ["gov"]}, "DE_IDENTIFY_SENSITIVE_RECORDS"),
+    ({"custodyChange": "yes"}, "LIMIT_CUSTODY_CHANGES"),
+    ({"environmentControl": "thirdParty"}, "VERIFY_RULE_ENFORCEMENT"),
+    ({"reusableKeys": "yes"}, "USE_PARTNER_SPECIFIC_KEYS"),
+    ({"smallResults": "yes"}, "SET_MINIMUM_MATCH_COUNT"),
+    ({"combined": "yes"}, "REVIEW_COMBINATION_RISK"),
+    ({"retainedArtifacts": "yes"}, "DELETE_AFTER_EXCHANGE"),
+    ({"secondaryUse": "yes"}, "GATE_SECONDARY_USE"),
+    ({"purpose": "enrichment"}, "SHARE_ONLY_THE_MATCH_RESULT"),
+    ({"purpose": "healthResearch"}, "CONFIRM_RESEARCH_BASIS"),
+    ({"purpose": "fraud"}, "LIMIT_FRAUD_CHECK_SCOPE"),
+    ({"purpose": "advertising"}, "CHECK_ADVERTISING_OPT_OUTS"),
+    ({"purpose": "ai"}, "DOCUMENT_AI_TRAINING_DATA"),
+    ({"identifierConsistency": "no"}, "STANDARDIZE_IDENTIFIERS"),
+    ({"identifierConsistency": "notSure"}, "STANDARDIZE_IDENTIFIERS"),
+    ({"participants": "multiplePartners"}, "PLAN_REPEATABLE_ONBOARDING"),
 ])
-def test_individual_factor_has_a_relevant_attributed_safeguard(factor, safeguard):
-    result = map_recommendations([factor], "1.0")
-    assert any(item.id == safeguard and item.factorIds == [factor] for item in result.generalSafeguards)
+def test_each_answer_selects_its_recommendation_and_the_lowest_risk_answer_does_not(overrides, expected):
+    assert expected in recommendation_ids(**overrides)
+    assert expected not in recommendation_ids(purpose="analytics")
 
 
-def test_all_scoring_factors_are_mapped_and_frontend_catalog_matches():
-    catalog = get_mapping()
-    assert set(catalog.factorSafeguards) == {rule.id for rule in get_ruleset().rules}
-    root = Path(__file__).resolve().parents[2]
-    backend = root / "backend/app/scoring/mappings/v1.1.json"
-    frontend = root / "frontend/lib/mappings/v1.1.json"
-    assert backend.read_bytes() == frontend.read_bytes()
-    rubric = (root / catalog.source).read_text(encoding="utf-8")
-    for entry in catalog.karlsgate:
-        assert entry.text in rubric
-    assert catalog.approvalStatus == "approved"
+def test_different_identifier_answers_produce_different_guidance():
+    answers = ("cleartext", "hashedTokenized", "cleanRoom", "notExchanged")
+    results = [recommendation_ids(identifierProtection=answer) for answer in answers]
+    assert len({frozenset(result) for result in results}) == len(answers)
 
 
-def test_approval_release_preserves_historical_pending_catalog():
-    factors = ["EXTERNAL_ACCESS", "PURPOSE_MATCHING"]
-    historical = map_recommendations(factors, "1.0", "1.0")
-    current = map_recommendations(factors, "1.0")
-    assert historical.mappingApprovalStatus == "pending"
-    assert historical.mappingVersion == "1.0"
-    assert current.mappingApprovalStatus == "approved"
-    assert current.mappingVersion == "1.1"
-    assert current.generalSafeguards == historical.generalSafeguards
-    assert current.karlsgateRecommendations == historical.karlsgateRecommendations
+def test_readable_identifier_advice_does_not_require_matching_for_internal_analytics():
+    result = score_assessment(sample_request(
+        purpose="analytics", participants="internal", identifierProtection="encryptedDecrypted",
+    ))
+    item = next(entry for entry in result.recommendations if entry.id == "AVOID_READABLE_IDENTIFIERS")
+    assert item.action.startswith("Remove or de-identify identifiers if the purpose does not need them.")
+    assert "If records must be linked" in item.action
 
 
-def test_applicability_and_coverage_across_all_questionnaire_combinations():
-    data_types = ("names", "emails", "phone", "gov", "health", "financial")
-    purposes = ("analytics", "research", "matching", "other", "marketing", "ai")
-    for data_type, purpose, flags in product(data_types, purposes, product(("yes", "no"), repeat=5)):
-        external, raw, movement, combined, secondary = flags
-        request = AssessmentRequest(
-            dataTypes=[data_type], purpose=purpose, externalAccess=external, rawExchange=raw,
-            dataMovement=movement, combined=combined, secondaryUse=secondary,
-        )
-        result = score_assessment(request)
-        capabilities = {item.id for item in result.karlsgateRecommendations}
-        assert ("PROTECTED_MATCHING" in capabilities) == (external == "yes" and (raw == "yes" or purpose == "matching"))
-        assert ("REID_REMEDIATION" in capabilities) == (combined == "yes")
-        assert ("DEIDENTIFICATION" in capabilities) == (data_type in ("gov", "health", "financial"))
-        assert {"DATA_MINIMIZATION", "GOVERNANCE_EXECUTION"} <= capabilities
-        factors = {item.ruleId for item in result.factors}
-        assert {factor for item in result.generalSafeguards for factor in item.factorIds} == factors
-        assert all(set(item.factorIds) <= factors for item in result.karlsgateRecommendations)
-        assert len({item.id for item in result.generalSafeguards}) == len(result.generalSafeguards)
-        actions = [item.action for item in result.recommendationDetails]
-        assert {item.text for item in result.generalSafeguards} <= set(actions)
-        assert all("Karlsgate" not in text for text in actions)
-        assert len(actions) == len(set(actions))
-        assert len({item.id for item in result.recommendationDetails}) == len(actions)
-        assert [item.priority for item in result.recommendationDetails] == list(range(1, len(actions) + 1))
-        assert all(set(item.riskFactorIds) <= factors for item in result.recommendationDetails)
+def test_lowest_risk_answers_keep_only_baseline_and_purpose_guidance():
+    assert recommendation_ids() == BASELINE | {"SHARE_ONLY_THE_MATCH_RESULT"}
+    assert recommendation_ids(purpose="analytics", participants="internal") == BASELINE
 
 
-def test_no_specialist_capability_fit_keeps_general_controls():
-    result = map_recommendations(["RAW_EXCHANGE", "PURPOSE_ANALYTICS"], "1.0")
-    assert "PROTECTED_MATCHING" not in {item.id for item in result.karlsgateRecommendations}
-    assert {"ACCESS_CONTROL", "FIELD_MINIMIZATION", "RETENTION_DELETION", "PRIVATE_MATCHING"} <= {
-        item.id for item in result.generalSafeguards
+def test_selected_recommendation_cites_the_answer_that_triggered_it():
+    result = score_assessment(sample_request(identifierProtection="hashedTokenized"))
+    item = next(entry for entry in result.recommendations if entry.id == "TREAT_HASHES_AS_PERSONAL_DATA")
+    assert item.basedOn == ["Identifiers exchanged as hashes or tokens"]
+    assert {entry.publisher for entry in item.references} == {
+        "GDPR Recital 26", "U.S. Department of Health and Human Services",
     }
+    assert all(entry.sourceUrl.startswith("https://") for entry in item.references)
 
 
-def test_versioned_result_is_reproducible_and_retains_combined_reasons():
-    factors = ["EXTERNAL_ACCESS", "RAW_EXCHANGE", "PURPOSE_MATCHING", "DATA_SENSITIVITY_HIGH"]
-    first = map_recommendations(factors, "1.0", "1.0")
-    assert first == map_recommendations(factors, "1.0", "1.0")
-    assert first.mappingVersion == "1.0"
-    matching = next(item for item in first.karlsgateRecommendations if item.id == "PROTECTED_MATCHING")
-    assert matching.conditionId == "EXTERNAL_AND_RAW_OR_MATCHING"
-    assert matching.factorIds == factors[:3]
+def test_baseline_recommendation_without_a_matching_answer_has_no_basis_labels():
+    result = score_assessment(sample_request())
+    item = next(entry for entry in result.recommendations if entry.id == "SET_LIFECYCLE_RESPONSIBILITIES")
+    assert item.basedOn == []
 
 
-@pytest.mark.parametrize("factors,rules,version", [
-    (["UNSUPPORTED"], "1.0", "1.0"),
-    (["EXTERNAL_ACCESS"], "99.0", "1.0"),
-    (["EXTERNAL_ACCESS"], "1.0", "99.0"),
-])
-def test_unknown_factors_and_versions_fail_instead_of_inventing_controls(factors, rules, version):
+def test_coverage_and_ordering_across_representative_combinations():
+    data_types = ("emails", "gov", "health")
+    purposes = ("overlap", "enrichment", "healthResearch", "fraud", "advertising", "ai", "analytics", "other")
+    protections = ("notExchanged", "cleartext", "hashedTokenized", "encryptedDecrypted", "cleanRoom", "notSure")
+    flags = ("yes", "no", "notSure")
+    catalog_ids = [entry.id for entry in get_mapping().recommendations]
+    for data_type, purpose, protection, flag in product(data_types, purposes, protections, flags):
+        result = score_assessment(sample_request(
+            dataTypes=[data_type], purpose=purpose, identifierProtection=protection,
+            custodyChange=flag, reusableKeys=flag, smallResults=flag, retainedArtifacts=flag,
+            identifierConsistency=flag,
+        ))
+        ids = [item.id for item in result.recommendations]
+        assert BASELINE <= set(ids)
+        assert len(ids) == len(set(ids))
+        assert ids == [entry for entry in catalog_ids if entry in ids]
+        assert [item.priority for item in result.recommendations] == list(range(1, len(ids) + 1))
+        factor_labels = {factor.label for factor in result.factors}
+        assert all(factor_labels & set(item.basedOn) or item.id in BASELINE or item.id == "STANDARDIZE_IDENTIFIERS"
+                   for item in result.recommendations)
+
+
+def test_catalog_is_approved_and_documented():
+    catalog = get_mapping()
+    assert catalog.approvalStatus == "approved"
+    assert (Path(__file__).resolve().parents[2] / catalog.source).exists()
+
+
+def test_catalog_is_not_written_in_the_first_person():
+    for entry in get_mapping().recommendations:
+        for text in (entry.title, entry.action, entry.rationale):
+            assert not FIRST_PERSON.search(text), text
+
+
+def test_every_source_is_https_on_its_publishers_domain_and_used():
+    catalog = get_mapping()
+    expected_hosts = {
+        "GDPR Recital 26": "gdpr-info.eu",
+        "U.S. Department of Health and Human Services": "www.hhs.gov",
+        "California Attorney General": "oag.ca.gov",
+    }
+    used = {citation.sourceId for entry in catalog.recommendations for citation in entry.references}
+    assert used == set(catalog.sources)
+    for source in catalog.sources.values():
+        parts = urlsplit(source.url)
+        assert parts.scheme == "https"
+        assert parts.hostname == expected_hosts[source.publisher]
+
+
+@pytest.mark.parametrize("rules,version", [("99.0", "2.0"), ("2.0", "99.0")])
+def test_unknown_versions_fail_instead_of_inventing_recommendations(rules, version):
     with pytest.raises(ValueError):
-        map_recommendations(factors, rules, version)
+        map_recommendations({"CUSTODY_CHANGE": "label"}, rules, version)
 
 
-@pytest.mark.parametrize("defect", ["missing_factor", "empty_mapping", "unknown_safeguard", "unknown_condition", "duplicate"])
+@pytest.mark.parametrize("defect", [
+    "unknown_trigger", "uncovered_rule", "unselectable", "unknown_source", "duplicate", "insecure_source",
+])
 def test_invalid_catalog_is_rejected(defect):
     catalog = get_mapping().model_dump(mode="json")
-    if defect == "missing_factor":
-        del catalog["factorSafeguards"]["RAW_EXCHANGE"]
-    elif defect == "empty_mapping":
-        catalog["factorSafeguards"]["RAW_EXCHANGE"] = []
-    elif defect == "unknown_safeguard":
-        catalog["factorSafeguards"]["RAW_EXCHANGE"] = ["UNKNOWN"]
-    elif defect == "unknown_condition":
-        catalog["karlsgate"][0]["anyOfAllFactors"] = [["UNKNOWN"]]
+    entry = next(item for item in catalog["recommendations"] if item["references"])
+    if defect == "unknown_trigger":
+        entry["triggers"] = ["UNKNOWN", *entry["triggers"]]
+    elif defect == "uncovered_rule":
+        catalog["recommendations"] = [item for item in catalog["recommendations"] if item["id"] != "GATE_SECONDARY_USE"]
+    elif defect == "unselectable":
+        entry["baseline"] = False
+        entry["triggers"] = []
+    elif defect == "unknown_source":
+        entry["references"][0]["sourceId"] = "UNKNOWN"
+    elif defect == "insecure_source":
+        catalog["sources"]["CA_AG_CCPA"]["url"] = "http://oag.ca.gov/privacy/ccpa"
     else:
-        catalog["safeguards"].append(catalog["safeguards"][0])
+        catalog["recommendations"].append(entry)
     with pytest.raises(ValidationError):
         MappingCatalog.model_validate(catalog)

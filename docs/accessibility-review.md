@@ -74,7 +74,7 @@ The risk level is stated in words ("HIGH RISK", "The proposed use case is high r
 - Every question that used privacy jargon now carries a plain-language note: what "another organization" means, what counts as data leaving its environment, why combining datasets matters, and what reuse means. "Raw identifiable values" was already explained.
 - Capability names are accompanied by the approved rubric copy, so "De-identification" and "Protected matching" are explained rather than assumed.
 - The disclaimer says the report is decision support and not legal advice, in both the app and the PDF.
-- Wording not changed: the capability copy and risk guidance are approved text from `docs/risk-scoring-rubric-v1.0.md` (SCRUM-6). Any rewording needs product-owner approval.
+- Wording not changed: the capability copy and risk guidance are approved text from rubric v1.0 (SCRUM-6). Any rewording needs product-owner approval.
 
 ## Completion time and scenario coverage
 
