@@ -1,9 +1,11 @@
 // @vitest-environment node
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(), getClaims: vi.fn(), signInWithPassword: vi.fn(), signOut: vi.fn(),
   createServerClient: vi.fn(), setCookie: vi.fn(),
+  signUp: vi.fn(), resetPasswordForEmail: vi.fn(), verifyOtp: vi.fn(), updateUser: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
@@ -11,6 +13,10 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], set: 
 import { currentSession, sameOrigin } from "../lib/auth-server";
 import { POST as login } from "../app/api/login/route";
 import { POST as logout } from "../app/api/logout/route";
+import { POST as signup } from "../app/api/signup/route";
+import { POST as forgotPassword } from "../app/api/forgot-password/route";
+import { POST as confirm } from "../app/api/confirm/route";
+import { POST as updatePassword } from "../app/api/update-password/route";
 import { POST as assess } from "../app/api/assessments/route";
 import { GET as session } from "../app/api/session/route";
 import { proxy } from "../proxy";
@@ -186,5 +192,123 @@ describe("Supabase authentication routes", () => {
       return { data: { session: { access_token: "private-jwt" } }, error: null };
     });
     expect(await currentSession()).toEqual({ user: { id: "user-id", email: "client@example.test" } });
+  });
+});
+
+describe("account creation and recovery", () => {
+  const NEW_PASSWORD = "plum kettle orbit lantern";
+  const hash = createHash("sha1").update(NEW_PASSWORD).digest("hex").toUpperCase();
+  const credentials = { email: "new@example.test", password: NEW_PASSWORD };
+  const stubBreachCheck = (body = "0000000000000000000000000000000000A:3") =>
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body)));
+
+  beforeEach(() => {
+    mocks.signUp.mockResolvedValue({ data: {}, error: null });
+    mocks.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    mocks.verifyOtp.mockResolvedValue({ data: {}, error: null });
+    mocks.updateUser.mockResolvedValue({ data: {}, error: null });
+    stubBreachCheck();
+  });
+
+  it("creates the account and sends only a hash prefix to the breach check", async () => {
+    const response = await signup(request("signup", undefined, credentials));
+    expect(response.status).toBe(200);
+    expect(mocks.signUp).toHaveBeenCalledWith(credentials);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe(`https://api.pwnedpasswords.com/range/${hash.slice(0, 5)}`);
+    expect(JSON.stringify(init)).not.toContain(NEW_PASSWORD);
+  });
+
+  it("rejects cross-site sign-up", async () => {
+    const response = await signup(request("signup", "https://attacker.test", credentials));
+    expect(response.status).toBe(403);
+    expect(mocks.signUp).not.toHaveBeenCalled();
+  });
+
+  it.each([["too short", "short phrase"], ["over 72 bytes", "x".repeat(73)]])("rejects a password that is %s", async (_, password) => {
+    const response = await signup(request("signup", undefined, { ...credentials, password }));
+    expect(response.status).toBe(400);
+    expect(mocks.signUp).not.toHaveBeenCalled();
+  });
+
+  it("counts characters rather than bytes toward the minimum", async () => {
+    const response = await signup(request("signup", undefined, { ...credentials, password: "é".repeat(14) }));
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a breached password and ignores padded entries", async () => {
+    stubBreachCheck(`${hash.slice(5)}:12`);
+    const response = await signup(request("signup", undefined, credentials));
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toMatch(/data breach/);
+    expect(mocks.signUp).not.toHaveBeenCalled();
+
+    stubBreachCheck(`${hash.slice(5)}:0`);
+    expect((await signup(request("signup", undefined, credentials))).status).toBe(200);
+  });
+
+  it("still allows sign-up when the breach check is down", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    expect((await signup(request("signup", undefined, credentials))).status).toBe(200);
+  });
+
+  it("answers the same for new and existing addresses", async () => {
+    const created = await signup(request("signup", undefined, credentials));
+    mocks.signUp.mockResolvedValue({ data: {}, error: { status: 422, code: "user_already_exists", message: "User already registered" } });
+    const existing = await signup(request("signup", undefined, credentials));
+    expect(existing.status).toBe(created.status);
+    expect(await existing.json()).toEqual(await created.json());
+  });
+
+  it("reports rate limits and hides provider details", async () => {
+    mocks.signUp.mockResolvedValue({ data: {}, error: { status: 429, code: "over_email_send_rate_limit", message: "provider detail" } });
+    expect((await signup(request("signup", undefined, credentials))).status).toBe(429);
+    mocks.signUp.mockResolvedValue({ data: {}, error: { status: 400, code: "email_address_not_authorized", message: "provider detail" } });
+    const response = await signup(request("signup", undefined, credentials));
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("provider detail");
+  });
+
+  it("answers password reset requests without revealing accounts", async () => {
+    const response = await forgotPassword(request("forgot-password", undefined, { email: "unknown@example.test" }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
+  it.each(["email", "recovery"])("confirms a %s link and ignores any destination it carries", async (type) => {
+    const response = await confirm(request("confirm", undefined, { tokenHash: "abc", type, next: "https://attacker.test" }));
+    expect(mocks.verifyOtp).toHaveBeenCalledWith({ type, token_hash: "abc" });
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
+  it("rejects unsupported link types and expired links", async () => {
+    expect((await confirm(request("confirm", undefined, { tokenHash: "abc", type: "invite" }))).status).toBe(400);
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    mocks.verifyOtp.mockResolvedValue({ data: {}, error: { status: 403, code: "otp_expired", message: "provider detail" } });
+    const response = await confirm(request("confirm", undefined, { tokenHash: "abc", type: "email" }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toMatch(/expired/);
+  });
+
+  function signedInBy(method: string, secondsAgo = 60) {
+    mocks.getClaims.mockResolvedValue({ data: { claims: {
+      sub: "user-id", email: "client@example.test", is_anonymous: false,
+      amr: [{ method, timestamp: Math.floor(Date.now() / 1000) - secondsAgo }],
+    } }, error: null });
+  }
+
+  it("changes the password after a recent email link and ends other sessions", async () => {
+    signedInBy("otp");
+    const response = await updatePassword(request("update-password", undefined, { password: NEW_PASSWORD }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateUser).toHaveBeenCalledWith({ password: NEW_PASSWORD });
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "others" });
+  });
+
+  it.each([["a password sign-in", "password", 60], ["an old email link", "otp", 16 * 60]])("refuses a password change from %s", async (_, method, age) => {
+    signedInBy(method as string, age as number);
+    const response = await updatePassword(request("update-password", undefined, { password: NEW_PASSWORD }));
+    expect(response.status).toBe(401);
+    expect(mocks.updateUser).not.toHaveBeenCalled();
   });
 });
