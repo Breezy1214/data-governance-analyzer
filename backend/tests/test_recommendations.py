@@ -52,6 +52,15 @@ def test_different_identifier_answers_produce_different_guidance():
     assert len({frozenset(result) for result in results}) == len(answers)
 
 
+def test_readable_identifier_advice_does_not_require_matching_for_internal_analytics():
+    result = score_assessment(sample_request(
+        purpose="analytics", participants="internal", identifierProtection="encryptedDecrypted",
+    ))
+    item = next(entry for entry in result.recommendations if entry.id == "AVOID_READABLE_IDENTIFIERS")
+    assert item.action.startswith("Remove or de-identify identifiers if the purpose does not need them.")
+    assert "If records must be linked" in item.action
+
+
 def test_lowest_risk_answers_keep_only_baseline_and_purpose_guidance():
     assert recommendation_ids() == BASELINE | {"SHARE_ONLY_THE_MATCH_RESULT"}
     assert recommendation_ids(purpose="analytics", participants="internal") == BASELINE

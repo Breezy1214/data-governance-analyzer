@@ -27,8 +27,8 @@
     {
       "id": "AVOID_READABLE_IDENTIFIERS",
       "title": "Stop handing over readable identifiers",
-      "action": "Replace the exchange of readable identifiers with a matching method that lets each party keep its identifiers in its own environment.",
-      "rationale": "Encryption only protects data in transit. Once a recipient decrypts it, they hold fully identified records and you can no longer control how those records are reused. Matching methods that compare single-use hashes through a neutral party let both sides find what they have in common without handing over identifiers.",
+      "action": "Remove or de-identify identifiers if the purpose does not need them. If records must be linked, use a matching method that lets each party keep its identifiers in its own environment.",
+      "rationale": "Encryption only protects data in transit. Once a recipient decrypts it, they hold fully identified records and you can no longer control how those records are reused. Many uses work without identifiers at all. When records do need linking, matching methods that compare single-use hashes through a neutral party let both sides find what they have in common without handing over identifiers.",
       "triggers": [
         "IDENTIFIERS_CLEARTEXT",
         "IDENTIFIERS_UNKNOWN",
