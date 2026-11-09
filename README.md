@@ -6,8 +6,7 @@ A guided, plain-language assessment for identifying privacy and governance risks
 
 - `frontend/` — Next.js App Router, React, TypeScript, and Tailwind CSS; collects answers and renders backend results
 - `backend/` — FastAPI service and the single source of truth for assessment scoring
-- `docs/` — versioned scoring rubric, recommendation catalog and sources, deployment guidance, [data handling and retention](docs/data-handling.md), the [accessibility review](docs/accessibility-review.md), and the [usability scenarios](docs/usability-scenarios.md)
-- [Scoring verification](docs/scoring-verification.md) — the SCRUM-14 correctness matrix, reproducible commands, performance conditions, results, and limitations
+- `docs/` — the [scoring rubric](docs/risk-scoring-rubric-v2.0.md) and [data handling and retention](docs/data-handling.md)
 - `.github/workflows/ci.yml` — frontend and backend quality gates
 
 ## Local development
@@ -45,7 +44,7 @@ npm run dev
 Open `http://localhost:3000/login`. Set server-only `API_BASE_URL`, `SUPABASE_URL`, and
 `SUPABASE_PUBLISHABLE_KEY` in the frontend environment. Set `SUPABASE_URL` in the backend
 environment. Use the same Supabase project with an asymmetric signing key (ES256 or RS256)
-and an existing confirmed account. Never use a service-role key or commit private environment
+and a confirmed account, either added in Supabase or created at `/signup` once email is set up. Never use a service-role key or commit private environment
 files. Do not overwrite existing environment files when copying the examples.
 
 ## Quality checks
@@ -64,7 +63,7 @@ pytest
 ruff check app tests
 ```
 
-To reproduce the documented assessment response-time check:
+To reproduce the assessment response-time check:
 
 ```bash
 cd backend
@@ -73,14 +72,25 @@ cd backend
 
 ## Deployment
 
-Deployment configuration and environment requirements are documented in [docs/deployment.md](docs/deployment.md). Do not commit credentials or production-sensitive data.
+Deploy `frontend/` and `backend/` separately over HTTPS, set the variables from each `.env.example`,
+and point `API_BASE_URL` at the backend. Do not commit credentials or production-sensitive data.
 
 Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
 FastAPI verifies access-token signatures through the project's JWKS endpoint.
-Real-provider and HTTPS smoke tests are required before deploying; see the deployment guide.
+
+### Sign-up and password reset
+
+Anyone can create an account at `/signup`. In Supabase Auth:
+
+1. Set the Site URL to the production URL. Emailed links are built from it.
+2. Add custom SMTP. The built-in email service only reaches the project's own team.
+3. Point both email templates at the app, so links work on any device:
+   - Confirm signup: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
+   - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+4. Keep "Confirm email" on and set the minimum password length to 15.
 
 ## Recommendations
 
 Assessments use API schema 3.0, [rubric v2.0](docs/risk-scoring-rubric-v2.0.md), and
-[recommendation catalog v2.0](docs/recommendation-mapping-v2.0.md).
+recommendation catalog v2.0 (`backend/app/scoring/mappings/v2.0.json`).
 Scoring and recommendations are server-only, and recommendations link to regulatory guidance where it applies.

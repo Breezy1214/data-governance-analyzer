@@ -9,6 +9,8 @@ Supabase manages authenticated accounts and session metadata. The application ha
 local session database. Next.js stores Supabase session tokens in HttpOnly, SameSite=Lax
 cookies (Secure on hosted HTTPS deployments); browser JavaScript cannot read them.
 FastAPI verifies JWT signature, issuer, audience, expiry, and authenticated user claims.
+New passwords are checked against Pwned Passwords; only the first five characters of the
+password's SHA-1 hash leave the server.
 
 ## Field inventory
 
@@ -57,14 +59,15 @@ The API schema does not accept `description`; it remains exclusively in the brow
 Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
 
 The draft timer is not the login lifetime. Logout clears drafts across tabs; login lifetime and
-token revocation are covered under "Supabase setup" in [deployment.md](deployment.md).
+token revocation are set in Supabase.
 
 ## Logs, analytics, URLs, and errors
 
 - **Application logs** (`backend/app/logging_config.py`) record only a random request ID, schema/rules versions, score, level, and fired rule IDs. Raw answers and free text are never logged. Covered by `test_scoring_logs_exclude_questionnaire_input`.
 - **Validation errors** report field names only, never submitted values or unknown field names. Covered by `test_invalid_input_returns_clear_client_error_without_echoing_input` and `test_user_controlled_extra_field_name_is_not_echoed_or_logged`.
 - **URLs:** assessment content and credentials never appear in paths or query strings.
-  Routes include `/`, `/login`, and same-origin `/api/*` handlers.
+  Routes include `/`, `/login`, `/signup`, `/forgot-password`, `/update-password`, and same-origin `/api/*` handlers.
+  Emailed `/auth/confirm` links carry a single-use token and no other personal data.
 - **Analytics and error reporting:** none are installed. Any tool added later must not capture request bodies, form values, or `sessionStorage`.
 
 ## Hosted environments

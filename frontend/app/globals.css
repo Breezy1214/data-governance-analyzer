@@ -2,8 +2,7 @@
 
 /*
  * Design tokens (SCRUM-24). Every colour in the app comes from this block;
- * components reference the semantic tokens, never raw values. Contrast
- * ratios are recorded in docs/accessibility-review.md, and lib/theme.ts
+ * components reference the semantic tokens, never raw values. lib/theme.ts
  * mirrors the values the PDF report needs.
  */
 :root {
@@ -62,6 +61,10 @@
 .auth-form input { min-width: 0; min-height: 50px; padding: 12px; }
 .auth-form button { margin-top: 12px; min-height: 48px; }
 .auth-note { font-size: 13px; }
+.auth-note a { color: inherit; text-decoration: underline; }
+.auth-message { line-height: 1.6; margin-top: 32px; }
+.auth-form .auth-toggle { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.auth-form .auth-toggle input { width: auto; min-height: 0; padding: 0; }
 .account-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 .account-controls span { overflow-wrap: anywhere; min-width: 0; }
 html { background: var(--paper); scroll-behavior: smooth; }

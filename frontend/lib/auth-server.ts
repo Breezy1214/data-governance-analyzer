@@ -45,7 +45,7 @@ export async function authenticatedSession() {
   const claims = data?.claims;
   if (!claims || claims.is_anonymous || !claims.email) throw new AuthenticationError(401, AUTH_MESSAGES.expired);
   const payload: AuthSession = { user: { id: claims.sub, email: claims.email } };
-  return { accessToken: session.access_token, payload };
+  return { accessToken: session.access_token, payload, claims, client };
 }
 
 export async function currentSession(): Promise<AuthSession | null> {
@@ -55,6 +55,35 @@ export async function currentSession(): Promise<AuthSession | null> {
     if (error instanceof AuthenticationError && error.status === 401) return null;
     throw error;
   }
+}
+
+const EMAIL_LINK_WINDOW_SECONDS = 15 * 60;
+
+/** Requires a session started by an emailed link in the last 15 minutes, so a stolen session can't change the password. */
+export async function requireEmailLinkSession() {
+  const session = await authenticatedSession();
+  const { amr } = session.claims;
+  const now = Date.now() / 1000;
+  const recent = Array.isArray(amr) && amr.some((entry) =>
+    typeof entry === "object" && entry.method === "otp" && now - entry.timestamp < EMAIL_LINK_WINDOW_SECONDS);
+  if (!recent) throw new AuthenticationError(401, AUTH_MESSAGES.linkInvalid);
+  return session;
+}
+
+export function parseEmail(value: unknown) {
+  const email = typeof value === "string" ? value.trim() : "";
+  if (!email.includes("@") || email.length > 254) throw new AuthenticationError(400, AUTH_MESSAGES.invalidEmail);
+  return email;
+}
+
+/** Maps a Supabase account error to a safe message, without passing on provider details. */
+export function accountError(error: { status?: number; code?: string }, clientFailure?: AuthenticationError) {
+  if (error.status === 429) return new AuthenticationError(429, AUTH_MESSAGES.rateLimited);
+  if (error.code === "weak_password") return new AuthenticationError(400, AUTH_MESSAGES.passwordRules);
+  if (error.code === "same_password") return new AuthenticationError(400, AUTH_MESSAGES.passwordReused);
+  if (error.code === "email_address_invalid") return new AuthenticationError(400, AUTH_MESSAGES.invalidEmail);
+  if (clientFailure && error.status && error.status < 500) return clientFailure;
+  return new AuthenticationError(503, AUTH_MESSAGES.unavailable);
 }
 
 export function json(body: unknown, status = 200) {
@@ -89,4 +118,16 @@ export function sameOrigin(request: Request) {
 
 export function requireSameOrigin(request: Request) {
   if (!sameOrigin(request)) throw new AuthenticationError(403, AUTH_MESSAGES.forbidden);
+}
+
+/** A POST handler that always checks the origin and always returns a safe error response. */
+export function sameOriginPost(handler: (request: Request) => Promise<Response>) {
+  return async (request: Request) => {
+    try {
+      requireSameOrigin(request);
+      return await handler(request);
+    } catch (error) {
+      return errorResponse(error);
+    }
+  };
 }

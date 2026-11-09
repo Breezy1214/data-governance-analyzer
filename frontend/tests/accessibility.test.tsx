@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { StrictMode } from "react";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } from "../components/AccountForms";
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
@@ -11,8 +12,7 @@ import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-
  * Accessibility checks for the assessment flow (SCRUM-17).
  *
  * axe-core catches the machine-checkable WCAG failures. Colour contrast
- * cannot be judged in jsdom, so it is excluded here and audited against
- * the stylesheet instead; see docs/accessibility-review.md.
+ * cannot be judged in jsdom, so it is excluded here.
  */
 
 const AXE_OPTIONS: axe.RunOptions = {
@@ -249,5 +249,17 @@ describe("assessment flow accessibility", () => {
     await screen.findByText(/what drives this score/i);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/high risk/);
     expect(container.querySelector('[data-risk="high"] h2 .risk-icon')).not.toBeNull();
+  });
+});
+
+describe("account pages", () => {
+  it.each([
+    ["sign-up", <SignupForm key="signup" />],
+    ["forgot password", <ForgotPasswordForm key="forgot" expired />],
+    ["confirm email", <ConfirmLinkForm key="confirm" tokenHash="abc" type="email" />],
+    ["new password", <UpdatePasswordForm key="update" />],
+  ])("%s has no accessibility violations", async (_, page) => {
+    const { container } = render(page);
+    await expectNoViolations(container);
   });
 });
