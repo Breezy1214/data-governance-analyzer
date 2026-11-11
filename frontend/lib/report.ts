@@ -11,6 +11,7 @@ import {
   Recommendation,
   RiskLevel,
 } from "./assessment";
+import { redactSensitiveData } from "./sensitive-data";
 import { PALETTE, RISK_COLORS } from "./theme";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
@@ -60,7 +61,7 @@ export function buildReportModel(
   result: AssessmentResult,
 ): ReportModel {
   const sections: ReportSection[] = [
-    { heading: "Use case", kind: "paragraph", body: input.description.trim() },
+    { heading: "Use case", kind: "paragraph", body: redactSensitiveData(input.description).trim() },
     {
       heading: "Questionnaire responses",
       kind: "pairs",

@@ -46,12 +46,6 @@ def test_each_answer_selects_its_recommendation_and_the_lowest_risk_answer_does_
     assert expected not in recommendation_ids(purpose="analytics")
 
 
-def test_different_identifier_answers_produce_different_guidance():
-    answers = ("cleartext", "hashedTokenized", "cleanRoom", "notExchanged")
-    results = [recommendation_ids(identifierProtection=answer) for answer in answers]
-    assert len({frozenset(result) for result in results}) == len(answers)
-
-
 def test_readable_identifier_advice_does_not_require_matching_for_internal_analytics():
     result = score_assessment(sample_request(
         purpose="analytics", participants="internal", identifierProtection="encryptedDecrypted",

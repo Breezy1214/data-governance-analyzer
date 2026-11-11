@@ -28,6 +28,12 @@ describe("report model", () => {
     ]);
   });
 
+  it("never prints personal values in the use case, even if one reached the input", () => {
+    const leaked = buildReportModel({ ...input, description: "Share jane@example.com's history with the partner." }, result);
+    const useCase = leaked.sections.find((section) => section.heading === "Use case");
+    expect(useCase).toEqual({ heading: "Use case", kind: "paragraph", body: "Share [email]'s history with the partner." });
+  });
+
   it("reports the same score, level, and rules version shown in the app", () => {
     expect(flat).toContain(`${result.score} out of 100`);
     expect(flat).toContain(result.level);

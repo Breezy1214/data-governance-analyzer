@@ -1,3 +1,5 @@
+import { describeSensitiveFindings, findSensitiveData } from "./sensitive-data";
+
 export const DATA_TYPE_LABELS = {
   names: "Names",
   emails: "Email addresses",
@@ -205,11 +207,20 @@ export function isAssessmentInput(value: unknown): value is AssessmentInput {
 export function validateDescription(value: string): string | null {
   const length = value.trim().length;
   if (length === 0) return "Describe the proposed data use case before continuing.";
+  const sensitive = sensitiveDataMessage(value);
+  if (sensitive) return sensitive;
   if (length < 20) return "Add a little more detail—include the data, who will use it, and why.";
   if (length > DESCRIPTION_MAX_LENGTH) {
     return `Keep the description to ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters or fewer.`;
   }
   return null;
+}
+
+/** Describe the kinds of data involved, never the data itself. Null when nothing personal was found. */
+function sensitiveDataMessage(value: string): string | null {
+  const findings = findSensitiveData(value);
+  if (findings.length === 0) return null;
+  return `Remove personal or confidential details before continuing. This description contains ${describeSensitiveFindings(findings)}. Describe the kinds of data instead, such as “customer email addresses.”`;
 }
 
 export function validateQuestions(input: AssessmentInput): string | null {

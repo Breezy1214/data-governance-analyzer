@@ -34,6 +34,17 @@ password's SHA-1 hash leave the server.
 
 The API schema does not accept `description`; it remains exclusively in the browser for the on-screen record and local PDF report.
 
+### Personal details in the description
+
+The description must describe kinds of data ("customer email addresses"), not contain them. `frontend/lib/sensitive-data.ts` screens it for names, email addresses, phone numbers, dates of birth, ages, street addresses and postcodes, Social Security and other government ID numbers, payment card and bank account numbers, labelled ID and account numbers, IP and device/advertising IDs, and passwords, keys and access tokens. Text is normalized first (NFKC, invisible characters removed, dash variants unified) so look-alike characters cannot slip a value past the checks.
+
+- **Continue is blocked** while the description contains any of these. The message names only the kinds found, never the values, and offers to replace them with placeholders such as `[email]`.
+- **Imported documents** are redacted before the text reaches the form, and the person is told placeholders were inserted.
+- **The draft in `sessionStorage`** only ever holds the redacted description, and drafts saved before screening are redacted on load.
+- **The PDF report** redacts the use case again as a last line of defence.
+
+Pattern-based values (emails, numbers, IDs, keys) are caught reliably. Names are matched against a name lexicon and contextual cues such as "customer …", "Dr. …" and "Name: …"; an unlabelled name the lexicon doesn't know can still pass, so the help text continues to ask people to leave names out.
+
 ## Data flow
 
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.

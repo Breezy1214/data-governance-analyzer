@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssessmentInput,
   AssessmentResult,
@@ -34,6 +34,7 @@ import {
   extractDocumentText,
 } from "@/lib/document-import";
 import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
+import { containsSensitiveData, redactSensitiveData } from "@/lib/sensitive-data";
 import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
 
@@ -50,6 +51,7 @@ const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = [
   { level: "HIGH", label: "High", range: `${mediumMax + 1}–100` },
 ];
 const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
+const DRAFT_SAVE_DELAY_MS = 400;
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -236,10 +238,20 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     return () => window.clearTimeout(restoreDraft);
   }, [draftOwner]);
 
+  // Saving redacts the description, so it waits for a pause in typing instead of running on every key.
   useEffect(() => {
     if (!draftReady) return;
-    if (input === EMPTY_INPUT) clearDraft();
-    else saveDraft(input);
+    if (input === EMPTY_INPUT) {
+      clearDraft();
+      return;
+    }
+    const save = () => saveDraft(input);
+    const pending = window.setTimeout(save, DRAFT_SAVE_DELAY_MS);
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.clearTimeout(pending);
+      window.removeEventListener("pagehide", save);
+    };
   }, [input, draftReady]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
@@ -278,7 +290,8 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
 
   const moveTo = (nextStep: number) => {
     cancelPendingWork();
-    if (nextStep === 1) {
+    // The description is only editable here, so leaving this step is the one gate it must pass.
+    if (step === 0 && nextStep > 0) {
       const message = validateDescription(input.description);
       if (message) { setError(message); return; }
     }
@@ -348,11 +361,14 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
       const imported = await extractDocumentText(file);
       if (controller.signal.aborted) return;
       update("description", imported.text);
+      const summary = imported.truncated
+        ? `Imported ${imported.fileName} (first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters).`
+        : `Imported ${imported.fileName}.`;
       setImportStatus({
         kind: "notice",
-        message: imported.truncated
-          ? `Imported ${imported.fileName} (first ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters).`
-          : `Imported ${imported.fileName}.`,
+        message: imported.redacted
+          ? `${summary} Personal or confidential details were replaced with placeholders such as [name]. Check that it still reads clearly.`
+          : summary,
       });
     } catch (failure) {
       if (controller.signal.aborted) return;
@@ -371,6 +387,11 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     }
   };
 
+  // Typing clears the error, so this scans once per blocked Continue rather than on every render.
+  const offerRedaction = useMemo(
+    () => step === 0 && error !== null && containsSensitiveData(input.description),
+    [step, error, input.description],
+  );
   const progress = ((step + 1) / STEPS.length) * 100;
   const stats = statsFor(step, input, result);
   const renderChoice = (field: ChoiceField) => (
@@ -463,8 +484,15 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                     placeholder="For example: We want to compare our customer database with a partner’s records to understand which customers we share."
                   />
                 </label>
-                <div className="field-meta" id="description-help"><span>A clear sentence or two is enough. Avoid names or other identifying details.</span><span>{input.description.length} / {DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")}</span></div>
+                <div className="field-meta" id="description-help"><span>Describe the kinds of data, not actual records. Names, contact details, birth dates, ID numbers, and passwords are not accepted.</span><span>{input.description.length} / {DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")}</span></div>
                 {error && <p className="error" id="description-error" role="alert">{error}</p>}
+                {offerRedaction && (
+                  <div className="actions">
+                    <button className="secondary" type="button" onClick={() => update("description", redactSensitiveData(input.description))}>
+                      Replace them with placeholders
+                    </button>
+                  </div>
+                )}
 
                 <div
                   className={dragging ? "dropzone dragging" : "dropzone"}
