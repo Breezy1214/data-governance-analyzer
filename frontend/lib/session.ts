@@ -1,4 +1,5 @@
 import { AssessmentInput, isAssessmentInput } from "./assessment";
+import { redactSensitiveData } from "./sensitive-data";
 
 /** v1.0 retains nothing: the draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16, docs/data-handling.md). */
 
@@ -26,8 +27,13 @@ export function purgeLegacyDrafts(storage?: Storage): void {
   });
 }
 
+/** Personal values typed into the description are never written to storage, only their placeholders. */
+function withoutSensitiveData(input: AssessmentInput): AssessmentInput {
+  return { ...input, description: redactSensitiveData(input.description) };
+}
+
 export function saveDraft(input: AssessmentInput, storage?: Storage, now = Date.now()): void {
-  const draft: StoredDraft = { savedAt: now, input };
+  const draft: StoredDraft = { savedAt: now, input: withoutSensitiveData(input) };
   safely(() => (storage ?? window.sessionStorage).setItem(DRAFT_KEY, JSON.stringify(draft)));
 }
 
@@ -41,7 +47,7 @@ export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput 
       clearDraft(storage);
       return null;
     }
-    return draft.input;
+    return withoutSensitiveData(draft.input);
   } catch {
     clearDraft(storage);
     return null;

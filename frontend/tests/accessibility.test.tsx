@@ -156,9 +156,23 @@ describe("assessment flow accessibility", () => {
     expect(signal.aborted).toBe(true);
   });
 
-  it("has no axe violations on the description step", async () => {
+  it("blocks personal details in the description and offers to replace them", async () => {
     const { container } = render(<AssessmentWizard />);
+    describeUseCase("Compare Maria Garcia's records (maria@example.com, DOB 04/12/1979) with our partner.");
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/a person's name, an email address and a date of birth/i);
+    expect(alert.textContent).not.toContain("maria@example.com");
+    expect(screen.getByRole("heading", { name: /what are you proposing/i })).toBeTruthy();
+    await waitFor(() => expect(window.sessionStorage.getItem(DRAFT_KEY)).toContain("[email]"));
+    expect(window.sessionStorage.getItem(DRAFT_KEY)).not.toContain("maria@example.com");
     await expectNoViolations(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /replace them with placeholders/i }));
+    const field = screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement;
+    expect(field.value).toBe("Compare [name]'s records ([email], DOB [date of birth]) with our partner.");
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(screen.getByRole("heading", { name: /how will the data be handled/i })).toBeTruthy();
   });
 
   it("offers a skip link to the assessment", () => {

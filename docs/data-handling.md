@@ -34,6 +34,26 @@ password's SHA-1 hash leave the server.
 
 The API schema does not accept `description`; it remains exclusively in the browser for the on-screen record and local PDF report.
 
+### Personal details in the description
+
+The description must describe kinds of data ("customer email addresses"), not contain them. `frontend/lib/sensitive-data.ts` screens it for names, email addresses, phone numbers, dates of birth, ages, street addresses and postcodes, Social Security and other government ID numbers, payment card and bank account numbers, labelled ID and account numbers, IP and device/advertising IDs, and passwords, keys and access tokens. Text is normalized first (NFKC, invisible characters removed, dash variants unified) so look-alike characters cannot slip a value past the checks.
+
+- **Continue is blocked** while the description contains any of these. The message names only the kinds found, never the values, and offers to replace them with placeholders such as `[email]`.
+- **Imported documents** are redacted before the text reaches the form, and the person is told placeholders were inserted.
+- **The draft in `sessionStorage`** only ever holds the redacted description, and drafts saved before screening are redacted on load.
+- **The PDF report** redacts the use case again as a last line of defence.
+
+Pattern-based values (emails, numbers, IDs, keys) are caught reliably. Names are found three ways, so they don't depend on a first-name list that favours some cultures over others:
+
+- compromise's name lexicon and cues such as "customer …", "Dr. …", "my wife …" and "Name: …";
+- any capitalized word that is not common English (SCOWL size 50, via `wordlist-english`), a known organization, product or place, or an industry term (`frontend/lib/known-words.ts`), together with any first or last name beside it;
+- lower-case names in positions that take a person ("my husband …", "ask …", "send it to …", "submitted by …", "…'s records"), and any two non-English lower-case words together ("adaeze okeke");
+- names in ALL CAPS, in pasted table rows (lines of short fields; prose with commas is not a table), in lists next to another name ("Chidinma, segun and ngozi"), and words in scripts without capital letters (Chinese, Arabic, Devanagari and others). @handles are caught as their own kind.
+
+A capitalized phrase is left alone when it names an organization ("Grant Thornton"), a product written in CamelCase ("PostHog"), a programme, team or place ("Wellness Program", "RevOps teams", "Ikeja and Lekki stores", "in Lagos and Abuja"), a system introduced by a system verb ("sync with Airtable"), or a brand the text itself describes ("Company 1: Airtasker", "Smartsheet, a saas company", "AWS Graviton"). Once a word is shown to be a brand, every mention of it is left alone. An unfamiliar brand with no such context can still be flagged; the person can then describe it generically ("our CRM vendor").
+
+`frontend/tests/fixtures/name-detection.json` holds the sentences used to measure this: every listed name must be redacted and no safe sentence flagged. Add a sentence there whenever a miss or a false block is reported. A single lower-case name with no cue before it ("forward to segun later" is caught; "segun approved it" is not) can still pass, so the help text continues to ask people to leave names out.
+
 ## Data flow
 
 1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.

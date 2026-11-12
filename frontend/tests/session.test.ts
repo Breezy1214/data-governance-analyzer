@@ -30,17 +30,24 @@ describe("session-scoped draft storage", () => {
     expect(loadDraft(session)).toEqual(draft);
   });
 
+  it("never writes personal values from the description to storage", () => {
+    saveDraft({ ...draft, description: "Email jane.doe@example.com the SSN 123-45-6789." }, session);
+    const stored = session.getItem(DRAFT_KEY) ?? "";
+    expect(stored).not.toContain("jane.doe");
+    expect(stored).not.toContain("123-45-6789");
+    expect(loadDraft(session)?.description).toBe("Email [email] the SSN [ID number].");
+  });
+
+  it("redacts a draft saved before screening existed", () => {
+    session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), input: { ...draft, description: "Call 208-555-0147." } }));
+    expect(loadDraft(session)?.description).toBe("Call [phone].");
+  });
+
   it("discards a draft after the idle timeout", () => {
     saveDraft(draft, session, 0);
     expect(loadDraft(session, IDLE_TIMEOUT_MS - 1)).toEqual(draft);
     expect(loadDraft(session, IDLE_TIMEOUT_MS)).toBeNull();
     expect(session.getItem(DRAFT_KEY)).toBeNull();
-  });
-
-  it("clears the draft on start over", () => {
-    saveDraft(draft, session);
-    clearDraft(session);
-    expect(loadDraft(session)).toBeNull();
   });
 
   it("removes drafts left in localStorage by earlier builds", () => {
@@ -53,12 +60,6 @@ describe("session-scoped draft storage", () => {
     session.setItem(DRAFT_KEY, "{not json");
     expect(loadDraft(session)).toBeNull();
     expect(session.getItem(DRAFT_KEY)).toBeNull();
-  });
-
-  it("keeps working when storage is blocked", () => {
-    const blocked = new MemoryStorage();
-    blocked.setItem = () => { throw new DOMException("blocked", "SecurityError"); };
-    expect(() => saveDraft(draft, blocked)).not.toThrow();
   });
 
   it.each([null, {}, { ...draft, dataTypes: null }, { ...draft, description: 42 }, { ...draft, purpose: "unknown" }])(

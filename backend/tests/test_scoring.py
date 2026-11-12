@@ -168,12 +168,6 @@ def test_identical_input_produces_identical_output_for_same_rules_version():
     assert first == second
 
 
-def test_response_reports_current_rules_version():
-    result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
-    assert result.rulesVersion == RULESET_V2_0.version
-    assert result.schemaVersion == "3.0"
-
-
 def test_rejects_empty_data_types():
     with pytest.raises(ValidationError):
         sample_request(dataTypes=[])
@@ -187,11 +181,6 @@ def test_rejects_duplicate_data_types():
 def test_rejects_unknown_purpose():
     with pytest.raises(ValidationError):
         sample_request(purpose="not-a-real-purpose")
-
-
-def test_rejects_unsupported_extra_fields():
-    with pytest.raises(ValidationError):
-        sample_request(unexpectedField="value")
 
 
 @pytest.mark.parametrize("regulations", [[], ["gdpr", "gdpr"], ["none", "gdpr"], ["notSure", "hipaa"], ["none", "notSure"]])

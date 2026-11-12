@@ -1,0 +1,464 @@
+{
+ "_note": "Sentences used to measure name detection. Every listed name must be redacted and no safe sentence flagged. Add a sentence whenever a miss or a false block is reported. Names are invented or common.",
+ "names": [
+  {
+   "text": "the account belongs to segun",
+   "names": [
+    "segun"
+   ]
+  },
+  {
+   "text": "send it to okeke",
+   "names": [
+    "okeke"
+   ]
+  },
+  {
+   "text": "ask chiamaka to review the export",
+   "names": [
+    "chiamaka"
+   ]
+  },
+  {
+   "text": "email bolaji about the refund",
+   "names": [
+    "bolaji"
+   ]
+  },
+  {
+   "text": "the claim was submitted by uchenna",
+   "names": [
+    "uchenna"
+   ]
+  },
+  {
+   "text": "segun's records are incomplete",
+   "names": [
+    "segun"
+   ]
+  },
+  {
+   "text": "CHARLES OKAFOR, 12 ELM STREET",
+   "names": [
+    "CHARLES",
+    "OKAFOR"
+   ]
+  },
+  {
+   "text": "Customer list: ADAEZE OKONKWO, TUNDE BAKARE",
+   "names": [
+    "ADAEZE",
+    "OKONKWO",
+    "TUNDE",
+    "BAKARE"
+   ]
+  },
+  {
+   "text": "C. Nwosu approved the transfer.",
+   "names": [
+    "Nwosu"
+   ]
+  },
+  {
+   "text": "Approved by Okoro, J.",
+   "names": [
+    "Okoro"
+   ]
+  },
+  {
+   "text": "Reach her on Instagram at @ada_okafor.",
+   "names": [
+    "ada_okafor"
+   ]
+  },
+  {
+   "text": "Records for 王伟 and 李娜 are in the file.",
+   "names": [
+    "王伟",
+    "李娜"
+   ]
+  },
+  {
+   "text": "The patient محمد الأحمد was admitted.",
+   "names": [
+    "محمد",
+    "الأحمد"
+   ]
+  },
+  {
+   "text": "Иван Петров asked for deletion.",
+   "names": [
+    "Иван",
+    "Петров"
+   ]
+  },
+  {
+   "text": "Chidinma, segun and ngozi are on the list.",
+   "names": [
+    "Chidinma",
+    "segun",
+    "ngozi"
+   ]
+  },
+  {
+   "text": "name,email\nadaeze okeke,ada@example.com",
+   "names": [
+    "adaeze",
+    "okeke"
+   ]
+  },
+  {
+   "text": "obinna eze;nkem obi;tolu ade",
+   "names": [
+    "obinna",
+    "nkem",
+    "tolu"
+   ]
+  },
+  {
+   "text": "Ọlá Adébáyọ̀ signed the consent form.",
+   "names": [
+    "Ọlá",
+    "Adébáyọ̀"
+   ]
+  },
+  {
+   "text": "We will match María José Fernández against the partner list.",
+   "names": [
+    "María",
+    "José",
+    "Fernández"
+   ]
+  },
+  {
+   "text": "Ludwig van der Berg and Ana da Silva opted in.",
+   "names": [
+    "Ludwig",
+    "Berg",
+    "Ana",
+    "Silva"
+   ]
+  },
+  {
+   "text": "Share Mr. adewale's file with the auditor.",
+   "names": [
+    "adewale"
+   ]
+  },
+  {
+   "text": "Ngozi-Okafor's account was closed.",
+   "names": [
+    "Ngozi-Okafor"
+   ]
+  },
+  {
+   "text": "The donor, Precious Eze, gave consent.",
+   "names": [
+    "Precious",
+    "Eze"
+   ]
+  },
+  {
+   "text": "Grace and Emeka from the billing list both complained.",
+   "names": [
+    "Grace",
+    "Emeka"
+   ]
+  },
+  {
+   "text": "Kwabena Owusu-Ansah moved to Accra.",
+   "names": [
+    "Kwabena",
+    "Owusu-Ansah"
+   ]
+  },
+  {
+   "text": "Please refund amara for the duplicate charge.",
+   "names": [
+    "amara"
+   ]
+  },
+  {
+   "text": "The order was placed by ikenna last night.",
+   "names": [
+    "ikenna"
+   ]
+  },
+  {
+   "text": "Forward the invoice to Mrs. Olatunji.",
+   "names": [
+    "Olatunji"
+   ]
+  },
+  {
+   "text": "We need to delete everything about Zainab Yusuf.",
+   "names": [
+    "Zainab",
+    "Yusuf"
+   ]
+  },
+  {
+   "text": "CHIOMA NNADI requested a copy of her data.",
+   "names": [
+    "CHIOMA",
+    "NNADI"
+   ]
+  },
+  {
+   "text": "Kemi, Femi and Dayo are the pilot users.",
+   "names": [
+    "Kemi",
+    "Femi",
+    "Dayo"
+   ]
+  },
+  {
+   "text": "id,name\n1,olumide bankole\n2,ese ighodaro",
+   "names": [
+    "olumide",
+    "bankole",
+    "ighodaro"
+   ]
+  },
+  {
+   "text": "Contact @tobi.dev on Twitter about the leak.",
+   "names": [
+    "tobi.dev"
+   ]
+  },
+  {
+   "text": "The policy holder is Mr Adeyinka Coker.",
+   "names": [
+    "Adeyinka",
+    "Coker"
+   ]
+  },
+  {
+   "text": "Patient: Nnamdi Azikiwe-Obi, ward 4.",
+   "names": [
+    "Nnamdi",
+    "Azikiwe-Obi"
+   ]
+  },
+  {
+   "text": "Records of 佐藤健 must be removed.",
+   "names": [
+    "佐藤健"
+   ]
+  },
+  {
+   "text": "Our customer Jürgen Müller complained twice.",
+   "names": [
+    "Jürgen",
+    "Müller"
+   ]
+  },
+  {
+   "text": "Share Sipho Ndlovu's purchases with the bank.",
+   "names": [
+    "Sipho",
+    "Ndlovu"
+   ]
+  },
+  {
+   "text": "the subscriber chukwudi okafor cancelled",
+   "names": [
+    "chukwudi",
+    "okafor"
+   ]
+  },
+  {
+   "text": "Esther and Blessing Okon moved to Lagos.",
+   "names": [
+    "Esther",
+    "Blessing",
+    "Okon"
+   ]
+  },
+  {
+   "text": "The files belong to Chidinma Okeke and Tunde Bakare.",
+   "names": [
+    "Chidinma",
+    "Okeke",
+    "Tunde",
+    "Bakare"
+   ]
+  },
+  {
+   "text": "Send it to Okonkwo.",
+   "names": [
+    "Okonkwo"
+   ]
+  },
+  {
+   "text": "Chinedu gave consent.",
+   "names": [
+    "Chinedu"
+   ]
+  },
+  {
+   "text": "Ifeoma Chukwu, Oluwaseun Adeyemi and Aigerim Bekova are in the sample.",
+   "names": [
+    "Ifeoma",
+    "Chukwu",
+    "Oluwaseun",
+    "Adeyemi",
+    "Aigerim",
+    "Bekova"
+   ]
+  },
+  {
+   "text": "Contact Ananya Iyer about the match.",
+   "names": [
+    "Ananya",
+    "Iyer"
+   ]
+  },
+  {
+   "text": "Siobhan O'Connor and Mary McDonald approved it.",
+   "names": [
+    "Siobhan",
+    "Connor",
+    "Mary",
+    "McDonald"
+   ]
+  },
+  {
+   "text": "The Okeke family records are attached.",
+   "names": [
+    "Okeke"
+   ]
+  },
+  {
+   "text": "my wife ngozi will review it",
+   "names": [
+    "ngozi"
+   ]
+  },
+  {
+   "text": "Records for Chidinma and her husband, my wife ngozi, and Tunde.",
+   "names": [
+    "Chidinma",
+    "ngozi",
+    "Tunde"
+   ]
+  },
+  {
+   "text": "my name is tunde bakare",
+   "names": [
+    "tunde",
+    "bakare"
+   ]
+  },
+  {
+   "text": "This is for me (Emeka) and my husband (Kelechi).",
+   "names": [
+    "Emeka",
+    "Kelechi"
+   ]
+  },
+  {
+   "text": "Chinedu, an engineer at a software company, approved it.",
+   "names": [
+    "Chinedu"
+   ]
+  },
+  {
+   "text": "Share it with Okafor, a vendor contact.",
+   "names": [
+    "Okafor"
+   ]
+  },
+  {
+   "text": "Company 1: Airtasker. Contact Tunde Bakare at Airtasker about the export.",
+   "names": [
+    "Tunde",
+    "Bakare"
+   ]
+  },
+  {
+   "text": "Customer\nChinedu Okafor",
+   "names": [
+    "Chinedu",
+    "Okafor"
+   ]
+  },
+  {
+   "text": "Ngozi, a nurse, moved the job to AWS Graviton.",
+   "names": [
+    "Ngozi"
+   ]
+  }
+ ],
+ "safe": [
+  "Send events to PostHog and sync segments with HubSpot.",
+  "We will export daily totals to BigQuery for the finance team.",
+  "Integrate the CRM with Zapier to route new leads.",
+  "Upload the hashed file to the partner's SFTP server.",
+  "The Sales Ops and RevOps teams will own the pipeline report.",
+  "Our KPI dashboard tracks churn, NPS and CSAT by region.",
+  "HIPAA and GDPR reviews are complete for the ETL job.",
+  "We use OKRs to track the data quality project.",
+  "Email the summary to the compliance team every Friday.",
+  "Ask the vendor to delete the files after 30 days.",
+  "Data from Kano and Onitsha branches will be aggregated.",
+  "The ML Ops group retrains the model monthly.",
+  "We want to sync with Airtable and Notion for planning.",
+  "Store raw events in S3 and query them with Athena.",
+  "Contact the data protection officer before launch.",
+  "The audit was requested by the board.",
+  "Share totals with partners; no rows leave our warehouse.",
+  "Merchant names, MCC codes and transaction amounts will be shared.",
+  "The model uses age bands, region and tenure as features.",
+  "Our team in Lagos will review results with the bank.",
+  "We will sync orders from WooCommerce into our warehouse each night.",
+  "The Risk team uses Sardine and Unit21 for fraud scoring.",
+  "Partners in Ilorin and Owerri will receive monthly totals.",
+  "Store transcripts in Pinecone and search them with LangChain.",
+  "The Growth Ops squad will A/B test the onboarding flow.",
+  "Survey results feed a Looker Studio report for the board.",
+  "Integrate Intercom with our ticketing workflow to tag complaints.",
+  "Raw clickstream lands in Kinesis before the nightly batch.",
+  "We will compare cohorts by signup month and plan tier.",
+  "The Payments squad reconciles Paystack settlements daily.",
+  "Use Twilio Verify for one-time passcodes at login.",
+  "Aggregated footfall from Ikeja and Lekki stores goes to the landlord.",
+  "Send the anonymized extract to the research partner via SFTP.",
+  "Our Data Platform team owns the Snowplow pipeline.",
+  "Ask the vendor for their SOC 2 report before onboarding.",
+  "We want to share aggregated sales figures with Paystack and Flutterwave.",
+  "The Claims Review board in Kano will see only de-identified records.",
+  "Our partner in Port Harcourt will receive hashed phone numbers.",
+  "We plan to move the Member Portal from Heroku to Google Cloud Run.",
+  "Analysts will use Power BI to report churn by region.",
+  "The Growth team wants to sync Braze segments with Snapchat Ads.",
+  "Customer support transcripts will be summarized with Claude before review.",
+  "We will run identity resolution in AWS Clean Rooms with a retail partner.",
+  "Survey answers from Ibadan and Kaduna clinics will be pooled.",
+  "Sales Ops will enrich leads using ZoomInfo and Apollo.",
+  "The Benefits team shares enrollment files with Aetna and Cigna.",
+  "We want to forecast demand using Shopify orders and Stripe payouts.",
+  "Marketing will measure reach with Meta Conversions API.",
+  "The Risk Engine flags transactions above the threshold for manual review.",
+  "Store managers in Soweto and Durban will see weekly dashboards.",
+  "Product Analytics will track feature usage in PostHog.",
+  "Payments are reconciled nightly between Moniepoint and our ledger.",
+  "We will pilot the Smart Pricing model with three franchise partners.",
+  "Partner data from Safaricom will be matched against our subscriber base.",
+  "The Trust and Safety team reviews flagged uploads in Hive.",
+  "We send hashed emails to LiveRamp and Experian, store them in Snowflake and Databricks, and report in Tableau.",
+  "Our Internal Analytics team in Lagos and Abuja will run the Onboarding Survey for new members.",
+  "Retail partners in Nairobi, Accra and Enugu will receive aggregated weekly sales.",
+  "The Wellness Program shares Fitbit step counts with our Benefits Administration vendor.",
+  "Finance will reconcile Plaid transactions against QuickBooks ledgers each quarter.",
+  "We combine Nielsen panels with Comscore data to measure TV reach.",
+  "The Mobile App sends crash logs and device IDs to Firebase and Sentry.",
+  "Patient intake forms from Epic will be joined with claims from Medicaid for the Population Health study.",
+  "Data Science will build a Churn Prediction model using Amplitude and Mixpanel events.",
+  "Customer Stories\n\nImagine you are a consultant hired by AWS to find out how companies use their products.",
+  "Company 1: Airtasker\n\nAirtasker, an Australian online marketplace, needed to keep infrastructure costs low.",
+  "Smartsheet, a saas company, moved its Lambda functions to Graviton (arm64) processors.",
+  "It runs on AWS Graviton processors, supported by Amazon SQS.\nBenefits include cost savings, scalability, improved performance, or operational efficiency.",
+  "They used Amazon EKS and the Karpenter autoscaler to shift workloads."
+ ]
+}

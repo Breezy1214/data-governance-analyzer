@@ -1,4 +1,5 @@
 import { DESCRIPTION_MAX_LENGTH } from "./assessment";
+import { scanSensitiveData } from "./sensitive-data";
 
 /**
  * Document import for the describe step (SCRUM-23).
@@ -55,6 +56,8 @@ export type ImportedDocument = {
   fileName: string;
   text: string;
   truncated: boolean;
+  /** Personal or confidential values were replaced with placeholders before the text reached the form. */
+  redacted: boolean;
 };
 
 /** Source text read so far, and whether the file holds more that was skipped. */
@@ -139,9 +142,12 @@ export async function extractDocumentText(file: File): Promise<ImportedDocument>
     );
   }
 
+  // Redact before trimming to length, so a value cut in half at the limit is still caught whole.
+  const { findings, redacted: clean } = scanSensitiveData(text);
   return {
     fileName: file.name,
-    text: text.slice(0, DESCRIPTION_MAX_LENGTH),
-    truncated: extracted.more || text.length > DESCRIPTION_MAX_LENGTH,
+    text: clean.slice(0, DESCRIPTION_MAX_LENGTH),
+    truncated: extracted.more || clean.length > DESCRIPTION_MAX_LENGTH,
+    redacted: findings.length > 0,
   };
 }

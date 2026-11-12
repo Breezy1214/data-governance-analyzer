@@ -34,6 +34,16 @@ describe("document import", () => {
     expect(imported.text).toBe("We want to share customer emails with a partner.");
     expect(imported.fileName).toBe("use-case.txt");
     expect(imported.truncated).toBe(false);
+    expect(imported.redacted).toBe(false);
+  });
+
+  it("replaces personal values in an imported document before they reach the form", async () => {
+    const imported = await extractDocumentText(
+      fileFrom("export.csv", "name,email,dob\nJane Doe,jane@example.com,1988-03-14\nCustomer Ngozi Adeyemi,ngozi@example.org,1990-07-04"),
+    );
+    expect(imported.redacted).toBe(true);
+    expect(imported.text).not.toMatch(/jane@|ngozi@|1988|1990|Adeyemi|Jane Doe/);
+    expect(imported.text).toContain("[email]");
   });
 
   it("extracts text from a PDF", async () => {

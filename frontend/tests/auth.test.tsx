@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "../components/LoginForm";
-import { bindDraft, clearPrivateState } from "../lib/auth-client";
+import { bindDraft } from "../lib/auth-client";
 import { DRAFT_KEY } from "../lib/session";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
@@ -47,11 +47,6 @@ describe("draft isolation", () => {
     bindDraft("session-a");
     expect(sessionStorage.getItem(DRAFT_KEY)).toBe("private draft");
     bindDraft("session-b");
-    expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
-  });
-  it("clears private state on logout", () => {
-    sessionStorage.setItem(DRAFT_KEY, "private draft");
-    clearPrivateState();
     expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 });

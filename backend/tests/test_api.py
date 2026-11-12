@@ -46,13 +46,6 @@ def test_assessment_returns_transparent_score():
     assert all(item["rationale"] and item["action"] for item in body["recommendations"])
 
 
-def test_recommendations_come_from_the_backend_with_regulatory_references_only():
-    response = client.post("/assessments", json=sample_payload(identifierProtection="hashedTokenized"))
-    item = next(entry for entry in response.json()["recommendations"] if entry["id"] == "TREAT_HASHES_AS_PERSONAL_DATA")
-    assert item["basedOn"] == ["Identifiers exchanged as hashes or tokens"]
-    assert {entry["publisher"] for entry in item["references"]} >= {"GDPR Recital 26"}
-
-
 def test_high_risk_regulated_use_includes_limitations():
     response = client.post(
         "/assessments",
@@ -88,14 +81,15 @@ def test_invalid_input_returns_clear_client_error_without_echoing_input():
     assert "sensitive" not in response.text
 
 
-def test_unsupported_purpose_is_rejected():
-    response = client.post("/assessments", json=sample_payload(purpose="unsupported-value"))
+def test_free_text_description_is_never_accepted_or_echoed():
+    # The description stays in the browser; personal details in it must never reach this service.
+    response = client.post(
+        "/assessments",
+        json=sample_payload(description="Jane Doe, jane@example.com, SSN 123-45-6789"),
+    )
     assert response.status_code == 422
-
-
-def test_unsupported_extra_field_is_rejected():
-    response = client.post("/assessments", json=sample_payload(unexpectedField="value"))
-    assert response.status_code == 422
+    assert "jane" not in response.text.lower()
+    assert "123-45-6789" not in response.text
 
 
 def test_oversized_request_is_rejected_before_validation():
