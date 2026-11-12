@@ -89,6 +89,13 @@ Anyone can create an account at `/signup`. In Supabase Auth:
    - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
 4. Keep "Confirm email" on and set the minimum password length to 15.
 
+## Sample assessment (demo mode)
+
+`/demo` lets anyone try three sample scenarios without an account. It scores through the public
+`POST /demo/assessments` endpoint, saves nothing, and keeps no draft in the browser. The backend
+rate-limits it per visitor and overall (`DEMO_RATE_PER_CLIENT`, `DEMO_RATE_TOTAL`, per minute).
+Scenarios live in `frontend/lib/demo-scenarios.json`; backend tests check each one still scores at its stated level.
+
 ## Recommendations
 
 Assessments use API schema 3.0, [rubric v2.0](docs/risk-scoring-rubric-v2.0.md), and

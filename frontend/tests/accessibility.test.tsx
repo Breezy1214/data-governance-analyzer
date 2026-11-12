@@ -1,12 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
-import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } from "../components/AccountForms";
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
+import { expectNoViolations } from "./axe";
 
 /**
  * Accessibility checks for the assessment flow (SCRUM-17).
@@ -14,19 +14,6 @@ import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-
  * axe-core catches the machine-checkable WCAG failures. Colour contrast
  * cannot be judged in jsdom, so it is excluded here.
  */
-
-const AXE_OPTIONS: axe.RunOptions = {
-  runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
-  rules: { "color-contrast": { enabled: false } },
-};
-
-async function expectNoViolations(container: HTMLElement) {
-  const results = await axe.run(container, AXE_OPTIONS);
-  const summary = results.violations.map(
-    (violation) => `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
-  );
-  expect(summary).toEqual([]);
-}
 
 function describeUseCase(description = "Share loyalty member emails with a partner brand for campaign measurement.") {
   fireEvent.change(screen.getByLabelText(/use-case description/i), { target: { value: description } });

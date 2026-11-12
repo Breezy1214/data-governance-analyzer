@@ -51,6 +51,11 @@ const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = [
   { level: "HIGH", label: "High", range: `${mediumMax + 1}–100` },
 ];
 const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
+const ASSESSMENT_ERRORS: Record<number, string> = {
+  422: "The assessment service could not accept these answers. Review them and try again.",
+  429: "Too many assessments were requested in the last minute. Wait a minute, then try again.",
+};
+const ASSESSMENT_UNAVAILABLE = "The assessment service is unavailable. Your answers are still in this tab—please try again.";
 const DRAFT_SAVE_DELAY_MS = 400;
 
 function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
@@ -106,7 +111,7 @@ function ReferenceList({ items }: { items: Reference[] }) {
   );
 }
 
-type Stat = { title: string; badge: string; value: string | number; unit?: string; detail: React.ReactNode };
+export type Stat = { title: string; badge: string; value: string | number; unit?: string; detail: React.ReactNode };
 
 function StatCard({ title, badge, value, unit, detail }: Stat) {
   return (
@@ -121,12 +126,15 @@ function StatCard({ title, badge, value, unit, detail }: Stat) {
 const INTRO_STATS: Stat[] = [
   { title: "Questions", badge: "Step 2", value: QUESTION_COUNT, detail: <>About data, <b>access</b> and use</> },
   { title: "Risk score", badge: "Step 3", value: "0–100", detail: <>Across <b>{RISK_BANDS.length}</b> risk bands</> },
+];
+
+const PRIVACY_STATS: Stat[] = [
   { title: "Draft retention", badge: "This tab", value: IDLE_MINUTES, unit: "min", detail: <>Cleared when <b>idle</b></> },
   { title: "Answers stored", badge: "Private", value: 0, detail: <>Answers are <b>scored, not stored</b></> },
 ];
 
-function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null): Stat[] {
-  if (step === 0) return INTRO_STATS;
+function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null, privacyStats: Stat[]): Stat[] {
+  if (step === 0) return [...INTRO_STATS, ...privacyStats];
   if (step === 1) {
     const answers = CHOICE_FIELDS.map((field) => input[field]);
     // The intended use always has a value, so it counts as answered.
@@ -177,12 +185,25 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
+/** Fills every answer, then opens the questions so they can be reviewed before scoring. */
+export type Prefill = (input: AssessmentInput, label: string) => void;
+
+export function AssessmentWizard({
+  account, draftOwner, onUnauthorized, endpoint, keepDrafts = true, privacyStats = PRIVACY_STATS, intro: Intro,
+}: {
   account?: React.ReactNode;
   draftOwner?: string;
   onUnauthorized?: () => void;
+  /** Where answers are scored; defaults to the signed-in endpoint. */
+  endpoint?: string;
+  /** When false, nothing is read from or written to this tab's draft storage. */
+  keepDrafts?: boolean;
+  privacyStats?: Stat[];
+  /** Rendered above the description, with a way to prefill the assessment. */
+  intro?: React.ComponentType<{ prefill: Prefill }>;
 } = {}) {
   const [step, setStep] = useState(0);
+  const [sample, setSample] = useState<string | null>(null);
   const [maxReached, setMaxReached] = useState(0);
   const [input, setInput] = useState<AssessmentInput>(EMPTY_INPUT);
   const [result, setResult] = useState<AssessmentResult | null>(null);
@@ -218,15 +239,17 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     cancelPendingWork();
     setInput(EMPTY_INPUT);
     setResult(null);
+    setSample(null);
     setStep(0);
     setMaxReached(0);
     setError(null);
     setReportError(null);
     setImportStatus(null);
-    clearDraft();
-  }, [cancelPendingWork]);
+    if (keepDrafts) clearDraft();
+  }, [cancelPendingWork, keepDrafts]);
 
   useEffect(() => {
+    if (!keepDrafts) return;
     purgeLegacyDrafts();
     if (draftOwner) bindDraft(draftOwner);
     const restored = loadDraft();
@@ -236,11 +259,11 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
       setDraftReady(true);
     }, 0);
     return () => window.clearTimeout(restoreDraft);
-  }, [draftOwner]);
+  }, [draftOwner, keepDrafts]);
 
   // Saving redacts the description, so it waits for a pause in typing instead of running on every key.
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || !keepDrafts) return;
     if (input === EMPTY_INPUT) {
       clearDraft();
       return;
@@ -252,7 +275,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
       window.clearTimeout(pending);
       window.removeEventListener("pagehide", save);
     };
-  }, [input, draftReady]);
+  }, [input, draftReady, keepDrafts]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
   useEffect(() => {
@@ -300,6 +323,14 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     setMaxReached((current) => Math.max(current, nextStep));
   };
 
+  const prefill: Prefill = (answers, label) => {
+    reset();
+    setInput(answers);
+    setSample(label);
+    setStep(1);
+    setMaxReached(1);
+  };
+
   const assess = async () => {
     if (pendingAssessment.current) return;
     const message = validateQuestions(input);
@@ -309,7 +340,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     setLoading(true);
     setError(null);
     try {
-      const response = await requestAssessment(input, controller.signal);
+      const response = await requestAssessment(input, controller.signal, endpoint);
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
       setResult(response);
       moveTo(2);
@@ -320,9 +351,8 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
         onUnauthorized?.();
         return;
       }
-      setError(failure instanceof AssessmentServiceError && failure.status === 422
-        ? "The assessment service could not accept these answers. Review them and try again."
-        : "The assessment service is unavailable. Your answers are still in this tab—please try again.");
+      const status = failure instanceof AssessmentServiceError ? failure.status : 0;
+      setError(ASSESSMENT_ERRORS[status] ?? ASSESSMENT_UNAVAILABLE);
     } finally {
       if (pendingAssessment.current === controller) {
         pendingAssessment.current = null;
@@ -393,7 +423,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     [step, error, input.description],
   );
   const progress = ((step + 1) / STEPS.length) * 100;
-  const stats = statsFor(step, input, result);
+  const stats = statsFor(step, input, result, privacyStats);
   const renderChoice = (field: ChoiceField) => (
     <ChoiceQuestion
       key={field}
@@ -471,6 +501,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
             <div className="step-panel">
               <h2 ref={mainHeading} tabIndex={-1}>What are you proposing?</h2>
               <p className="lede">Include what data is involved, who needs it, and the outcome you want.</p>
+              {Intro && <Intro prefill={prefill} />}
               <div className="card">
                 <label className="text-field" htmlFor="description">
                   <span>Use-case description <b className="badge">Required</b></span>
@@ -545,6 +576,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
             <div className="step-panel">
               <h2 ref={mainHeading} tabIndex={-1}>How will the data be handled?</h2>
               <p className="lede">Answer based on the planned operating model—not the best-case outcome.</p>
+              {sample && <p className="sample-note">Started from the sample “{sample}”. Change any answer, then select Assess risk.</p>}
 
               <div className="card">
                 <h3 className="card-title">The data</h3>

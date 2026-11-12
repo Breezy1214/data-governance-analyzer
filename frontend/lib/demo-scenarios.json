@@ -1,0 +1,74 @@
+[
+  {
+    "id": "clinic-ai-vendor",
+    "title": "Clinic shares patient records with an AI vendor",
+    "sector": "Healthcare",
+    "summary": "An outside vendor wants appointment histories to train a no-show prediction model.",
+    "expectedLevel": "HIGH",
+    "expectedScore": 86,
+    "input": {
+      "description": "A 40-person outpatient clinic wants to send patient appointment histories, contact phone numbers and visit reasons to an outside software vendor so the vendor can train an AI model that predicts missed appointments. The vendor would receive readable records, host them on its own platform and keep copies after the project ends.",
+      "dataTypes": ["health", "names", "phone"],
+      "purpose": "ai",
+      "regulations": ["hipaa"],
+      "participants": "onePartner",
+      "environmentControl": "partner",
+      "identifierProtection": "cleartext",
+      "custodyChange": "yes",
+      "reusableKeys": "no",
+      "retainedArtifacts": "yes",
+      "smallResults": "no",
+      "combined": "no",
+      "secondaryUse": "no",
+      "identifierConsistency": "yes"
+    }
+  },
+  {
+    "id": "retail-card-partner",
+    "title": "Retailer matches customers with a card partner",
+    "sector": "Retail",
+    "summary": "Two companies find shared customers in a clean room to plan a joint loyalty offer.",
+    "expectedLevel": "MEDIUM",
+    "expectedScore": 54,
+    "input": {
+      "description": "A retailer wants to find the customers it shares with a co-branded credit card partner so both companies can plan a joint loyalty offer. Customer email and mailing addresses would be sent into a third-party clean room, and the same match key would be reused for future campaigns.",
+      "dataTypes": ["emails", "postal"],
+      "purpose": "overlap",
+      "regulations": ["ccpa"],
+      "participants": "onePartner",
+      "environmentControl": "thirdParty",
+      "identifierProtection": "cleanRoom",
+      "custodyChange": "no",
+      "reusableKeys": "yes",
+      "retainedArtifacts": "no",
+      "smallResults": "notSure",
+      "combined": "no",
+      "secondaryUse": "no",
+      "identifierConsistency": "notSure"
+    }
+  },
+  {
+    "id": "internal-sales-dashboard",
+    "title": "Internal dashboard of newsletter sign-ups",
+    "sector": "Analytics",
+    "summary": "A sales team counts sign-ups by region using only aggregated, internal data.",
+    "expectedLevel": "LOW",
+    "expectedScore": 14,
+    "input": {
+      "description": "Our sales team wants a monthly dashboard showing how many people joined the newsletter in each region. It is built from our own customer email list, stays in our own data warehouse, and only shows aggregated counts to internal staff.",
+      "dataTypes": ["emails"],
+      "purpose": "analytics",
+      "regulations": ["none"],
+      "participants": "internal",
+      "environmentControl": "own",
+      "identifierProtection": "notExchanged",
+      "custodyChange": "no",
+      "reusableKeys": "no",
+      "retainedArtifacts": "no",
+      "smallResults": "no",
+      "combined": "no",
+      "secondaryUse": "no",
+      "identifierConsistency": "yes"
+    }
+  }
+]

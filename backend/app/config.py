@@ -12,6 +12,8 @@ class Settings:
     max_request_bytes: int = 16 * 1024
     supabase_url: str = ""
     supabase_audience: str = "authenticated"
+    demo_rate_per_client: int = 30
+    demo_rate_total: int = 600
 
     def validate_auth(self) -> None:
         parsed = urlsplit(self.supabase_url)
@@ -29,4 +31,6 @@ class Settings:
             max_request_bytes=int(os.getenv("MAX_REQUEST_BYTES", cls.max_request_bytes)),
             supabase_url=os.getenv("SUPABASE_URL", "").rstrip("/"),
             supabase_audience=os.getenv("SUPABASE_JWT_AUDIENCE", cls.supabase_audience),
+            demo_rate_per_client=int(os.getenv("DEMO_RATE_PER_CLIENT", cls.demo_rate_per_client)),
+            demo_rate_total=int(os.getenv("DEMO_RATE_TOTAL", cls.demo_rate_total)),
         )

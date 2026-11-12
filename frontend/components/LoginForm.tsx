@@ -32,5 +32,6 @@ export function LoginForm({ expired = false }: { expired?: boolean }) {
       <button className="primary" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
       <p className="auth-note"><Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot your password?</Link></p>
     </form>
+    <p className="demo-entry"><Link href="/demo">Try a sample assessment</Link> — no account needed</p>
   </AuthShell>;
 }

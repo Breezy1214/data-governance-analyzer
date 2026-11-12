@@ -18,6 +18,7 @@ import { POST as forgotPassword } from "../app/api/forgot-password/route";
 import { POST as confirm } from "../app/api/confirm/route";
 import { POST as updatePassword } from "../app/api/update-password/route";
 import { POST as assess } from "../app/api/assessments/route";
+import { POST as assessDemo } from "../app/api/demo/assessments/route";
 import { GET as session } from "../app/api/session/route";
 import { proxy } from "../proxy";
 import { NextRequest } from "next/server";
@@ -37,9 +38,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-function request(path: string, origin = "http://localhost:3000", body: unknown = { email: "client@example.test", password: "private-password" }) {
+function request(path: string, origin = "http://localhost:3000", body: unknown = { email: "client@example.test", password: "private-password" },
+  headers: Record<string, string> = {}) {
   return new Request("http://localhost:3000/api/" + path, {
-    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...headers }, body: JSON.stringify(body),
   });
 }
 
@@ -130,6 +132,29 @@ describe("Supabase authentication routes", () => {
     const response = await assess(request("assessments"));
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ message: "Backend message" });
+  });
+
+  it("forwards public demo scoring without credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 14 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await assessDemo(request("demo/assessments", undefined, { schemaVersion: "3.0" },
+      { "X-Forwarded-For": "203.0.113.7, 10.0.0.1", Cookie: "sb-access-token=private" }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toMatch(/no-store/);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url.toString()).toBe("http://localhost:8000/demo/assessments");
+    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers.Cookie).toBeUndefined();
+    expect(options.headers["X-Demo-Client"]).toBe("203.0.113.7");
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-site demo scoring and passes rate limits through", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "rate_limited" }, { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await assessDemo(request("demo/assessments", "https://attacker.test"))).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await assessDemo(request("demo/assessments"))).status).toBe(429);
   });
 
   it("does not trust an unverified cookie session", async () => {
