@@ -436,8 +436,10 @@ function looksLikeName(candidate: string): boolean {
 /** What a possessive name owns in "Jane Doe's records" or "segun's orders". */
 const POSSESSED = String.raw`(?:records?|files?|data|details|account|history|chart|profile|information|info|address|email|phone|number|results?|claims?|purchases?|transactions?|application|case|diagnosis|orders?|payments?|refund|form)`;
 
+/** Space within a line: a cue on one line never reaches a word on the next, as after a "Customer Stories" heading. */
+const SP = String.raw`[^\S\n]`;
 const NAME_WORD = String.raw`[A-Z][a-z]+(?:['’-][A-Za-z]+)*`;
-const NAME = String.raw`${NAME_WORD}(?:\s+(?:[A-Z]\.\s+)?${NAME_WORD}){0,2}`;
+const NAME = String.raw`${NAME_WORD}(?:${SP}+(?:[A-Z]\.${SP}+)?${NAME_WORD}){0,2}`;
 const HONORIFIC = String.raw`(?:Mr|Mrs|Ms|Mx|Miss|Dr|Prof|Professor|Sir|Dame|Madam|Mme|Mlle|Herr|Frau|Sr|Sra|Srta)`;
 const ROLE_WORDS = [
   "customer", "client", "patient", "member", "employee", "user", "student", "applicant", "subscriber", "resident",
@@ -471,11 +473,11 @@ function isOrdinaryWord({ text, tags }: ParsedTerm): boolean {
   return tags.some((tag) => NOT_NAME_TAGS.has(tag)) || isKnownWord(text.replace(/[^A-Za-z'-]/g, ""));
 }
 
-/** Where the name starts when a capitalized run opens with an ordinary word, as in "Compare Jane Doe's". */
-function nameStart(text: string, start: number, end: number): number {
+/** Where the name starts past leading ordinary words ("Compare Jane Doe's"); null when all are ordinary ("Customer Stories"). */
+function nameStart(text: string, start: number, end: number): number | null {
   const terms = parse(text).terms.filter((term) => term.start >= start && term.start < end);
-  let index = 0;
-  while (index < terms.length - 1 && isOrdinaryWord(terms[index])) index += 1;
+  const index = terms.findIndex((term) => !isOrdinaryWord(term));
+  if (index === -1) return null;
   return index === 0 ? start : terms[index].start;
 }
 
@@ -484,19 +486,19 @@ function nameDetector(pattern: RegExp): Detector {
     const span = match.indices?.[1];
     if (!span) return;
     const start = nameStart(text, span[0], span[1]);
-    if (looksLikeName(text.slice(start, span[1]))) claims.add("name", start, span[1]);
+    if (start !== null && looksLikeName(text.slice(start, span[1]))) claims.add("name", start, span[1]);
   });
 }
 
 const nameCues: Detector[] = [
-  nameDetector(new RegExp(String.raw`\b${HONORIFIC}\.?\s+(${NAME})`, "gd")),
-  nameDetector(new RegExp(String.raw`\b(?:${anyCaseWords(["full", "first", "last", "maiden", "given", "family"])}\s+)?${anyCaseWords(["name", "surname"])}\s*(?:is|was|:|=|-)\s*(${NAME})`, "gd")),
-  nameDetector(new RegExp(String.raw`\b${anyCaseWords(["named", "called", String.raw`known\s+as`])}\s+(${NAME})`, "gd")),
-  nameDetector(new RegExp(String.raw`\b${anyCaseWords(ROLE_WORDS)}s?\s*[:,]?\s+(${NAME})`, "gd")),
+  nameDetector(new RegExp(String.raw`\b${HONORIFIC}\.?${SP}+(${NAME})`, "gd")),
+  nameDetector(new RegExp(String.raw`\b(?:${anyCaseWords(["full", "first", "last", "maiden", "given", "family"])}${SP}+)?${anyCaseWords(["name", "surname"])}${SP}*(?:is|was|:|=|-)${SP}*(${NAME})`, "gd")),
+  nameDetector(new RegExp(String.raw`\b${anyCaseWords(["named", "called", String.raw`known${SP}+as`])}${SP}+(${NAME})`, "gd")),
+  nameDetector(new RegExp(String.raw`\b${anyCaseWords(ROLE_WORDS)}s?${SP}*[:,]?${SP}+(${NAME})`, "gd")),
   // "Jane Doe's records", "Okafor's file".
   nameDetector(new RegExp(String.raw`\b(${NAME})['’]s\s+${POSSESSED}\b`, "gd")),
   // "Chinedu Okafor (born 1990)", "Jane Doe <jane@…>", "Kwame Mensah: 555…".
-  nameDetector(new RegExp(String.raw`\b(${NAME_WORD}\s+${NAME_WORD})(?=\s*(?:\(|<|,\s*(?:born|dob|age|aged|\d)))`, "gd")),
+  nameDetector(new RegExp(String.raw`\b(${NAME_WORD}${SP}+${NAME_WORD})(?=\s*(?:\(|<|,\s*(?:born|dob|age|aged|\d)))`, "gd")),
 ];
 
 /** Names compromise recognizes from its first-name and surname lexicon, minus places and organizations. */
@@ -532,7 +534,7 @@ const knownNames: Detector = (text, claims) => {
 
 /** A capitalized word in any script: "Adaeze", "O'Connor", "McDonald", "Siobhán", "Adebayo-Smith". */
 const CAPITALIZED_WORD = /(?<![\p{L}\p{M}\p{N}'’-])\p{Lu}[\p{Ll}\p{M}]+(?:\p{Lu}[\p{Ll}\p{M}]+)?(?:['’-]\p{Lu}?[\p{Ll}\p{M}]+)*(?![\p{L}\p{M}\p{N}])/gu;
-const NOT_A_PERSON_TAGS = new Set(["Organization", "Place", "Acronym", "Abbreviation", "Honorific", "Month", "WeekDay", "Date", "Holiday", "Currency", "Unit"]);
+const NOT_A_PERSON_TAGS = new Set(["Organization", "Place", "Demonym", "Acronym", "Abbreviation", "Honorific", "Month", "WeekDay", "Date", "Holiday", "Currency", "Unit"]);
 
 type Word = { start: number; end: number; unfamiliar: boolean; nameLike: boolean };
 
@@ -563,7 +565,17 @@ const THING_HEADS = new Set([
   "buckets", "database", "warehouse", "server", "servers", "instance", "plugin", "ads", "campaign", "campaigns",
   "region", "regions", "market", "markets", "site", "sites", "hub", "campus", "district", "state", "city", "area",
   "location", "locations", "depot", "tables", "events", "segments", "workflow", "workflows", "reports", "report",
+  "processor", "processors", "autoscaler", "engine", "framework", "library", "console", "chip", "chips", "instances",
+  "functions",
 ]);
+
+const ORGANIZATION_NOUN = String.raw`(?:company|marketplace|platform|provider|startup|firm|business|retailer|brand|service|app|bank|vendor|tool|software|product|website|network|agency|manufacturer|insurer|lender|chain|organi[sz]ation)`;
+/** "Company 1: Airtasker", "Vendor - Smartsheet": a label that introduces an organization. */
+const ORGANIZATION_LABEL = new RegExp(String.raw`\b${ORGANIZATION_NOUN}(?:${SP}|[#\d])*[:–-]${SP}*$`, "i");
+/** "Airtasker, an Australian online marketplace", "Smartsheet, a saas company": the text says what it is. */
+const ORGANIZATION_APPOSITIVE = new RegExp(String.raw`^,\s+(?:a|an)\s+(?:[\p{L}-]+\s+){0,3}${ORGANIZATION_NOUN}(?=\s*(?:[,.;:)]|$)|\s+(?:that|which|based|headquartered|founded|offering|providing|serving|known|focused|specializing)\b)`, "iu");
+/** The word just before a phrase is a known vendor, so the phrase is its product: "AWS Graviton", "Amazon SQS". */
+const VENDOR_BEFORE = new RegExp(String.raw`(\p{Lu}\p{L}*)${SP}+$`, "u");
 
 /** Internal capitals mark a product ("PostHog", "RevOps") unless they follow a surname prefix ("McDonald", "DeShawn"). */
 const NAME_PREFIXES = new Set(["mc", "mac", "de", "la", "le", "di", "da", "van", "von", "du", "st", "fitz", "o"]);
@@ -577,8 +589,10 @@ function namesAThingInContext(text: string, start: number, end: number): boolean
   const before = text.slice(Math.max(0, start - 80), start);
   // Look past the rest of a list for its head noun: "Ikeja and Lekki stores".
   const after = text.slice(end, end + 120).replace(REST_OF_LIST, "");
-  const next = /^\s+([\p{L}]+)/u.exec(after);
-  return SYSTEM_CONTEXT.test(before) || PLACE_CONTEXT.test(before) || (next !== null && THING_HEADS.has(next[1].toLowerCase()));
+  const next = /^\s+(?:\([^)\n]{0,30}\)\s+)?(\p{L}+)/u.exec(after);
+  return SYSTEM_CONTEXT.test(before) || PLACE_CONTEXT.test(before) || ORGANIZATION_LABEL.test(before)
+    || ORGANIZATION_APPOSITIVE.test(text.slice(end, end + 80)) || isKnownOrganization(VENDOR_BEFORE.exec(before)?.[1] ?? "")
+    || (next !== null && THING_HEADS.has(next[1].toLowerCase()));
 }
 
 function startsSentence(text: string, index: number): boolean {
@@ -590,6 +604,8 @@ function startsSentence(text: string, index: number): boolean {
  * Names outside compromise's lexicon, such as many African, Asian and Indigenous names: a capitalized word that
  * isn't known vocabulary, together with the capitalized words beside it ("Precious Eze").
  */
+const SAME_LINE_GAP = new RegExp(String.raw`^${SP}+$`);
+
 const unfamiliarNames: Detector = (text, claims) => {
   const { terms } = parse(text);
   const words: Word[] = [...text.matchAll(CAPITALIZED_WORD)].map((match) => {
@@ -599,13 +615,23 @@ const unfamiliarNames: Detector = (text, claims) => {
     const unfamiliar = !tags.some((tag) => NOT_A_PERSON_TAGS.has(tag)) && !isKnownWord(match[0]) && !isCamelCaseProduct(match[0]);
     return { start, end, unfamiliar, nameLike: unfamiliar || tags.includes("FirstName") || tags.includes("LastName") };
   });
-  let run: Word[] = [];
-  const claimRun = () => {
-    const words = run;
-    run = [];
-    if (!words.some((word) => word.unfamiliar)) return;
-    const whole = text.slice(words[0].start, words[words.length - 1].end);
-    if (isOrganization(whole) || namesAThing(whole) || namesAThingInContext(text, words[0].start, words[words.length - 1].end)) return;
+  const runs: Word[][] = [];
+  for (const word of words) {
+    const run = runs[runs.length - 1];
+    const previous = run?.[run.length - 1];
+    if (previous && SAME_LINE_GAP.test(text.slice(previous.end, word.start).replace(/^['’]s/u, ""))) run.push(word);
+    else runs.push([word]);
+  }
+  const wordOf = (word: Word) => text.slice(word.start, word.end).toLowerCase();
+  const isThing = (run: Word[]) => {
+    const whole = text.slice(run[0].start, run[run.length - 1].end);
+    return isOrganization(whole) || namesAThing(whole) || namesAThingInContext(text, run[0].start, run[run.length - 1].end);
+  };
+  const thingRuns = new Set(runs.filter((run) => run.some((word) => word.unfamiliar) && isThing(run)));
+  // A word shown to be a brand or place once ("Company 1: Airtasker") is one at every mention.
+  const things = new Set([...thingRuns].flatMap((run) => run.filter((word) => word.unfamiliar).map(wordOf)));
+  for (const words of runs) {
+    if (thingRuns.has(words) || words.every((word) => !word.unfamiliar || things.has(wordOf(word)))) continue;
     let first = words.findIndex((word) => word.nameLike);
     const last = words.findLastIndex((word) => word.nameLike);
     // Take in capitalized words before the name unless they open the sentence: "Precious Eze", but not "Contact Ananya".
@@ -616,13 +642,7 @@ const unfamiliarNames: Detector = (text, claims) => {
     }
     const [start, end] = [words[first].start, words[last].end];
     if (looksLikeName(text.slice(start, end))) claims.add("name", start, end);
-  };
-  for (const word of words) {
-    const previous = run[run.length - 1];
-    if (previous && !/^[ \t]+$/.test(text.slice(previous.end, word.start).replace(/^['’]s/u, ""))) claimRun();
-    run.push(word);
   }
-  if (run.length) claimRun();
 };
 
 const LOWER_WORD = String.raw`[\p{Ll}][\p{L}\p{M}'’-]+`;
@@ -642,13 +662,13 @@ function claimUnfamiliarWords(text: string, claims: Claims, start: number, phras
  * The name is captured in a lookahead so a cue that finds no name ("husband, my wife ngozi") doesn't swallow the next cue.
  */
 const LOWERCASE_NAME_CUE = new RegExp(
-  String.raw`(?:\b(?:(?:my|his|her|their|our|the)\s+)?${anyCaseWords(ROLE_WORDS)}|\b${anyCaseWords(["name", "surname"])}\s*(?:is|was|:)|\b${anyCaseWords(["named", "called"])}|\b[Ii]\s+am|\b[Ii]['’]m)\s*[:,]?\s+(?=([\p{Ll}][\p{L}\p{M}'’-]*(?:\s+[\p{Ll}][\p{L}\p{M}'’-]*){0,2}))`,
+  String.raw`(?:\b(?:(?:my|his|her|their|our|the)${SP}+)?${anyCaseWords(ROLE_WORDS)}|\b${anyCaseWords(["name", "surname"])}${SP}*(?:is|was|:)|\b${anyCaseWords(["named", "called"])}|\b[Ii]${SP}+am|\b[Ii]['’]m)${SP}*[:,]?${SP}+(?=([\p{Ll}][\p{L}\p{M}'’-]*(?:${SP}+[\p{Ll}][\p{L}\p{M}'’-]*){0,2}))`,
   "gdu",
 );
 
 /** Positions that take a person: "send it to okeke", "ask chiamaka", "submitted by uchenna", "Mr. adewale". */
 const PERSON_POSITION = new RegExp(
-  String.raw`(?:\b(?:send|give|forward|email|mail|pass|hand|assign|show|sell|pay|refund|transfer|deliver|report|write|reply|sent|gave|given|forwarded|emailed|mailed|handed|assigned|showed|shown|sold|paid|refunded|transferred|delivered|reported|wrote|written|replied|belongs?|belonged)\b(?:\s+[\p{L}'’-]+){0,3}?\s+to|\b(?:ask|asked|email|emailed|call|called|phone|phoned|text|texted|tell|told|notify|notified|remind|reminded|ping|pinged|message|messaged|thank|thanked|cc|bcc|contact|contacted|invite|invited|meet|met|visit|visited|hire|hired|bill|billed|charge|charged|refund|refunded|pay|paid|credit|credited|reimburse|reimbursed|compensate|compensated|treat|treated|admit|admitted|discharge|discharged)|\b(?:submitted|approved|requested|signed|sent|owned|created|filed|made|written|reviewed|authori[sz]ed|referred|prescribed|completed|initiated|raised|opened|closed|placed|booked)\s+by|\bon\s+behalf\s+of|\b${HONORIFIC}\.?)\s+(?=(${LOWER_WORD}(?:\s+${LOWER_WORD})?))`,
+  String.raw`(?:\b(?:send|give|forward|email|mail|pass|hand|assign|show|sell|pay|refund|transfer|deliver|report|write|reply|sent|gave|given|forwarded|emailed|mailed|handed|assigned|showed|shown|sold|paid|refunded|transferred|delivered|reported|wrote|written|replied|belongs?|belonged)\b(?:${SP}+[\p{L}'’-]+){0,3}?${SP}+to|\b(?:ask|asked|email|emailed|call|called|phone|phoned|text|texted|tell|told|notify|notified|remind|reminded|ping|pinged|message|messaged|thank|thanked|cc|bcc|contact|contacted|invite|invited|meet|met|visit|visited|hire|hired|bill|billed|charge|charged|refund|refunded|pay|paid|credit|credited|reimburse|reimbursed|compensate|compensated|treat|treated|admit|admitted|discharge|discharged)|\b(?:submitted|approved|requested|signed|sent|owned|created|filed|made|written|reviewed|authori[sz]ed|referred|prescribed|completed|initiated|raised|opened|closed|placed|booked)${SP}+by|\bon${SP}+behalf${SP}+of|\b${HONORIFIC}\.?)${SP}+(?=(${LOWER_WORD}(?:${SP}+${LOWER_WORD})?))`,
   "gdu",
 );
 
@@ -688,27 +708,31 @@ const lowercaseNames: Detector = (text, claims) => {
   });
 };
 
-/** Rows of a pasted table: any field of one to four words with a non-English word in it ("obinna eze;nkem obi"). */
+/** A line's fields if it reads as a table row: two or more, of at most four words each. Prose with commas is not a row. */
+function rowFields(line: string, separator: RegExp): string[] | null {
+  const fields = line.split(separator);
+  return fields.length >= 2 && fields.every((field) => field.trim().split(/\s+/).length <= 4) ? fields : null;
+}
+
+/** Rows of a pasted table: any field with a non-English word in it ("obinna eze;nkem obi"). */
 const tabularNames: Detector = (text, claims) => {
   const lines = text.split("\n");
-  const commaRows = lines.filter((line) => line.includes(",")).length;
+  const commaRows = lines.map((line) => rowFields(line, /,/));
+  const commaTable = commaRows.filter(Boolean).length >= 2;
   let offset = 0;
-  for (const line of lines) {
-    const separator = /[;\t|]/.test(line) ? /[;\t|]/ : commaRows >= 2 && line.includes(",") ? /,/ : null;
-    if (separator) {
-      let fieldStart = offset;
-      for (const field of line.split(separator)) {
-        const trimmed = field.trim();
-        const lead = field.length - field.trimStart().length;
-        if (/^[\p{L}\p{M}'’ .-]+$/u.test(trimmed) && trimmed.split(/\s+/).length <= 4
-          && trimmed.split(/\s+/).some((word) => word.length >= 2 && !isKnownWord(word.replace(/\.$/, "")))) {
-          claims.add("name", fieldStart + lead, fieldStart + lead + trimmed.length);
-        }
-        fieldStart += field.length + 1;
+  lines.forEach((line, index) => {
+    let fieldStart = offset;
+    for (const field of rowFields(line, /[;\t|]/) ?? (commaTable ? commaRows[index] : null) ?? []) {
+      const trimmed = field.trim();
+      const lead = field.length - field.trimStart().length;
+      if (/^[\p{L}\p{M}'’ .-]+$/u.test(trimmed)
+        && trimmed.split(/\s+/).some((word) => word.length >= 2 && !isKnownWord(word.replace(/\.$/, "")))) {
+        claims.add("name", fieldStart + lead, fieldStart + lead + trimmed.length);
       }
+      fieldStart += field.length + 1;
     }
     offset += line.length + 1;
-  }
+  });
 };
 
 /** "Chidinma, segun and ngozi": non-English words listed alongside a name are names too. */

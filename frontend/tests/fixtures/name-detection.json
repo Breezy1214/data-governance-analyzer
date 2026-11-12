@@ -356,6 +356,38 @@
     "Emeka",
     "Kelechi"
    ]
+  },
+  {
+   "text": "Chinedu, an engineer at a software company, approved it.",
+   "names": [
+    "Chinedu"
+   ]
+  },
+  {
+   "text": "Share it with Okafor, a vendor contact.",
+   "names": [
+    "Okafor"
+   ]
+  },
+  {
+   "text": "Company 1: Airtasker. Contact Tunde Bakare at Airtasker about the export.",
+   "names": [
+    "Tunde",
+    "Bakare"
+   ]
+  },
+  {
+   "text": "Customer\nChinedu Okafor",
+   "names": [
+    "Chinedu",
+    "Okafor"
+   ]
+  },
+  {
+   "text": "Ngozi, a nurse, moved the job to AWS Graviton.",
+   "names": [
+    "Ngozi"
+   ]
   }
  ],
  "safe": [
@@ -422,6 +454,11 @@
   "We combine Nielsen panels with Comscore data to measure TV reach.",
   "The Mobile App sends crash logs and device IDs to Firebase and Sentry.",
   "Patient intake forms from Epic will be joined with claims from Medicaid for the Population Health study.",
-  "Data Science will build a Churn Prediction model using Amplitude and Mixpanel events."
+  "Data Science will build a Churn Prediction model using Amplitude and Mixpanel events.",
+  "Customer Stories\n\nImagine you are a consultant hired by AWS to find out how companies use their products.",
+  "Company 1: Airtasker\n\nAirtasker, an Australian online marketplace, needed to keep infrastructure costs low.",
+  "Smartsheet, a saas company, moved its Lambda functions to Graviton (arm64) processors.",
+  "It runs on AWS Graviton processors, supported by Amazon SQS.\nBenefits include cost savings, scalability, improved performance, or operational efficiency.",
+  "They used Amazon EKS and the Karpenter autoscaler to shift workloads."
  ]
 }
