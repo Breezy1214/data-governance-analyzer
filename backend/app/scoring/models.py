@@ -92,7 +92,7 @@ class RecommendationResult(BaseModel):
     recommendations: list[Recommendation]
 
 
-class AssessmentResponse(RecommendationResult):
+class ScoredAssessment(RecommendationResult):
     """Deterministic scoring output with full attribution."""
 
     schemaVersion: str
@@ -103,3 +103,10 @@ class AssessmentResponse(RecommendationResult):
     factors: list[RiskFactor]
     limitations: list[str]
     assessedAt: str
+
+
+class AssessmentResponse(ScoredAssessment):
+    """What the API returns: the scoring plus the deployment that produced it and the answers it accepted."""
+
+    apiVersion: str
+    answers: AssessmentRequest

@@ -23,6 +23,7 @@ export const completeInput: AssessmentInput = {
 export const assessmentResult: AssessmentResult = {
   schemaVersion: "3.0",
   rulesVersion: "2.0",
+  apiVersion: "0.1.0",
   mappingVersion: "2.0",
   mappingApprovalStatus: "approved",
   sourcesCheckedOn: "2026-11-04",

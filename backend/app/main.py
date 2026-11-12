@@ -85,23 +85,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/assessments", response_model=AssessmentResponse, tags=["assessment"],
               dependencies=[Depends(require_session)])
     def create_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
-        return _score(payload, response, demo=False)
+        return _score(payload, response, demo=False, api_version=settings.version)
 
     # Public so visitors can try sample scenarios without an account. Scoring is stateless and
     # the description never reaches the API, so the only protection needed is a rate limit.
     @app.post("/demo/assessments", response_model=AssessmentResponse, tags=["assessment"],
               dependencies=[Depends(require_demo_quota)])
     def create_demo_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
-        return _score(payload, response, demo=True)
+        return _score(payload, response, demo=True, api_version=settings.version)
 
     return app
 
 
-def _score(payload: AssessmentRequest, response: Response, *, demo: bool) -> AssessmentResponse:
+def _score(payload: AssessmentRequest, response: Response, *, demo: bool, api_version: str) -> AssessmentResponse:
     request_id = str(uuid.uuid4())
     # Results describe a sensitive use case; keep them out of browser and proxy caches.
     response.headers["Cache-Control"] = "no-store"
-    result = score_assessment(payload)
+    result = AssessmentResponse(**score_assessment(payload).model_dump(), apiVersion=api_version, answers=payload)
     logger.info(
         "assessment_scored",
         extra={
@@ -110,6 +110,7 @@ def _score(payload: AssessmentRequest, response: Response, *, demo: bool) -> Ass
                 "demo": demo,
                 "schemaVersion": result.schemaVersion,
                 "rulesVersion": result.rulesVersion,
+                "apiVersion": result.apiVersion,
                 "mappingVersion": result.mappingVersion,
                 "score": result.score,
                 "riskLevel": result.level,

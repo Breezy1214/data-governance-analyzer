@@ -32,7 +32,7 @@ function ScenarioPicker({ prefill }: { prefill: Prefill }) {
 /** The public sample assessment: scored by the rate-limited demo endpoint, with nothing stored. */
 export function DemoAssessment() {
   return <AssessmentWizard
-    endpoint={DEMO_ASSESSMENT_ENDPOINT}
+    endpointFor={() => DEMO_ASSESSMENT_ENDPOINT}
     keepDrafts={false}
     privacyStats={DEMO_STATS}
     intro={ScenarioPicker}

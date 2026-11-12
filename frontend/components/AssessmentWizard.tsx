@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AssessmentInput,
   AssessmentResult,
@@ -17,16 +18,15 @@ import {
   QUESTION_LABELS,
   Purpose,
   REGULATION_LABELS,
-  RISK_THRESHOLDS,
-  Reference,
   Regulation,
-  RiskLevel,
+  SavedVersion,
   requestAssessment,
   toggleRegulation,
   validateDescription,
   validateQuestions,
 } from "@/lib/assessment";
-import { BASED_ON_LABEL, EVERY_ASSESSMENT_LABEL, REFERENCE_HEADING, downloadAssessmentReport, formatAssessedAt, formatCheckedOn } from "@/lib/report";
+import { downloadAssessmentReport } from "@/lib/report";
+import { assessmentPath } from "@/lib/register";
 import {
   ACCEPTED_FILE_TYPES,
   ACCEPTED_LABEL,
@@ -37,18 +37,13 @@ import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } 
 import { containsSensitiveData, redactSensitiveData } from "@/lib/sensitive-data";
 import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
+import { AssessmentRecord, RISK_BANDS, RecommendationsView, ScoreBreakdown } from "@/components/AssessmentResultView";
 
 const STEPS: { label: string; icon: IconName }[] = [
   { label: "Describe", icon: "describe" },
   { label: "Answer questions", icon: "questions" },
   { label: "Assessment", icon: "assessment" },
   { label: "Recommendations", icon: "recommendations" },
-];
-const { lowMax, mediumMax } = RISK_THRESHOLDS;
-const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = [
-  { level: "LOW", label: "Low", range: `0–${lowMax}` },
-  { level: "MEDIUM", label: "Medium", range: `${lowMax + 1}–${mediumMax}` },
-  { level: "HIGH", label: "High", range: `${mediumMax + 1}–100` },
 ];
 const IDLE_MINUTES = IDLE_TIMEOUT_MS / 60_000;
 const ASSESSMENT_ERRORS: Record<number, string> = {
@@ -93,24 +88,6 @@ const QUESTION_GROUPS: { title: string; fields: ChoiceField[] }[] = [
   { title: "What the results could reveal", fields: ["smallResults", "combined", "secondaryUse"] },
 ];
 
-function ReferenceList({ items }: { items: Reference[] }) {
-  return items.length > 0 && (
-    <div className="recommendation-references">
-      <h5>{REFERENCE_HEADING}</h5>
-      <ul>
-        {items.map((entry) => (
-          <li key={entry.statement}>
-            {entry.statement}{" "}
-            <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer">
-              Source: {entry.sourceTitle}<span className="sr-only"> (opens in a new tab)</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export type Stat = { title: string; badge: string; value: string | number; unit?: string; detail: React.ReactNode };
 
 function StatCard({ title, badge, value, unit, detail }: Stat) {
@@ -130,7 +107,7 @@ const INTRO_STATS: Stat[] = [
 
 const PRIVACY_STATS: Stat[] = [
   { title: "Draft retention", badge: "This tab", value: IDLE_MINUTES, unit: "min", detail: <>Cleared when <b>idle</b></> },
-  { title: "Answers stored", badge: "Private", value: 0, detail: <>Answers are <b>scored, not stored</b></> },
+  { title: "Description saved", badge: "Never", value: 0, unit: "chars", detail: <>Only answers and results go to <b>My assessments</b></> },
 ];
 
 function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null, privacyStats: Stat[]): Stat[] {
@@ -162,51 +139,35 @@ function statsFor(step: number, input: AssessmentInput, result: AssessmentResult
   ];
 }
 
-const RING_RADIUS = 70;
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
-
-function ScoreRing({ score }: { score: number }) {
-  const filled = (score / 100) * RING_LENGTH;
-  return (
-    <div className="score-ring">
-      <svg viewBox="0 0 180 180" aria-hidden="true">
-        <circle className="ring-track" cx="90" cy="90" r={RING_RADIUS} />
-        <circle
-          className="ring-value"
-          cx="90"
-          cy="90"
-          r={RING_RADIUS}
-          strokeDasharray={`${filled} ${RING_LENGTH}`}
-          transform="rotate(-90 90 90)"
-        />
-      </svg>
-      <div><span className="score-number">{score}</span><span className="score-total">out of 100</span></div>
-    </div>
-  );
-}
-
 /** Fills every answer, then opens the questions so they can be reviewed before scoring. */
 export type Prefill = (input: AssessmentInput, label: string) => void;
 
 export function AssessmentWizard({
-  account, draftOwner, onUnauthorized, endpoint, keepDrafts = true, privacyStats = PRIVACY_STATS, intro: Intro,
+  account, draftOwner, onUnauthorized, endpointFor, keepDrafts = true, privacyStats = PRIVACY_STATS, intro: Intro,
+  initialInput = EMPTY_INPUT, notice,
 }: {
   account?: React.ReactNode;
   draftOwner?: string;
   onUnauthorized?: () => void;
-  /** Where answers are scored; defaults to the signed-in endpoint. */
-  endpoint?: string;
+  /** Where answers are scored, given the assessment this session last saved to; defaults to the signed-in endpoint. */
+  endpointFor?: (savedTo: string | undefined) => string;
   /** When false, nothing is read from or written to this tab's draft storage. */
   keepDrafts?: boolean;
   privacyStats?: Stat[];
   /** Rendered above the description, with a way to prefill the assessment. */
   intro?: React.ComponentType<{ prefill: Prefill }>;
+  /** Answers to start from, such as a saved assessment being re-assessed or duplicated. */
+  initialInput?: AssessmentInput;
+  notice?: React.ReactNode;
 } = {}) {
   const [step, setStep] = useState(0);
   const [sample, setSample] = useState<string | null>(null);
   const [maxReached, setMaxReached] = useState(0);
-  const [input, setInput] = useState<AssessmentInput>(EMPTY_INPUT);
+  const [input, setInput] = useState<AssessmentInput>(initialInput);
   const [result, setResult] = useState<AssessmentResult | null>(null);
+  // Undefined when this endpoint never saves, null when saving failed.
+  const [saved, setSaved] = useState<SavedVersion | null>();
+  const [savedTo, setSavedTo] = useState<string>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -237,8 +198,10 @@ export function AssessmentWizard({
 
   const reset = useCallback(() => {
     cancelPendingWork();
-    setInput(EMPTY_INPUT);
+    setInput(initialInput);
     setResult(null);
+    setSaved(undefined);
+    setSavedTo(undefined);
     setSample(null);
     setStep(0);
     setMaxReached(0);
@@ -246,7 +209,7 @@ export function AssessmentWizard({
     setReportError(null);
     setImportStatus(null);
     if (keepDrafts) clearDraft();
-  }, [cancelPendingWork, keepDrafts]);
+  }, [cancelPendingWork, keepDrafts, initialInput]);
 
   useEffect(() => {
     if (!keepDrafts) return;
@@ -307,6 +270,7 @@ export function AssessmentWizard({
       setResult(null);
       setMaxReached((current) => Math.min(current, 1));
     }
+    setSaved(undefined);
     setError(null);
     setReportError(null);
   };
@@ -340,9 +304,11 @@ export function AssessmentWizard({
     setLoading(true);
     setError(null);
     try {
-      const response = await requestAssessment(input, controller.signal, endpoint);
+      const outcome = await requestAssessment(input, controller.signal, endpointFor?.(savedTo));
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
-      setResult(response);
+      setResult(outcome.result);
+      setSaved(outcome.saved);
+      if (outcome.saved) setSavedTo(outcome.saved.assessmentId);
       moveTo(2);
     } catch (failure) {
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
@@ -422,6 +388,12 @@ export function AssessmentWizard({
     () => step === 0 && error !== null && containsSensitiveData(input.description),
     [step, error, input.description],
   );
+  const saveStatus = saved === null
+    ? <div className="error" role="alert"><span>This result couldn’t be saved to My assessments. Your answers are still here.</span>
+        <button className="secondary" type="button" disabled={loading} onClick={assess}>{loading ? "Saving…" : "Try saving again"}</button></div>
+    : saved && <p className="save-note" role="status">
+        Saved to <Link href={assessmentPath(saved.assessmentId, saved.version)}>My assessments</Link> as version {saved.version}.
+      </p>;
   const progress = ((step + 1) / STEPS.length) * 100;
   const stats = statsFor(step, input, result, privacyStats);
   const renderChoice = (field: ChoiceField) => (
@@ -501,6 +473,7 @@ export function AssessmentWizard({
             <div className="step-panel">
               <h2 ref={mainHeading} tabIndex={-1}>What are you proposing?</h2>
               <p className="lede">Include what data is involved, who needs it, and the outcome you want.</p>
+              {notice && <p className="sample-note">{notice}</p>}
               {Intro && <Intro prefill={prefill} />}
               <div className="card">
                 <label className="text-field" htmlFor="description">
@@ -626,34 +599,8 @@ export function AssessmentWizard({
           {step === 2 && result && (
             <div className="step-panel risk-result" data-risk={result.level.toLowerCase()}>
               <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em><span className="risk-icon" aria-hidden="true" />{result.level.toLowerCase()} risk.</em></h2>
-              <div className="result-grid">
-                <div className="card score-card">
-                  <h3 className="card-title">Overall risk score</h3>
-                  <ScoreRing score={result.score} />
-                  <ul className="band-list">
-                    {RISK_BANDS.map((band) => (
-                      <li key={band.level} data-risk={band.level.toLowerCase()} aria-current={band.level === result.level ? "true" : undefined}>
-                        <span className="risk-icon" aria-hidden="true" />
-                        <span>{band.label}</span>
-                        <b>{band.range}</b>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="score-guidance">{result.guidance}</p>
-                </div>
-                <div className="card factor-card">
-                  <h3 className="card-title">What drives this score</h3>
-                  <ul className="factor-list">
-                    {result.factors.map((factor) => (
-                      <li key={factor.label}>
-                        <div><span>{factor.label}</span><b>+{factor.points}</b></div>
-                        <span className="factor-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, factor.points)}%` }} /></span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="method-note">Transparent rules, capped at 100. Review the versioned rubric for assumptions and thresholds.</p>
-                </div>
-              </div>
+              {saveStatus}
+              <ScoreBreakdown result={result} />
               <div className="actions"><button className="secondary" type="button" onClick={() => moveTo(1)}>← Back</button><button className="primary" type="button" onClick={() => moveTo(3)}>See recommendations <span>→</span></button></div>
             </div>
           )}
@@ -665,47 +612,10 @@ export function AssessmentWizard({
             >
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
-              <div className="card">
-                <div className="outcome-head">
-                  <b className="risk-label risk-pill"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
-                  <span className="outcome-counts">
-                    {result.recommendations.length} recommendations
-                  </span>
-                </div>
-                <p className="outcome-guidance">{result.guidance}</p>
-                {result.limitations.length > 0 && <div className="limitations"><h3>Specialist review required</h3>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
-              </div>
+              <RecommendationsView result={result} />
 
-              <div className="card safeguards">
-                <h3 className="card-title">Recommended actions</h3>
-                <ol className="recommendation-list">
-                  {result.recommendations.map((item) => (
-                    <li key={item.id}>
-                      <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
-                      <div>
-                        <h4>{item.title}</h4>
-                        <p className="recommendation-action">{item.action}</p>
-                        <ReferenceList items={item.references} />
-                        <details className="recommendation-why">
-                          <summary>Why this applies</summary>
-                          <div>
-                            <p>{item.rationale}</p>
-                            {item.basedOn.length > 0 ? (
-                              <div className="recommendation-trace">
-                                <b>{BASED_ON_LABEL}</b>
-                                <ul>{item.basedOn.map((label) => <li key={label}>{label}</li>)}</ul>
-                              </div>
-                            ) : <p>{EVERY_ASSESSMENT_LABEL}</p>}
-                          </div>
-                        </details>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                <p className="method-note">Recommendation catalog v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}. Sources checked {formatCheckedOn(result.sourcesCheckedOn)}.</p>
-              </div>
-
-              <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation catalog version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
+              <AssessmentRecord input={input} result={result} />
+              {saveStatus}
               {reportError && <p className="error" role="alert">{reportError}</p>}
               <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>

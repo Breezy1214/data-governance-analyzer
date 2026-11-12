@@ -6,6 +6,7 @@ from app.scoring.models import (
     AssessmentRequest,
     AssessmentResponse,
     RiskFactor,
+    ScoredAssessment,
 )
 from app.scoring.rules import CURRENT_RULES_VERSION, get_ruleset
 
@@ -15,6 +16,7 @@ __all__ = [
     "AssessmentRequest",
     "AssessmentResponse",
     "RiskFactor",
+    "ScoredAssessment",
     "get_ruleset",
     "score_assessment",
 ]

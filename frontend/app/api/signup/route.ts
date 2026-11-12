@@ -1,9 +1,9 @@
-import { accountError, json, parseEmail, sameOriginPost, serverAuth } from "@/lib/auth-server";
+import { accountError, json, parseEmail, sameOriginRoute, serverAuth } from "@/lib/auth-server";
 import { requireNewPassword } from "@/lib/new-password";
 
 const EXISTING_ACCOUNT_CODES = ["user_already_exists", "email_exists"];
 
-export const POST = sameOriginPost(async (request) => {
+export const POST = sameOriginRoute(async (request) => {
   const input = await request.json().catch(() => null);
   const email = parseEmail(input?.email);
   const password = await requireNewPassword(input?.password);

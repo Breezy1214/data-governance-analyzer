@@ -46,6 +46,12 @@ def test_assessment_returns_transparent_score():
     assert all(item["rationale"] and item["action"] for item in body["recommendations"])
 
 
+def test_response_returns_the_answers_it_accepted_for_saving():
+    # The frontend saves these, not the raw request, so defaults such as schemaVersion are filled in.
+    body = client.post("/assessments", json=sample_payload()).json()
+    assert body["answers"] == {**sample_payload(), "schemaVersion": "3.0"}
+
+
 def test_high_risk_regulated_use_includes_limitations():
     response = client.post(
         "/assessments",

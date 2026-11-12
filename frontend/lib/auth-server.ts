@@ -120,12 +120,12 @@ export function requireSameOrigin(request: Request) {
   if (!sameOrigin(request)) throw new AuthenticationError(403, AUTH_MESSAGES.forbidden);
 }
 
-/** A POST handler that always checks the origin and always returns a safe error response. */
-export function sameOriginPost(handler: (request: Request) => Promise<Response>) {
-  return async (request: Request) => {
+/** A state-changing handler (POST or DELETE) that always checks the origin and always returns a safe error response. */
+export function sameOriginRoute<Context extends unknown[]>(handler: (request: Request, ...context: Context) => Promise<Response>) {
+  return async (request: Request, ...context: Context) => {
     try {
       requireSameOrigin(request);
-      return await handler(request);
+      return await handler(request, ...context);
     } catch (error) {
       return errorResponse(error);
     }

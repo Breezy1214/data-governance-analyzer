@@ -1,5 +1,6 @@
 import "server-only";
 import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
+import type { Database } from "./database.types";
 
 function supabaseConfig() {
   const url = process.env.SUPABASE_URL;
@@ -12,7 +13,7 @@ function supabaseConfig() {
 
 export function createSupabaseClient(cookies: CookieMethodsServer) {
   const { url, key } = supabaseConfig();
-  return createServerClient(url, key, {
+  return createServerClient<Database>(url, key, {
     cookies,
     cookieOptions: {
       name: "session",

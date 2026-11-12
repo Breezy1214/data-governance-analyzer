@@ -1,7 +1,7 @@
 import { AssessmentInput, isAssessmentInput } from "./assessment";
 import { redactSensitiveData } from "./sensitive-data";
 
-/** v1.0 retains nothing: the draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16, docs/data-handling.md). */
+/** The draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16). Saved assessments are separate (docs/data-handling.md). */
 
 export const DRAFT_KEY = "governance-assessment-draft-v2";
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;

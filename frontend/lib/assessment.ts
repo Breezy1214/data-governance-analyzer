@@ -146,6 +146,7 @@ export type Recommendation = {
 export type AssessmentResult = {
   schemaVersion: string;
   rulesVersion: string;
+  apiVersion: string;
   mappingVersion: string;
   mappingApprovalStatus: "pending" | "approved";
   sourcesCheckedOn: string;
@@ -169,6 +170,10 @@ export const EMPTY_INPUT: AssessmentInput = {
 export const DESCRIPTION_MAX_LENGTH = 1000;
 export const RISK_THRESHOLDS = { lowMax: 29, mediumMax: 59 } as const;
 
+export function isRiskLevel(value: unknown): value is RiskLevel {
+  return value === "LOW" || value === "MEDIUM" || value === "HIGH";
+}
+
 export function riskLevelFor(score: number): RiskLevel {
   return score <= RISK_THRESHOLDS.lowMax ? "LOW" : score <= RISK_THRESHOLDS.mediumMax ? "MEDIUM" : "HIGH";
 }
@@ -180,7 +185,7 @@ export function toggleRegulation(current: Regulation[], item: Regulation): Regul
   return [...current.filter((value) => value !== "none" && value !== "notSure"), item];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -271,14 +276,15 @@ function isRecommendation(value: unknown): value is Recommendation {
 }
 
 /** The backend owns recommendation content; the client checks shape and internal consistency only. */
-function isAssessmentResult(value: unknown): value is AssessmentResult {
+export function isAssessmentResult(value: unknown): value is AssessmentResult {
   if (!isRecord(value)) return false;
   const basicShape = value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
+    && typeof value.apiVersion === "string"
     && typeof value.mappingVersion === "string"
     && (value.mappingApprovalStatus === "pending" || value.mappingApprovalStatus === "approved")
     && typeof value.sourcesCheckedOn === "string" && Number.isFinite(Date.parse(value.sourcesCheckedOn))
     && typeof value.score === "number" && Number.isInteger(value.score) && value.score >= 0 && value.score <= 100
-    && ["LOW", "MEDIUM", "HIGH"].includes(value.level as string)
+    && isRiskLevel(value.level)
     && typeof value.guidance === "string"
     && Array.isArray(value.factors) && value.factors.every(isRiskFactor)
     && isStringArray(value.limitations)
@@ -298,6 +304,18 @@ function isAssessmentResult(value: unknown): value is AssessmentResult {
     && recommendations.every((item, index) => item.priority === index + 1);
 }
 
+export type SavedVersion = { assessmentId: string; version: number };
+
+/**
+ * `saved` is undefined when the endpoint never saves (demo mode), and null when saving was attempted and failed.
+ */
+export type AssessmentOutcome = { result: AssessmentResult; saved?: SavedVersion | null };
+
+function isSavedVersion(value: unknown): value is SavedVersion {
+  return isRecord(value) && typeof value.assessmentId === "string"
+    && typeof value.version === "number" && Number.isInteger(value.version) && value.version >= 1;
+}
+
 export class AssessmentServiceError extends Error {
   constructor(public readonly status: number) {
     super(`Assessment service returned ${status}`);
@@ -315,8 +333,10 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, purpose, regulations, ...answers } as Omit<AssessmentInput, "description">;
 }
 
+export const ASSESSMENTS_ENDPOINT = "/api/assessments";
+
 export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
-  endpoint = "/api/assessments"): Promise<AssessmentResult> {
+  endpoint = ASSESSMENTS_ENDPOINT): Promise<AssessmentOutcome> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -339,7 +359,8 @@ export async function requestAssessment(input: AssessmentInput, signal?: AbortSi
       throw new Error("Assessment service returned an invalid response");
     }
     if (!isAssessmentResult(result)) throw new Error("Assessment service returned an invalid response");
-    return result;
+    const { saved, ...scored } = result as AssessmentResult & { saved?: unknown };
+    return { result: scored, saved: saved === undefined ? undefined : isSavedVersion(saved) ? saved : null };
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abort);

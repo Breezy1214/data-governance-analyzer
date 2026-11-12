@@ -22,6 +22,7 @@ import { POST as assessDemo } from "../app/api/demo/assessments/route";
 import { GET as session } from "../app/api/session/route";
 import { proxy } from "../proxy";
 import { NextRequest } from "next/server";
+import { assessmentResult } from "./assessment-fixture";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -115,7 +116,7 @@ describe("Supabase authentication routes", () => {
   });
 
   it("forwards only a verified token and the unchanged body to FastAPI", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 1 }));
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(assessmentResult));
     vi.stubGlobal("fetch", fetchMock);
     const response = await assess(request("assessments", undefined, { schemaVersion: "2.0" }));
     expect(response.status).toBe(200);
@@ -125,13 +126,6 @@ describe("Supabase authentication routes", () => {
     expect(options.headers.Authorization).toBe("Bearer private-jwt");
     expect(options.headers["X-Frontend-Key"]).toBeUndefined();
     expect(options.body).toBeInstanceOf(ReadableStream);
-  });
-
-  it.each([401, 413, 422, 503])("preserves backend status and safe message %s", async (status) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ message: "Backend message" }, { status })));
-    const response = await assess(request("assessments"));
-    expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ message: "Backend message" });
   });
 
   it("forwards public demo scoring without credentials", async () => {
