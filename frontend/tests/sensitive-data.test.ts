@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import nameDetection from "./fixtures/name-detection.json";
 import {
   SensitiveKind,
   describeSensitiveFindings,
@@ -100,6 +101,19 @@ describe("sensitive data detection", () => {
 
   it.each(UNSAFE)("blocks actual values: %s", (text, kind) => {
     expect(kinds(text)).toContain(kind);
+  });
+
+  it.each(nameDetection.names)("redacts every name in: $text", ({ text, names }) => {
+    const redacted = redactSensitiveData(text, NOW);
+    names.forEach((name) => expect(redacted).not.toContain(name));
+  });
+
+  it.each(nameDetection.safe)("allows vendors, places and teams: %s", (text) => {
+    expect(findSensitiveData(text, NOW)).toEqual([]);
+  });
+
+  it("labels social handles as their own kind", () => {
+    expect(kinds("Reach her at @ada_okafor.")).toContain("handle");
   });
 
   it("cannot be bypassed with invisible characters or look-alike digits", () => {

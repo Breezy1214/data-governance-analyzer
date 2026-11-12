@@ -43,7 +43,16 @@ The description must describe kinds of data ("customer email addresses"), not co
 - **The draft in `sessionStorage`** only ever holds the redacted description, and drafts saved before screening are redacted on load.
 - **The PDF report** redacts the use case again as a last line of defence.
 
-Pattern-based values (emails, numbers, IDs, keys) are caught reliably. Names are matched against a name lexicon and contextual cues such as "customer …", "Dr. …" and "Name: …"; an unlabelled name the lexicon doesn't know can still pass, so the help text continues to ask people to leave names out.
+Pattern-based values (emails, numbers, IDs, keys) are caught reliably. Names are found three ways, so they don't depend on a first-name list that favours some cultures over others:
+
+- compromise's name lexicon and cues such as "customer …", "Dr. …", "my wife …" and "Name: …";
+- any capitalized word that is not common English (SCOWL size 50, via `wordlist-english`), a known organization, product or place, or an industry term (`frontend/lib/known-words.ts`), together with any first or last name beside it;
+- lower-case names in positions that take a person ("my husband …", "ask …", "send it to …", "submitted by …", "…'s records"), and any two non-English lower-case words together ("adaeze okeke");
+- names in ALL CAPS, in pasted table rows, in lists next to another name ("Chidinma, segun and ngozi"), and words in scripts without capital letters (Chinese, Arabic, Devanagari and others). @handles are caught as their own kind.
+
+A capitalized phrase is left alone when it names an organization ("Grant Thornton"), a product written in CamelCase ("PostHog"), a programme, team or place ("Wellness Program", "RevOps teams", "Ikeja and Lekki stores", "in Lagos and Abuja"), or a system introduced by a system verb ("sync with Airtable"). An unfamiliar brand can still be flagged; the person can then describe it generically ("our CRM vendor").
+
+`frontend/tests/fixtures/name-detection.json` holds the sentences used to measure this: every listed name must be redacted and no safe sentence flagged. Add a sentence there whenever a miss or a false block is reported. A single lower-case name with no cue before it ("forward to segun later" is caught; "segun approved it" is not) can still pass, so the help text continues to ask people to leave names out.
 
 ## Data flow
 

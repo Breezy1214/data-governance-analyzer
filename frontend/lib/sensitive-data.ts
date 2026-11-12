@@ -1,4 +1,5 @@
 import nlp from "compromise";
+import { bareWord, isKnownOrganization, isKnownWord } from "./known-words";
 
 /**
  * Screens free text for personal and confidential values so the use-case
@@ -24,6 +25,7 @@ export type SensitiveKind =
   | "phone"
   | "address"
   | "age"
+  | "handle"
   | "name";
 
 export type SensitiveFinding = { kind: SensitiveKind; start: number; end: number };
@@ -41,6 +43,7 @@ const KIND_DETAILS: Record<SensitiveKind, { label: string; placeholder: string }
   phone: { label: "a phone number", placeholder: "[phone]" },
   address: { label: "a street address or postcode", placeholder: "[address]" },
   age: { label: "a person's age", placeholder: "[age]" },
+  handle: { label: "a username or social media handle", placeholder: "[handle]" },
   name: { label: "a person's name", placeholder: "[name]" },
 };
 
@@ -79,15 +82,25 @@ function normalize(source: string): Normalized {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+const intersects = (item: SensitiveFinding, start: number, end: number) => start < item.end && end > item.start;
+
 class Claims {
   readonly found: SensitiveFinding[] = [];
 
   overlaps(start: number, end: number): boolean {
-    return this.found.some((item) => start < item.end && end > item.start);
+    return this.found.some((item) => intersects(item, start, end));
   }
 
   add(kind: SensitiveKind, start: number, end: number): void {
-    if (end > start && !this.overlaps(start, end)) this.found.push({ kind, start, end });
+    if (end <= start) return;
+    const overlapping = this.found.filter((item) => intersects(item, start, end));
+    if (overlapping.length === 0) {
+      this.found.push({ kind, start, end });
+    } else if (kind === "name" && overlapping.every((item) => item.kind === "name")) {
+      // Two name checks can each see part of one name ("Charles" and "Okafor"); keep the whole of it.
+      const merged = { kind, start: Math.min(start, ...overlapping.map((item) => item.start)), end: Math.max(end, ...overlapping.map((item) => item.end)) };
+      this.found.splice(0, this.found.length, ...this.found.filter((item) => !overlapping.includes(item)), merged);
+    }
   }
 }
 
@@ -159,7 +172,6 @@ const SECRET_FORMATS = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
   /\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:[^\s@/]+@/gi,
 ];
-
 
 const labelledSecret = claimValue(
   "secret",
@@ -387,7 +399,7 @@ const KNOWN_ORGANIZATIONS = new Set(ORGANIZATIONS_NAMED_LIKE_PEOPLE);
 /** A name ending in one of these words is an organization ("Smith Holdings"). Words in NOT_A_NAME already rule a phrase out. */
 const ORGANIZATION_SUFFIX = /\b(?:bank|bancorp|corp|corporation|co|company|inc|llc|llp|lp|ltd|plc|gmbh|sa|ag|healthcare|hospital|clinic|medical|university|college|school|institute|foundation|trust|partners|capital|insurance|financial|holdings|labs?|technologies|tech|solutions|consulting|associates|cloud|network|media|pharma|pharmaceuticals|motors|airlines|stores?|markets?|state|county|city)\.?$/i;
 
-/** Capitalized title-case phrases that follow role words without naming anyone. */
+/** Words that make a capitalized phrase a thing rather than a person: "Customer Data", "Wellness Program". */
 const NOT_A_NAME = new Set([
   "data", "database", "records", "record", "list", "lists", "information", "info", "profile", "profiles", "portal",
   "platform", "experience", "relationship", "relationships", "management", "service", "services", "success", "support",
@@ -398,17 +410,31 @@ const NOT_A_NAME = new Set([
   "request", "requests", "satisfaction", "loyalty", "acquisition", "churn", "outreach", "communications", "email",
   "emails", "phone", "address", "addresses", "names", "name", "contact", "contacts", "table", "tables", "dataset",
   "datasets", "system", "systems", "app", "application", "applications", "registry", "registration", "enrollment",
-  "portfolio", "pipeline", "dashboard", "report", "reports", "agreement", "agreements", "and", "or", "the", "a", "an",
-  "of", "for", "in", "on", "to", "with", "from", "by", "at", "is", "are", "was", "were", "will", "data's",
+  "portfolio", "pipeline", "dashboard", "report", "reports", "agreement", "agreements", "programme", "programmes", "department", "departments", "office", "unit", "units", "project", "projects",
+  "initiative", "study", "studies", "model", "models", "operations", "administration", "committee", "board",
+  "council", "division", "campaign", "campaigns", "plan", "plans", "policy", "fund", "scheme", "panel", "panels",
+  "pilot", "prediction", "ledger", "ledgers", "store", "stores", "ward", "clinic", "lab",
 ]);
 
-function looksLikeName(candidate: string): boolean {
-  const words = candidate.replace(/['’]s$/i, "").split(/\s+/).filter(Boolean);
-  if (words.length === 0) return false;
-  if (words.some((word) => NOT_A_NAME.has(word.toLowerCase().replace(/[.,]$/, "")))) return false;
-  const phrase = words.join(" ").toLowerCase().replace(/[.,]$/, "");
-  return !KNOWN_ORGANIZATIONS.has(phrase) && !ORGANIZATION_SUFFIX.test(phrase);
+const FUNCTION_WORDS = new Set(["and", "or", "the", "a", "an", "of", "for", "in", "on", "to", "with", "from", "by", "at", "is", "are", "was", "were", "will", "our", "their", "your", "my", "his", "her", "its", "this", "that", "these", "those", "we", "they", "please"]);
+
+function isNotAName(word: string): boolean {
+  const bare = bareWord(word);
+  return NOT_A_NAME.has(bare) || FUNCTION_WORDS.has(bare);
 }
+
+function isOrganization(candidate: string): boolean {
+  const phrase = bareWord(candidate.trim().split(/\s+/).join(" "));
+  return KNOWN_ORGANIZATIONS.has(phrase) || ORGANIZATION_SUFFIX.test(phrase);
+}
+
+function looksLikeName(candidate: string): boolean {
+  const words = candidate.split(/\s+/).filter(Boolean);
+  return words.length > 0 && !words.some(isNotAName) && !isOrganization(candidate);
+}
+
+/** What a possessive name owns in "Jane Doe's records" or "segun's orders". */
+const POSSESSED = String.raw`(?:records?|files?|data|details|account|history|chart|profile|information|info|address|email|phone|number|results?|claims?|purchases?|transactions?|application|case|diagnosis|orders?|payments?|refund|form)`;
 
 const NAME_WORD = String.raw`[A-Z][a-z]+(?:['’-][A-Za-z]+)*`;
 const NAME = String.raw`${NAME_WORD}(?:\s+(?:[A-Z]\.\s+)?${NAME_WORD}){0,2}`;
@@ -420,34 +446,45 @@ const ROLE_WORDS = [
   "wife", "husband", "beneficiary", "claimant", "victim", "suspect", "witness", "candidate", "volunteer", "staffer",
 ];
 
-const NOT_NAME_TAGS = new Set(["Verb", "Adverb", "Adjective", "Determiner", "Preposition", "Conjunction", "Pronoun", "QuestionWord"]);
-let lexicon: Record<string, string | undefined> | undefined;
-const LEXICON = () => (lexicon ??= (nlp.model() as { one: { lexicon: Record<string, string | undefined> } }).one.lexicon);
+type ParsedTerm = { text: string; tags: string[]; start: number; end: number };
+type CompromiseTerm = { text: string; tags: string[]; offset: { start: number; length: number } };
+type CompromiseJson = { terms: CompromiseTerm[] }[];
+const JSON_OFFSETS = { offset: true, terms: { offset: true } };
+const toParsedTerms = (json: unknown): ParsedTerm[][] => (json as CompromiseJson)
+  .map(({ terms }) => terms.map(({ text, tags, offset }) => ({ text, tags, start: offset.start, end: offset.start + offset.length })));
 
-type TaggedTerm = { text: string; tags: string[]; offset: { start: number } };
+let lastParse: { text: string; doc: ReturnType<typeof nlp>; terms: ParsedTerm[] } | undefined;
 
-function isOrdinaryWord({ text, tags }: TaggedTerm): boolean {
-  if (tags.includes("FirstName") || tags.includes("LastName")) return false;
-  const word = text.replace(/[^A-Za-z'-]/g, "").toLowerCase();
-  return tags.some((tag) => NOT_NAME_TAGS.has(tag)) || (LEXICON()[word] !== undefined && LEXICON()[word] !== "FirstName");
+/** One compromise parse of the scanned text, shared by every name check. */
+function parse(text: string): NonNullable<typeof lastParse> {
+  if (lastParse?.text !== text) {
+    const doc = nlp(text);
+    lastParse = { text, doc, terms: toParsedTerms(doc.json(JSON_OFFSETS)).flat() };
+  }
+  return lastParse;
 }
 
-/** Characters to skip when a capitalized run starts with an ordinary word, as in "Compare Jane Doe's". */
-function leadingNonNameLength(value: string): number {
-  const terms = (nlp(value).json({ offset: true, terms: { offset: true } }) as { terms: TaggedTerm[] }[])
-    .flatMap((sentence) => sentence.terms);
+const NOT_NAME_TAGS = new Set(["Verb", "Adverb", "Adjective", "Determiner", "Preposition", "Conjunction", "Pronoun", "QuestionWord"]);
+
+function isOrdinaryWord({ text, tags }: ParsedTerm): boolean {
+  if (tags.includes("FirstName") || tags.includes("LastName")) return false;
+  return tags.some((tag) => NOT_NAME_TAGS.has(tag)) || isKnownWord(text.replace(/[^A-Za-z'-]/g, ""));
+}
+
+/** Where the name starts when a capitalized run opens with an ordinary word, as in "Compare Jane Doe's". */
+function nameStart(text: string, start: number, end: number): number {
+  const terms = parse(text).terms.filter((term) => term.start >= start && term.start < end);
   let index = 0;
   while (index < terms.length - 1 && isOrdinaryWord(terms[index])) index += 1;
-  return index === 0 ? 0 : terms[index].offset.start;
+  return index === 0 ? start : terms[index].start;
 }
 
 function nameDetector(pattern: RegExp): Detector {
   return (text, claims) => each(pattern, text, (match) => {
     const span = match.indices?.[1];
     if (!span) return;
-    const skip = leadingNonNameLength(match[1]);
-    const value = match[1].slice(skip);
-    if (looksLikeName(value)) claims.add("name", span[0] + skip, span[1]);
+    const start = nameStart(text, span[0], span[1]);
+    if (looksLikeName(text.slice(start, span[1]))) claims.add("name", start, span[1]);
   });
 }
 
@@ -457,28 +494,24 @@ const nameCues: Detector[] = [
   nameDetector(new RegExp(String.raw`\b${anyCaseWords(["named", "called", String.raw`known\s+as`])}\s+(${NAME})`, "gd")),
   nameDetector(new RegExp(String.raw`\b${anyCaseWords(ROLE_WORDS)}s?\s*[:,]?\s+(${NAME})`, "gd")),
   // "Jane Doe's records", "Okafor's file".
-  nameDetector(new RegExp(String.raw`\b(${NAME})['’]s\s+(?:records?|files?|data|details|account|history|chart|profile|information|info|address|email|phone|number|results?|claims?|purchases?|transactions?|application|case|diagnosis)\b`, "gd")),
+  nameDetector(new RegExp(String.raw`\b(${NAME})['’]s\s+${POSSESSED}\b`, "gd")),
   // "Chinedu Okafor (born 1990)", "Jane Doe <jane@…>", "Kwame Mensah: 555…".
   nameDetector(new RegExp(String.raw`\b(${NAME_WORD}\s+${NAME_WORD})(?=\s*(?:\(|<|,\s*(?:born|dob|age|aged|\d)))`, "gd")),
 ];
 
 /** Names compromise recognizes from its first-name and surname lexicon, minus places and organizations. */
 const knownNames: Detector = (text, claims) => {
-  const people = nlp(text).people().json({ offset: true, terms: { offset: true } }) as {
-    terms: { text: string; tags: string[]; offset: { start: number; length: number } }[];
-  }[];
   const spans: [number, number][] = [];
-  for (const person of people) {
-    const tags = new Set(person.terms.flatMap((term) => term.tags));
+  for (const person of toParsedTerms(parse(text).doc.people().json(JSON_OFFSETS))) {
+    const tags = new Set(person.flatMap((term) => term.tags));
     if (tags.has("Place") || tags.has("Organization")) continue;
     // "Dr." stays readable; only the name itself is a finding.
-    const terms = person.terms.filter((term) => term.text.trim() && !term.tags.includes("Honorific"));
+    const terms = person.filter((term) => term.text.trim() && !term.tags.includes("Honorific"));
     const named = terms.some((term) => term.tags.includes("FirstName") || term.tags.includes("LastName"))
-      || (terms.length > 0 && terms.length < person.terms.length);
+      || (terms.length > 0 && terms.length < person.length);
     if (!named) continue;
-    const last = terms[terms.length - 1];
-    const start = terms[0].offset.start;
-    const value = text.slice(start, last.offset.start + last.offset.length).replace(/['’]s$|[.,;:!?)]+$/u, "");
+    const start = terms[0].start;
+    const value = text.slice(start, terms[terms.length - 1].end).replace(/['’]s$|[.,;:!?)]+$/u, "");
     if (value.trim()) spans.push([start, start + value.length]);
   }
   // Compromise can return "Maria" and "Garcia's" as separate people; rejoin neighbours before judging the whole name.
@@ -490,13 +523,223 @@ const knownNames: Detector = (text, claims) => {
     else merged.push([...span]);
   }
   for (const [start, end] of merged) {
-    if (looksLikeName(text.slice(start, end))) claims.add("name", start, end);
+    const value = text.slice(start, end);
+    if (looksLikeName(value) && !value.split(/\s+/).every(isKnownOrganization) && !namesAThingInContext(text, start, end)) {
+      claims.add("name", start, end);
+    }
   }
 };
+
+/** A capitalized word in any script: "Adaeze", "O'Connor", "McDonald", "Siobhán", "Adebayo-Smith". */
+const CAPITALIZED_WORD = /(?<![\p{L}\p{M}\p{N}'’-])\p{Lu}[\p{Ll}\p{M}]+(?:\p{Lu}[\p{Ll}\p{M}]+)?(?:['’-]\p{Lu}?[\p{Ll}\p{M}]+)*(?![\p{L}\p{M}\p{N}])/gu;
+const NOT_A_PERSON_TAGS = new Set(["Organization", "Place", "Acronym", "Abbreviation", "Honorific", "Month", "WeekDay", "Date", "Holiday", "Currency", "Unit"]);
+
+type Word = { start: number; end: number; unfamiliar: boolean; nameLike: boolean };
+
+function namesAThing(run: string): boolean {
+  return run.split(/\s+/).some((word) => NOT_A_NAME.has(bareWord(word)));
+}
+
+/** The joins between list items: ", ", ", and ", " or ", " & ". */
+const LIST_LINK = String.raw`(?:\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&)\s+)`;
+const CAPITALIZED_PHRASE = String.raw`\p{Lu}[\p{L}\p{M}'’-]*(?:\s+\p{Lu}[\p{L}\p{M}'’-]*)*`;
+
+/** "in Lagos", "across Nairobi, Accra and Enugu": a list of capitalized words after a place preposition. */
+const PLACE_CONTEXT = new RegExp(String.raw`\b(?:in|across|throughout|around|near|within)\s+(?:${CAPITALIZED_PHRASE}${LIST_LINK})*$`, "u");
+const REST_OF_LIST = new RegExp(String.raw`^(?:${LIST_LINK}${CAPITALIZED_PHRASE})*`, "u");
+
+/**
+ * A system, not a person, is the object of these verbs when a preposition introduces it:
+ * "sync with Airtable", "query them with Athena", "built on Supabase", "via Segment". "Export Maria's records" still names her.
+ */
+const SYSTEM_CONTEXT = /(?:\b(?:sync(?:ed|ing|s)?|integrat(?:e|ed|es|ing|ion)|quer(?:y|ied|ies|ying)|host(?:ed|ing|s)?|migrat(?:e|ed|es|ing)|deploy(?:ed|ing|s)?|ingest(?:ed|ing|s)?|stream(?:ed|ing|s)?|index(?:ed|ing)?|connect(?:ed|ing|s)?|load(?:ed|ing|s)?|export(?:ed|ing|s)?|import(?:ed|ing|s)?|upload(?:ed|ing|s)?|pipe(?:d|s)?|stor(?:e|ed|es|ing)|built|build(?:ing|s)?|run(?:s|ning)?|ran)\b[^.;!?\n]{0,40}\b(?:with|in|into|to|on|from|onto)|\b(?:using|via|powered\s+by|built\s+on|hosted\s+on))\s+$/i;
+
+/** A noun right after a capitalized run that makes it a thing or place: "RevOps teams", "Onitsha branches". */
+const THING_HEADS = new Set([
+  "team", "teams", "group", "groups", "program", "programs", "programme", "platform", "app", "apps", "system", "systems",
+  "portal", "service", "services", "dashboard", "dashboards", "pipeline", "pipelines", "project", "department", "office",
+  "offices", "unit", "branch", "branches", "store", "stores", "clinic", "clinics", "hospital", "hospitals", "model",
+  "models", "survey", "api", "apis", "sdk", "integration", "integrations", "connector", "workspace", "cluster", "bucket",
+  "buckets", "database", "warehouse", "server", "servers", "instance", "plugin", "ads", "campaign", "campaigns",
+  "region", "regions", "market", "markets", "site", "sites", "hub", "campus", "district", "state", "city", "area",
+  "location", "locations", "depot", "tables", "events", "segments", "workflow", "workflows", "reports", "report",
+]);
+
+/** Internal capitals mark a product ("PostHog", "RevOps") unless they follow a surname prefix ("McDonald", "DeShawn"). */
+const NAME_PREFIXES = new Set(["mc", "mac", "de", "la", "le", "di", "da", "van", "von", "du", "st", "fitz", "o"]);
+function isCamelCaseProduct(word: string): boolean {
+  const head = /^(\p{Lu}[\p{Ll}\p{M}]+)\p{Lu}/u.exec(word);
+  return head !== null && !NAME_PREFIXES.has(head[1].toLowerCase());
+}
+
+function namesAThingInContext(text: string, start: number, end: number): boolean {
+  if (/^['’]s\b/u.test(text.slice(end))) return false;
+  const before = text.slice(Math.max(0, start - 80), start);
+  // Look past the rest of a list for its head noun: "Ikeja and Lekki stores".
+  const after = text.slice(end, end + 120).replace(REST_OF_LIST, "");
+  const next = /^\s+([\p{L}]+)/u.exec(after);
+  return SYSTEM_CONTEXT.test(before) || PLACE_CONTEXT.test(before) || (next !== null && THING_HEADS.has(next[1].toLowerCase()));
+}
+
+function startsSentence(text: string, index: number): boolean {
+  const before = text.slice(Math.max(0, index - 20), index).replace(/[ \t]+$/, "");
+  return (before === "" && index <= 20) || /[.!?:;\n(\["“'‘]$/u.test(before);
+}
+
+/**
+ * Names outside compromise's lexicon, such as many African, Asian and Indigenous names: a capitalized word that
+ * isn't known vocabulary, together with the capitalized words beside it ("Precious Eze").
+ */
+const unfamiliarNames: Detector = (text, claims) => {
+  const { terms } = parse(text);
+  const words: Word[] = [...text.matchAll(CAPITALIZED_WORD)].map((match) => {
+    const start = match.index;
+    const end = start + match[0].replace(/['’]s$/u, "").length;
+    const tags = terms.find((term) => start >= term.start && start < term.end)?.tags ?? [];
+    const unfamiliar = !tags.some((tag) => NOT_A_PERSON_TAGS.has(tag)) && !isKnownWord(match[0]) && !isCamelCaseProduct(match[0]);
+    return { start, end, unfamiliar, nameLike: unfamiliar || tags.includes("FirstName") || tags.includes("LastName") };
+  });
+  let run: Word[] = [];
+  const claimRun = () => {
+    const words = run;
+    run = [];
+    if (!words.some((word) => word.unfamiliar)) return;
+    const whole = text.slice(words[0].start, words[words.length - 1].end);
+    if (isOrganization(whole) || namesAThing(whole) || namesAThingInContext(text, words[0].start, words[words.length - 1].end)) return;
+    let first = words.findIndex((word) => word.nameLike);
+    const last = words.findLastIndex((word) => word.nameLike);
+    // Take in capitalized words before the name unless they open the sentence: "Precious Eze", but not "Contact Ananya".
+    while (first > 0) {
+      const before = words[first - 1];
+      if (isNotAName(text.slice(before.start, before.end)) || startsSentence(text, before.start)) break;
+      first -= 1;
+    }
+    const [start, end] = [words[first].start, words[last].end];
+    if (looksLikeName(text.slice(start, end))) claims.add("name", start, end);
+  };
+  for (const word of words) {
+    const previous = run[run.length - 1];
+    if (previous && !/^[ \t]+$/.test(text.slice(previous.end, word.start).replace(/^['’]s/u, ""))) claimRun();
+    run.push(word);
+  }
+  if (run.length) claimRun();
+};
+
+const LOWER_WORD = String.raw`[\p{Ll}][\p{L}\p{M}'’-]+`;
+
+/** Claims the leading words of a captured phrase that are not English: "segun" in "belongs to segun now". */
+function claimUnfamiliarWords(text: string, claims: Claims, start: number, phrase: string): void {
+  let end = start;
+  for (const token of phrase.matchAll(/\S+/gu)) {
+    if (isKnownWord(token[0])) break;
+    end = start + token.index + token[0].replace(/['’]s$/u, "").length;
+  }
+  claims.add("name", start, end);
+}
+
+/**
+ * Lower-case names right after a strong cue: "my wife adaeze", "name is tunde bakare", "I'm chidinma".
+ * The name is captured in a lookahead so a cue that finds no name ("husband, my wife ngozi") doesn't swallow the next cue.
+ */
+const LOWERCASE_NAME_CUE = new RegExp(
+  String.raw`(?:\b(?:(?:my|his|her|their|our|the)\s+)?${anyCaseWords(ROLE_WORDS)}|\b${anyCaseWords(["name", "surname"])}\s*(?:is|was|:)|\b${anyCaseWords(["named", "called"])}|\b[Ii]\s+am|\b[Ii]['’]m)\s*[:,]?\s+(?=([\p{Ll}][\p{L}\p{M}'’-]*(?:\s+[\p{Ll}][\p{L}\p{M}'’-]*){0,2}))`,
+  "gdu",
+);
+
+/** Positions that take a person: "send it to okeke", "ask chiamaka", "submitted by uchenna", "Mr. adewale". */
+const PERSON_POSITION = new RegExp(
+  String.raw`(?:\b(?:send|give|forward|email|mail|pass|hand|assign|show|sell|pay|refund|transfer|deliver|report|write|reply|sent|gave|given|forwarded|emailed|mailed|handed|assigned|showed|shown|sold|paid|refunded|transferred|delivered|reported|wrote|written|replied|belongs?|belonged)\b(?:\s+[\p{L}'’-]+){0,3}?\s+to|\b(?:ask|asked|email|emailed|call|called|phone|phoned|text|texted|tell|told|notify|notified|remind|reminded|ping|pinged|message|messaged|thank|thanked|cc|bcc|contact|contacted|invite|invited|meet|met|visit|visited|hire|hired|bill|billed|charge|charged|refund|refunded|pay|paid|credit|credited|reimburse|reimbursed|compensate|compensated|treat|treated|admit|admitted|discharge|discharged)|\b(?:submitted|approved|requested|signed|sent|owned|created|filed|made|written|reviewed|authori[sz]ed|referred|prescribed|completed|initiated|raised|opened|closed|placed|booked)\s+by|\bon\s+behalf\s+of|\b${HONORIFIC}\.?)\s+(?=(${LOWER_WORD}(?:\s+${LOWER_WORD})?))`,
+  "gdu",
+);
+
+/** "segun's records": a possessive non-English word before something personal. */
+const LOWERCASE_POSSESSIVE = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?=([\p{Ll}][\p{L}\p{M}-]{2,})['’]s\s+${POSSESSED}\b)`,
+  "gdu",
+);
+
+/** Two or more non-English lower-case words together are almost always a name ("adaeze okeke"), not a typo. */
+const LOWERCASE_PAIR = new RegExp(String.raw`(?<![\p{L}\p{M}'’-])${LOWER_WORD}(?:\s+${LOWER_WORD})+(?![\p{L}\p{M}])`, "gu");
+
+const lowercaseNames: Detector = (text, claims) => {
+  for (const pattern of [LOWERCASE_NAME_CUE, PERSON_POSITION, LOWERCASE_POSSESSIVE]) {
+    each(pattern, text, (match) => {
+      const span = match.indices?.[1];
+      if (span) claimUnfamiliarWords(text, claims, span[0], match[1]);
+    });
+  }
+  each(LOWERCASE_PAIR, text, (match) => {
+    let runStart = -1;
+    let runEnd = -1;
+    let count = 0;
+    const flush = () => {
+      if (count >= 2) claims.add("name", runStart, runEnd);
+      count = 0;
+    };
+    for (const token of match[0].matchAll(/\S+/gu)) {
+      const start = match.index + token.index;
+      if (token[0].length >= 3 && !isKnownWord(token[0])) {
+        if (count === 0) runStart = start;
+        runEnd = start + token[0].length;
+        count += 1;
+      } else flush();
+    }
+    flush();
+  });
+};
+
+/** Rows of a pasted table: any field of one to four words with a non-English word in it ("obinna eze;nkem obi"). */
+const tabularNames: Detector = (text, claims) => {
+  const lines = text.split("\n");
+  const commaRows = lines.filter((line) => line.includes(",")).length;
+  let offset = 0;
+  for (const line of lines) {
+    const separator = /[;\t|]/.test(line) ? /[;\t|]/ : commaRows >= 2 && line.includes(",") ? /,/ : null;
+    if (separator) {
+      let fieldStart = offset;
+      for (const field of line.split(separator)) {
+        const trimmed = field.trim();
+        const lead = field.length - field.trimStart().length;
+        if (/^[\p{L}\p{M}'’ .-]+$/u.test(trimmed) && trimmed.split(/\s+/).length <= 4
+          && trimmed.split(/\s+/).some((word) => word.length >= 2 && !isKnownWord(word.replace(/\.$/, "")))) {
+          claims.add("name", fieldStart + lead, fieldStart + lead + trimmed.length);
+        }
+        fieldStart += field.length + 1;
+      }
+    }
+    offset += line.length + 1;
+  }
+};
+
+/** "Chidinma, segun and ngozi": non-English words listed alongside a name are names too. */
+const NEXT_IN_LIST = new RegExp(String.raw`^${LIST_LINK}([\p{L}][\p{L}\p{M}'’-]*)`, "u");
+const PREVIOUS_IN_LIST = new RegExp(String.raw`([\p{L}][\p{L}\p{M}'’-]*)${LIST_LINK}$`, "u");
+const nameLists: Detector = (text, claims) => {
+  const queue = claims.found.filter((item) => item.kind === "name").map(({ start, end }) => [start, end]);
+  const claimWord = (word: string | undefined, from: number) => {
+    if (!word || isKnownWord(word) || claims.overlaps(from, from + word.length)) return;
+    claims.add("name", from, from + word.length);
+    queue.push([from, from + word.length]);
+  };
+  while (queue.length) {
+    const [start, end] = queue.pop()!;
+    const next = NEXT_IN_LIST.exec(text.slice(end, end + 60));
+    if (next) claimWord(next[1], end + next[0].length - next[1].length);
+    const previous = PREVIOUS_IN_LIST.exec(text.slice(Math.max(0, start - 60), start));
+    if (previous) claimWord(previous[1], start - previous[0].length);
+  }
+};
+
+/** Words in scripts without capital letters (Chinese, Arabic, Hindi, Korean, Amharic…) can't be checked against English. */
+const caselessScriptWords = claimAll("name", /(?:(?![ªº])\p{Lo})(?:(?![ªº])[\p{Lo}\p{M}])*/gu);
+
+/** @handles on social platforms; email addresses are claimed first. */
+const handles = claimAll("handle", /(?<![\w@.])@[A-Za-z0-9_](?:[A-Za-z0-9_.]{0,28}[A-Za-z0-9_])?(?![\w@])/g);
 
 const DETECTORS: Detector[] = [
   ...SECRET_FORMATS.map((pattern) => claimAll("secret", pattern)),
   ...emails,
+  handles,
   labelledSecret,
   ...deviceIds,
   ...ipAddresses,
@@ -514,9 +757,29 @@ const DETECTORS: Detector[] = [
   // The lexicon's exact spans first; cue patterns then catch names it doesn't know.
   knownNames,
   ...nameCues,
+  unfamiliarNames,
+  lowercaseNames,
+  tabularNames,
+  caselessScriptWords,
+  nameLists,
   // Long random-looking strings: keys, tokens, hashes of identifiers.
   claimAll("secret", /(?<![\w/+=-])(?=[A-Za-z0-9+/=_-]*\d[A-Za-z0-9+/=_-]*\d)(?=[A-Za-z0-9+/=_-]*[A-Za-z][A-Za-z0-9+/=_-]*[A-Za-z])[A-Za-z0-9+/=_-]{24,}(?![\w/+=-])/g),
 ];
+
+/**
+ * Rewrites runs of two or more ALL-CAPS words ("CHARLES OKAFOR, 12 ELM STREET") in title case so the name and
+ * address checks see them as they would mixed-case text. Single acronyms such as HIPAA are left alone.
+ * Only same-length case changes are made, so offsets still line up with the source.
+ */
+function titleCaseShouting(text: string): string {
+  return text.replace(/(?<![\p{L}\p{N}])\p{Lu}{2,}(?:[ \t]+\p{Lu}{2,})+(?![\p{L}\p{N}])/gu, (run) => run.replace(
+    /\p{Lu}+/gu,
+    (word) => {
+      const titled = word[0] + word.slice(1).toLowerCase();
+      return titled.length === word.length ? titled : word;
+    },
+  ));
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -526,8 +789,9 @@ const DETECTORS: Detector[] = [
 export function findSensitiveData(source: string, now: Date = new Date()): SensitiveFinding[] {
   if (!source.trim()) return [];
   const normalized = normalize(source.slice(0, MAX_SCAN_LENGTH));
+  const text = titleCaseShouting(normalized.text);
   const claims = new Claims();
-  for (const detect of DETECTORS) detect(normalized.text, claims, now);
+  for (const detect of DETECTORS) detect(text, claims, now);
   return claims.found
     .map(({ kind, start, end }) => ({ kind, start: normalized.starts[start], end: normalized.ends[end - 1] }))
     .sort((a, b) => a.start - b.start);
