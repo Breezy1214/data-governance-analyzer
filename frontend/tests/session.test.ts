@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_INPUT } from "../lib/assessment";
-import { DRAFT_KEY, IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "../lib/session";
+import { DRAFT_KEY, IDLE_TIMEOUT_MS, clearDraft, loadDraft, loadSession, purgeLegacyDrafts, saveDraft } from "../lib/session";
+import { assessmentResult, completeInput } from "./assessment-fixture";
 
 class MemoryStorage implements Storage {
   private items = new Map<string, string>();
@@ -83,5 +84,37 @@ describe("session-scoped draft storage", () => {
     expect(() => clearDraft()).not.toThrow();
     expect(() => purgeLegacyDrafts()).not.toThrow();
     expect(loadDraft()).toBeNull();
+  });
+
+  describe("restoring the screen after a refresh (SCRUM-28)", () => {
+    it("restores the step and result alongside the answers", () => {
+      saveDraft(completeInput, session, 100, { step: 3, result: assessmentResult });
+      expect(loadSession(session, 100)).toEqual({ input: completeInput, step: 3, result: assessmentResult });
+      expect(loadDraft(session, 100)).toEqual(completeInput);
+    });
+
+    it("falls back to the questions when a results step has no valid result", () => {
+      saveDraft(completeInput, session, 100, { step: 2, result: null });
+      expect(loadSession(session, 100)).toMatchObject({ step: 1, result: null });
+      session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 100, input: completeInput, step: 2, result: { ...assessmentResult, score: 7 } }));
+      expect(loadSession(session, 100)).toMatchObject({ step: 1, result: null });
+    });
+
+    it("never restores past the description step without a valid description", () => {
+      saveDraft({ ...completeInput, description: "short" }, session, 100, { step: 1, result: null });
+      expect(loadSession(session, 100)?.step).toBe(0);
+      session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 100, input: completeInput, step: 9 }));
+      expect(loadSession(session, 100)?.step).toBe(0);
+    });
+
+    it("restores drafts saved by the previous build, which had no step or result", () => {
+      session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 100, input: { ...draft, purpose: "overlap" } }));
+      expect(loadSession(session, 100)).toMatchObject({ step: 0, result: null });
+    });
+
+    it("expires a saved result with the draft", () => {
+      saveDraft(completeInput, session, 0, { step: 2, result: assessmentResult });
+      expect(loadSession(session, IDLE_TIMEOUT_MS)).toBeNull();
+    });
   });
 });

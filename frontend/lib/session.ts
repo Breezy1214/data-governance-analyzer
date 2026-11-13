@@ -1,4 +1,4 @@
-import { AssessmentInput, isAssessmentInput } from "./assessment";
+import { AssessmentInput, AssessmentResult, isAssessmentInput, isAssessmentResult, validateDescription } from "./assessment";
 import { redactSensitiveData } from "./sensitive-data";
 
 /** v1.0 retains nothing: the draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16, docs/data-handling.md). */
@@ -9,7 +9,12 @@ export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 // Earlier builds kept drafts in localStorage with no expiry.
 const LEGACY_KEYS = ["governance-assessment-draft-v1"];
 
-type StoredDraft = { savedAt: number; input: AssessmentInput };
+export type Step = 0 | 1 | 2 | 3;
+
+/** What a refresh restores: the answers, the screen, and the last result for those answers (SCRUM-28). */
+export type SessionState = { input: AssessmentInput; step: Step; result: AssessmentResult | null };
+
+type StoredDraft = { savedAt: number; input: AssessmentInput; step?: number; result?: unknown };
 
 export function safely<T>(action: () => T, fallback?: T): T | undefined {
   try {
@@ -32,12 +37,27 @@ function withoutSensitiveData(input: AssessmentInput): AssessmentInput {
   return { ...input, description: redactSensitiveData(input.description) };
 }
 
-export function saveDraft(input: AssessmentInput, storage?: Storage, now = Date.now()): void {
-  const draft: StoredDraft = { savedAt: now, input: withoutSensitiveData(input) };
+export function saveDraft(
+  input: AssessmentInput,
+  storage?: Storage,
+  now = Date.now(),
+  view?: { step: Step; result: AssessmentResult | null },
+): void {
+  const draft: StoredDraft = {
+    savedAt: now,
+    input: withoutSensitiveData(input),
+    ...(view && { step: view.step, result: view.result ?? undefined }),
+  };
   safely(() => (storage ?? window.sessionStorage).setItem(DRAFT_KEY, JSON.stringify(draft)));
 }
 
-export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput | null {
+/**
+ * Restores the session, or returns null (and clears storage) if it is
+ * expired or malformed. A step that is no longer reachable falls back to
+ * the furthest valid one: results steps need a valid result, and the
+ * questions step needs a valid description.
+ */
+export function loadSession(storage?: Storage, now = Date.now()): SessionState | null {
   const raw = safely(() => (storage ?? window.sessionStorage).getItem(DRAFT_KEY), null);
   if (!raw) return null;
   try {
@@ -47,11 +67,21 @@ export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput 
       clearDraft(storage);
       return null;
     }
-    return withoutSensitiveData(draft.input);
+    const input = withoutSensitiveData(draft.input);
+    const result = isAssessmentResult(draft.result) ? draft.result : null;
+    const describable = validateDescription(input.description) === null;
+    const requested = [0, 1, 2, 3].includes(draft.step as number) ? (draft.step as Step) : 0;
+    const step: Step = requested >= 2 ? (result ? requested : describable ? 1 : 0)
+      : requested === 1 && !describable ? 0 : requested;
+    return { input, step, result };
   } catch {
     clearDraft(storage);
     return null;
   }
+}
+
+export function loadDraft(storage?: Storage, now = Date.now()): AssessmentInput | null {
+  return loadSession(storage, now)?.input ?? null;
 }
 
 export function clearDraft(storage?: Storage): void {

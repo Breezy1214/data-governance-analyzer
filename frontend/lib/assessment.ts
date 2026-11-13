@@ -115,7 +115,8 @@ export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type AssessmentInput = {
   description: string;
   dataTypes: DataType[];
-  purpose: Purpose;
+  /** Empty until the person picks one: a default would silently add points (SCRUM-28). */
+  purpose: Purpose | "";
   regulations: Regulation[];
 } & { [Field in ChoiceField]: keyof (typeof CHOICE_QUESTIONS)[Field]["options"] | "" };
 
@@ -161,10 +162,18 @@ export type AssessmentResult = {
 export const EMPTY_INPUT: AssessmentInput = {
   description: "",
   dataTypes: [],
-  purpose: "overlap",
+  purpose: "",
   regulations: [],
   ...(Object.fromEntries(CHOICE_FIELDS.map((field) => [field, ""])) as Record<ChoiceField, "">),
 };
+
+/**
+ * Points of the heaviest single rule in docs/risk-scoring-rubric-v1.0.md
+ * (DATA_SENSITIVITY_HIGH). Factor bars are drawn against this so each bar
+ * shows its weight relative to the others, not against the 100-point cap.
+ * Update alongside backend/app/scoring/rules.py.
+ */
+export const MAX_FACTOR_POINTS = 24;
 
 export const DESCRIPTION_MAX_LENGTH = 1000;
 export const RISK_THRESHOLDS = { lowMax: 29, mediumMax: 59 } as const;
@@ -201,7 +210,8 @@ export function isAssessmentInput(value: unknown): value is AssessmentInput {
     && isSelectionOf(value.regulations, REGULATION_LABELS)
     && CHOICE_FIELDS.every((field) => value[field] === ""
       || (typeof value[field] === "string" && Object.hasOwn(CHOICE_QUESTIONS[field].options, value[field])))
-    && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
+    && typeof value.purpose === "string"
+    && (value.purpose === "" || Object.hasOwn(PURPOSE_LABELS, value.purpose));
 }
 
 export function validateDescription(value: string): string | null {
@@ -225,6 +235,7 @@ function sensitiveDataMessage(value: string): string | null {
 
 export function validateQuestions(input: AssessmentInput): string | null {
   if (input.dataTypes.length === 0) return "Select at least one type of information.";
+  if (!input.purpose) return "Choose the intended use before assessing the use case.";
   if (input.regulations.length === 0) return "Select the rules that may apply, or choose Not sure.";
   if (CHOICE_FIELDS.some((field) => !input[field])) {
     return "Answer every question before assessing the use case. Choose Not sure if you don't know yet.";
@@ -271,7 +282,7 @@ function isRecommendation(value: unknown): value is Recommendation {
 }
 
 /** The backend owns recommendation content; the client checks shape and internal consistency only. */
-function isAssessmentResult(value: unknown): value is AssessmentResult {
+export function isAssessmentResult(value: unknown): value is AssessmentResult {
   if (!isRecord(value)) return false;
   const basicShape = value.schemaVersion === SCHEMA_VERSION && typeof value.rulesVersion === "string"
     && typeof value.mappingVersion === "string"

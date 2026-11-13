@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ASSESSMENT_TIMEOUT_MS,
   CHOICE_FIELDS,
+  EMPTY_INPUT,
+  MAX_FACTOR_POINTS,
   isAssessmentInput,
   requestAssessment,
   toggleRegulation,
@@ -23,6 +27,7 @@ describe("assessment client", () => {
     expect(validateQuestions({ ...baseline, identifierProtection: "" })).toMatch(/answer every question/i);
     expect(validateQuestions({ ...baseline, dataTypes: [] })).toMatch(/type of information/i);
     expect(validateQuestions({ ...baseline, regulations: [] })).toMatch(/not sure/i);
+    expect(validateQuestions({ ...baseline, purpose: "" })).toMatch(/intended use/i);
     expect(validateQuestions(baseline)).toBeNull();
   });
 
@@ -140,5 +145,20 @@ describe("assessment client", () => {
     await requestAssessment(baseline, controller.signal);
     expect(vi.getTimerCount()).toBe(0);
     expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+  });
+});
+
+describe("questionnaire defaults and scale (SCRUM-28)", () => {
+  it("starts with no purpose selected so it cannot silently add points", () => {
+    expect(EMPTY_INPUT.purpose).toBe("");
+    expect(isAssessmentInput(EMPTY_INPUT)).toBe(true);
+    expect(validateQuestions({ ...baseline, purpose: EMPTY_INPUT.purpose })).not.toBeNull();
+  });
+
+  it("keeps the factor-bar scale in step with the heaviest backend rule", () => {
+    const rules = readFileSync(join(__dirname, "../../backend/app/scoring/rules.py"), "utf8");
+    const points = [...rules.matchAll(/^\s*Rule\("[A-Z_]+",\s*"[^"]+",\s*"[^"]*",\s*(\d+),/gm)].map((match) => Number(match[1]));
+    expect(points.length).toBeGreaterThan(10);
+    expect(MAX_FACTOR_POINTS).toBe(Math.max(...points));
   });
 });

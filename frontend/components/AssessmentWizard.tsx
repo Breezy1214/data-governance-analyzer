@@ -12,6 +12,7 @@ import {
   DESCRIPTION_MAX_LENGTH,
   DataType,
   EMPTY_INPUT,
+  MAX_FACTOR_POINTS,
   PURPOSE_LABELS,
   QUESTION_COUNT,
   QUESTION_LABELS,
@@ -33,7 +34,7 @@ import {
   DocumentImportError,
   extractDocumentText,
 } from "@/lib/document-import";
-import { IDLE_TIMEOUT_MS, clearDraft, loadDraft, purgeLegacyDrafts, saveDraft } from "@/lib/session";
+import { IDLE_TIMEOUT_MS, Step, clearDraft, loadSession, purgeLegacyDrafts, saveDraft } from "@/lib/session";
 import { containsSensitiveData, redactSensitiveData } from "@/lib/sensitive-data";
 import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
@@ -129,8 +130,7 @@ function statsFor(step: number, input: AssessmentInput, result: AssessmentResult
   if (step === 0) return INTRO_STATS;
   if (step === 1) {
     const answers = CHOICE_FIELDS.map((field) => input[field]);
-    // The intended use always has a value, so it counts as answered.
-    const answered = 1 + (input.dataTypes.length > 0 ? 1 : 0) + (input.regulations.length > 0 ? 1 : 0) + answers.filter(Boolean).length;
+    const answered = (input.purpose ? 1 : 0) + (input.dataTypes.length > 0 ? 1 : 0) + (input.regulations.length > 0 ? 1 : 0) + answers.filter(Boolean).length;
     const complete = validateQuestions(input) === null;
     const unknowns = answers.filter((answer) => answer === "notSure").length + (input.regulations.includes("notSure") ? 1 : 0);
     return [
@@ -182,7 +182,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
   draftOwner?: string;
   onUnauthorized?: () => void;
 } = {}) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<Step>(0);
   const [maxReached, setMaxReached] = useState(0);
   const [input, setInput] = useState<AssessmentInput>(EMPTY_INPUT);
   const [result, setResult] = useState<AssessmentResult | null>(null);
@@ -193,12 +193,21 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ kind: "notice" | "error"; message: string } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const startOverButton = useRef<HTMLButtonElement>(null);
+  const keepAssessmentButton = useRef<HTMLButtonElement>(null);
+  const wasConfirmingReset = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
   const pendingAssessment = useRef<AbortController | null>(null);
   const pendingReport = useRef<AbortController | null>(null);
   const pendingImport = useRef<AbortController | null>(null);
   const [draftReady, setDraftReady] = useState(false);
+  // Bars share one scale, the heaviest rubric rule, so their lengths compare (SCRUM-28).
+  const factorScale = useMemo(
+    () => Math.max(MAX_FACTOR_POINTS, ...(result?.factors.map((factor) => factor.points) ?? [])),
+    [result],
+  );
 
   const cancelPendingWork = useCallback(() => {
     pendingAssessment.current?.abort();
@@ -223,16 +232,23 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     setError(null);
     setReportError(null);
     setImportStatus(null);
+    setConfirmingReset(false);
     clearDraft();
   }, [cancelPendingWork]);
 
   useEffect(() => {
     purgeLegacyDrafts();
     if (draftOwner) bindDraft(draftOwner);
-    const restored = loadDraft();
+    const restored = loadSession();
     // Deferred: sessionStorage is client-only, and react-hooks/set-state-in-effect bans sync setState here.
     const restoreDraft = window.setTimeout(() => {
-      if (restored) setInput(restored);
+      if (restored) {
+        // A refresh returns to the same screen, including results (SCRUM-28).
+        setInput(restored.input);
+        setResult(restored.result);
+        setStep(restored.step);
+        setMaxReached(restored.result ? 3 : restored.step);
+      }
       setDraftReady(true);
     }, 0);
     return () => window.clearTimeout(restoreDraft);
@@ -241,18 +257,25 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
   // Saving redacts the description, so it waits for a pause in typing instead of running on every key.
   useEffect(() => {
     if (!draftReady) return;
-    if (input === EMPTY_INPUT) {
+    if (input === EMPTY_INPUT && !result) {
       clearDraft();
       return;
     }
-    const save = () => saveDraft(input);
+    const save = () => saveDraft(input, undefined, Date.now(), { step, result });
     const pending = window.setTimeout(save, DRAFT_SAVE_DELAY_MS);
     window.addEventListener("pagehide", save);
     return () => {
       window.clearTimeout(pending);
       window.removeEventListener("pagehide", save);
     };
-  }, [input, draftReady]);
+  }, [input, result, step, draftReady]);
+
+  // Move focus into the start-over confirmation, and back to its trigger on cancel.
+  useEffect(() => {
+    if (confirmingReset) keepAssessmentButton.current?.focus();
+    else if (wasConfirmingReset.current) startOverButton.current?.focus();
+    wasConfirmingReset.current = confirmingReset;
+  }, [confirmingReset]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
   useEffect(() => {
@@ -288,8 +311,9 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
     setReportError(null);
   };
 
-  const moveTo = (nextStep: number) => {
+  const moveTo = (nextStep: Step) => {
     cancelPendingWork();
+    setConfirmingReset(false);
     // The description is only editable here, so leaving this step is the one gate it must pass.
     if (step === 0 && nextStep > 0) {
       const message = validateDescription(input.description);
@@ -418,7 +442,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
             <li key={label} className={index === step ? "current" : index < step ? "complete" : ""}>
               <button
                 type="button"
-                onClick={() => index <= maxReached && moveTo(index)}
+                onClick={() => index <= maxReached && moveTo(index as Step)}
                 disabled={index > maxReached}
                 aria-current={index === step ? "step" : undefined}
               >
@@ -559,8 +583,9 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                 </fieldset>
 
                 <label className="select-field" htmlFor="purpose">
-                  <span>{QUESTION_LABELS.purpose}</span>
-                  <select id="purpose" value={input.purpose} onChange={(event) => update("purpose", event.target.value as Purpose)}>
+                  <span>{QUESTION_LABELS.purpose} <b className="badge">Required</b></span>
+                  <select id="purpose" required value={input.purpose} onChange={(event) => update("purpose", event.target.value as Purpose)}>
+                    <option value="" disabled>Choose an intended use</option>
                     {(Object.entries(PURPOSE_LABELS) as [Purpose, string][]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                   </select>
                 </label>
@@ -615,7 +640,7 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                     {result.factors.map((factor) => (
                       <li key={factor.label}>
                         <div><span>{factor.label}</span><b>+{factor.points}</b></div>
-                        <span className="factor-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, factor.points)}%` }} /></span>
+                        <span className="factor-bar" aria-hidden="true"><i style={{ width: `${(factor.points / factorScale) * 100}%` }} /></span>
                       </li>
                     ))}
                   </ul>
@@ -673,9 +698,26 @@ export function AssessmentWizard({ account, draftOwner, onUnauthorized }: {
                 <p className="method-note">Recommendation catalog v{result.mappingVersion}: {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}. Sources checked {formatCheckedOn(result.sourcesCheckedOn)}.</p>
               </div>
 
-              <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation catalog version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
+              <details className="summary card"><summary>Assessment record</summary><dl><div><dt>Use case</dt><dd>{input.description}</dd></div><div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div><div><dt>Purpose</dt><dd>{input.purpose ? PURPOSE_LABELS[input.purpose] : "Not answered"}</dd></div><div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div><div><dt>Recommendation catalog version</dt><dd>{result.mappingVersion}</dd></div><div><dt>Assessed</dt><dd>{formatAssessedAt(result.assessedAt)}</dd></div></dl></details>
               {reportError && <p className="error" role="alert">{reportError}</p>}
-              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button className="destructive" type="button" onClick={reset}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
+              {confirmingReset && (
+                <div
+                  className="confirm-reset card"
+                  id="confirm-reset"
+                  role="group"
+                  aria-labelledby="confirm-reset-title"
+                  aria-describedby="confirm-reset-detail"
+                  onKeyDown={(event) => { if (event.key === "Escape") setConfirmingReset(false); }}
+                >
+                  <h3 className="card-title" id="confirm-reset-title">Start over?</h3>
+                  <p id="confirm-reset-detail">This clears your answers and this assessment. Download the report first if you need a record.</p>
+                  <div className="actions end">
+                    <button ref={keepAssessmentButton} className="secondary" type="button" onClick={() => setConfirmingReset(false)}>Keep my assessment</button>
+                    <button className="destructive" type="button" onClick={reset}>Yes, start over</button>
+                  </div>
+                </div>
+              )}
+              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button ref={startOverButton} className="destructive" type="button" aria-expanded={confirmingReset} aria-controls={confirmingReset ? "confirm-reset" : undefined} onClick={() => setConfirmingReset(true)}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>
           )}
         </section>

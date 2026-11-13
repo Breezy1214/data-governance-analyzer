@@ -70,7 +70,7 @@ export function buildReportModel(
           label: "Information involved",
           value: input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ") || "None selected",
         },
-        { label: QUESTION_LABELS.purpose, value: PURPOSE_LABELS[input.purpose] },
+        { label: QUESTION_LABELS.purpose, value: input.purpose ? PURPOSE_LABELS[input.purpose] : "Not answered" },
         ...CHOICE_FIELDS.map((field) => ({ label: CHOICE_QUESTIONS[field].legend, value: answerLabel(field, input) })),
         {
           label: QUESTION_LABELS.regulations,
