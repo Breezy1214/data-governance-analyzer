@@ -315,14 +315,15 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, purpose, regulations, ...answers } as Omit<AssessmentInput, "description">;
 }
 
-export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal): Promise<AssessmentResult> {
+export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
+  endpoint = "/api/assessments"): Promise<AssessmentResult> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) abort();
   const timeout = setTimeout(abort, ASSESSMENT_TIMEOUT_MS);
   try {
-    const response = await fetch("/api/assessments", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
