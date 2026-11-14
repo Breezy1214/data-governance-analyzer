@@ -78,8 +78,10 @@ const PAIRS: [string, string, number][] = [
 ];
 
 describe("colour tokens", () => {
-  it.each(PAIRS)("--%s on --%s meets %s:1", (foreground, background, minimum) => {
-    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(minimum);
+  it("meets the WCAG contrast minimum for every token pair", () => {
+    const failing = PAIRS.filter(([foreground, background, minimum]) => contrast(foreground, background) < minimum)
+      .map(([foreground, background, minimum]) => `--${foreground} on --${background} needs ${minimum}:1`);
+    expect(failing).toEqual([]);
   });
 
   it("keeps raw colour values inside the :root token block", () => {

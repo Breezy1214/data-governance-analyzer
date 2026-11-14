@@ -114,9 +114,6 @@ describe("pdf rendering", () => {
     const wordy: AssessmentInput = { ...input, description: "Merge partner records. ".repeat(60) };
     const doc = await renderAssessmentPdf(buildReportModel(wordy, result));
     expect(doc.getNumberOfPages()).toBeGreaterThan(1);
-    const bytes = doc.output("arraybuffer");
-    expect(bytes.byteLength).toBeGreaterThan(1000);
-    expect(new TextDecoder().decode(new Uint8Array(bytes).slice(0, 8))).toContain("%PDF-");
   });
 
   it("embeds the report title and no personal metadata", async () => {

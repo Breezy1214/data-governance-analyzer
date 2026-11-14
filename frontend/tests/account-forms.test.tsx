@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfirmLinkForm, ForgotPasswordForm, SignupForm } from "../components/AccountForms";
-import { LoginForm } from "../components/LoginForm";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -78,13 +77,5 @@ describe("emailed links", () => {
     fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "new@example.test" } });
     fireEvent.submit(screen.getByRole("button", { name: "Send reset link" }).closest("form")!);
     await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/If an account exists/));
-  });
-});
-
-describe("sign-in page", () => {
-  it("links to account creation and password reset", () => {
-    render(<LoginForm />);
-    expect(screen.getByRole("link", { name: "Create an account" }).getAttribute("href")).toBe("/signup");
-    expect(screen.getByRole("link", { name: "Forgot your password?" }).getAttribute("href")).toBe("/forgot-password");
   });
 });

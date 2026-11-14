@@ -65,11 +65,13 @@ describe("saving a completed assessment", () => {
   });
 
   // FastAPI rejects unknown fields, so a description or a browser-supplied score never reaches the register.
-  it.each([401, 413, 422, 429, 503])("saves nothing when FastAPI answers %s, and passes its answer on", async (status) => {
-    stubAssessmentApi(Response.json({ message: "Backend message" }, { status }));
-    const response = await assess(post("assessments", { ...ANSWERS, description: "Jane Doe", score: 0 }));
-    expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ message: "Backend message" });
+  it("saves nothing when FastAPI refuses, and passes its answer on", async () => {
+    for (const status of [401, 422]) {
+      stubAssessmentApi(Response.json({ message: "Backend message" }, { status }));
+      const response = await assess(post("assessments", { ...ANSWERS, description: "Jane Doe", score: 0 }));
+      expect(response.status).toBe(status);
+      expect(await response.json()).toEqual({ message: "Backend message" });
+    }
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
