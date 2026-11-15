@@ -1,7 +1,7 @@
-import { accountError, json, requireEmailLinkSession, sameOriginPost } from "@/lib/auth-server";
+import { accountError, json, requireEmailLinkSession, sameOriginRoute } from "@/lib/auth-server";
 import { requireNewPassword } from "@/lib/new-password";
 
-export const POST = sameOriginPost(async (request) => {
+export const POST = sameOriginRoute(async (request) => {
   const { client } = await requireEmailLinkSession();
   const input = await request.json().catch(() => null);
   const password = await requireNewPassword(input?.password);

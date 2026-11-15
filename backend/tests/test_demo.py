@@ -39,8 +39,9 @@ def test_demo_matches_the_authenticated_result(client):
     client.app.dependency_overrides[require_session] = lambda: {"sub": "scoring-test"}
     signed_in = client.post("/assessments", json=sample_payload()).json()
     demo = client.post("/demo/assessments", json=sample_payload()).json()
-    signed_in.pop("assessedAt")
-    demo.pop("assessedAt")
+    for body in (signed_in, demo):
+        body.pop("assessedAt")
+    assert signed_in.pop("saved") is None
     assert demo == signed_in
 
 
@@ -102,3 +103,11 @@ def test_idle_clients_are_forgotten():
     now[0] = 61.0
     assert limiter.allow("second")
     assert list(limiter._clients) == ["second"]
+
+
+def test_responses_report_the_deployed_api_version():
+    app = create_app(Settings(supabase_url=SUPABASE_URL, version="9.9.9"))
+    app.dependency_overrides[require_session] = lambda: {"sub": "scoring-test"}
+    versioned = TestClient(app)
+    assert versioned.post("/demo/assessments", json=sample_payload()).json()["apiVersion"] == "9.9.9"
+    assert versioned.post("/assessments", json=sample_payload()).json()["apiVersion"] == "9.9.9"

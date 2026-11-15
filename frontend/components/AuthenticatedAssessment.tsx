@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AUTH_EVENT, AUTH_TIMEOUT_MS, clearPrivateState, notifyAuthChange, type AuthSession } from "@/lib/auth-client";
+import { AUTH_EVENT, AUTH_TIMEOUT_MS, SIGN_OUT_FAILED, clearPrivateState, signOut, type AuthSession } from "@/lib/auth-client";
+import { ASSESSMENTS_ENDPOINT, type AssessmentInput } from "@/lib/assessment";
+import { REGISTER_PATH, versionsEndpoint } from "@/lib/register";
 import { AssessmentWizard } from "./AssessmentWizard";
 
-export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
+export function AuthenticatedAssessment({ session, reopened }: {
+  session: AuthSession;
+  /** Answers from a saved assessment, and the assessment that new results are saved to (null starts a new one). */
+  reopened?: { input: AssessmentInput; saveTo: string | null; notice: React.ReactNode };
+}) {
   const router = useRouter();
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState("");
@@ -52,16 +59,9 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
 
   async function logout() {
     setBlocked(true);
-    clearPrivateState();
-    notifyAuthChange();
     setError("");
-    try {
-      const response = await fetch("/api/logout", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
-      if (!response.ok) throw new Error("Unavailable");
-      router.replace("/login");
-    } catch {
-      setError("Sign-out could not be confirmed. Please retry before leaving this device.");
-    }
+    if (await signOut()) router.replace("/login");
+    else setError(SIGN_OUT_FAILED);
   }
 
   return <>
@@ -70,7 +70,16 @@ export function AuthenticatedAssessment({ session }: { session: AuthSession }) {
       ? <main className="auth-page"><p role="status">Assessment locked.</p>
           <button className="secondary" onClick={logout}>Retry sign out</button></main>
       : <AssessmentWizard draftOwner={session.user.id} onUnauthorized={expire}
-          account={<div className="account-controls"><span>{session.user.email}</span>
+          initialInput={reopened?.input} notice={reopened?.notice}
+          // Results become versions of the assessment last saved here, or of the reopened one.
+          endpointFor={(savedTo) => {
+            const target = savedTo ?? reopened?.saveTo;
+            return target ? versionsEndpoint(target) : ASSESSMENTS_ENDPOINT;
+          }}
+          // A reopened assessment comes from the register, so it doesn't replace the draft kept in this tab.
+          keepDrafts={!reopened}
+          account={<div className="account-controls"><Link href={REGISTER_PATH}>My assessments</Link>
+            <span>{session.user.email}</span>
             <button className="secondary" onClick={logout}>Sign out</button></div>} />}
   </>;
 }

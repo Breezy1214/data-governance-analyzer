@@ -1,7 +1,5 @@
-import { authenticatedSession, sameOriginPost } from "@/lib/auth-server";
-import { forwardAssessment } from "@/lib/backend-proxy";
+import { authenticatedSession, sameOriginRoute } from "@/lib/auth-server";
+import { bearer, forwardToBackend } from "@/lib/backend-proxy";
 
-export const POST = sameOriginPost(async (request) => {
-  const { accessToken } = await authenticatedSession();
-  return forwardAssessment(request, "/assessments", { Authorization: `Bearer ${accessToken}` });
-});
+export const POST = sameOriginRoute(async (request) =>
+  forwardToBackend(request, "/assessments", bearer((await authenticatedSession()).accessToken)));

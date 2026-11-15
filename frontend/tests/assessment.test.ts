@@ -57,8 +57,8 @@ describe("assessment client", () => {
   it("sends an explicit schema version to the assessment API", async () => {
     const fetchMock = stubAssessmentApi();
 
-    const result = await requestAssessment(baseline);
-    expect(result).toEqual(assessmentResult);
+    const outcome = await requestAssessment(baseline);
+    expect(outcome).toEqual({ result: assessmentResult });
     expect(fetchMock.mock.calls[0][0]).toBe("/api/assessments");
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
@@ -103,6 +103,7 @@ describe("assessment client", () => {
     { ...assessmentResult, recommendations: undefined },
     { ...assessmentResult, assessedAt: "not a date" },
     { ...assessmentResult, mappingVersion: undefined },
+    { ...assessmentResult, apiVersion: undefined },
     { ...assessmentResult, mappingApprovalStatus: "unknown" },
     { ...assessmentResult, sourcesCheckedOn: "not a date" },
     { ...assessmentResult, score: 90 },
@@ -115,8 +116,22 @@ describe("assessment client", () => {
   it("accepts recommendation text from the backend without a local catalog", async () => {
     const changed = { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], action: "Text the client has never seen." }] };
     stubAssessmentApi(new Response(JSON.stringify(changed)));
-    await expect(requestAssessment(baseline)).resolves.toEqual(changed);
+    await expect(requestAssessment(baseline)).resolves.toEqual({ result: changed });
   });
+
+  it("reports where a signed-in result was saved, separately from the result", async () => {
+    stubAssessmentApi(Response.json({ ...assessmentResult, saved: { assessmentId: "a1", version: 2 } }));
+    await expect(requestAssessment(baseline)).resolves.toEqual({
+      result: assessmentResult, saved: { assessmentId: "a1", version: 2 },
+    });
+  });
+
+  it.each([null, { assessmentId: "a1" }, { assessmentId: "a1", version: 0 }])(
+    "treats a failed or malformed save (%j) as not saved", async (saved) => {
+      stubAssessmentApi(Response.json({ ...assessmentResult, saved }));
+      await expect(requestAssessment(baseline)).resolves.toEqual({ result: assessmentResult, saved: null });
+    },
+  );
 
   it("rejects invalid JSON", async () => {
     stubAssessmentApi(new Response("not json"));

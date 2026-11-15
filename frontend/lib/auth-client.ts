@@ -41,3 +41,17 @@ export function notifyAuthChange() {
   // Only a random notification is persisted, never identity, credentials or answers.
   safely(() => localStorage.setItem(AUTH_EVENT, crypto.randomUUID()));
 }
+
+export const SIGN_OUT_FAILED = "Sign-out could not be confirmed. Please retry before leaving this device.";
+
+/** False when the server didn't confirm the sign-out. */
+export async function signOut(): Promise<boolean> {
+  clearPrivateState();
+  notifyAuthChange();
+  try {
+    const response = await fetch("/api/logout", { method: "POST", cache: "no-store", signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

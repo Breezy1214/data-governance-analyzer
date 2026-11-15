@@ -15,5 +15,7 @@ services:
         value: 0.1.0
       - key: SUPABASE_URL
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated

@@ -6,6 +6,8 @@ const PATHS = {
   recommendations: "M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6zM9 12l2 2 4-4",
   upload: "M12 16V4M7 9l5-5 5 5M5 20h14",
   arrow: "M5 12h14M13 6l6 6-6 6",
+  register: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
+  plus: "M12 5v14M5 12h14",
 } as const;
 
 export type IconName = keyof typeof PATHS;
