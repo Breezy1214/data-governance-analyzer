@@ -13,6 +13,7 @@ import {
 } from "./assessment";
 import { redactSensitiveData } from "./sensitive-data";
 import { PALETTE, RISK_COLORS } from "./theme";
+import type { ReviewEvent } from "./review";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
 
@@ -59,6 +60,7 @@ function recommendationText(item: Recommendation): string {
 export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
+  review?: ReviewEvent,
 ): ReportModel {
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: redactSensitiveData(input.description).trim() },
@@ -110,6 +112,16 @@ export function buildReportModel(
     });
   }
 
+  if (review?.to_status === "approved" && review.actor_id && review.rules_version === result.rulesVersion && review.mapping_version === result.mappingVersion) {
+    sections.push({ heading: "Review sign-off", kind: "pairs", pairs: [
+      { label: "Reviewer", value: review.actor_label },
+      { label: "Reviewer account", value: review.actor_id },
+      { label: "Approved at", value: review.occurred_at },
+      { label: "Assessment version", value: `${review.assessment_id} / ${review.version}` },
+      { label: "Decision comment", value: review.comment },
+      { label: "Rubric and catalog", value: `${review.rules_version} / ${review.mapping_version}` },
+    ] });
+  }
   sections.push({ heading: "Disclaimer", kind: "paragraph", body: DISCLAIMER });
 
   return {
@@ -271,8 +283,9 @@ export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,
   signal?: AbortSignal,
+  review?: ReviewEvent,
 ): Promise<void> {
   if (signal?.aborted) return;
-  const doc = await renderAssessmentPdf(buildReportModel(input, result));
+  const doc = await renderAssessmentPdf(buildReportModel(input, result, review));
   if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }

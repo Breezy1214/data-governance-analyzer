@@ -8,6 +8,10 @@ const pages = vi.hoisted(() => ({ signedIn: vi.fn(), loadAssessmentPage: vi.fn()
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("../lib/register-page", () => ({ signedIn: pages.signedIn, loadAssessmentPage: pages.loadAssessmentPage }));
 vi.mock("../lib/register-server", () => ({ listRegister: pages.listRegister }));
+vi.mock("../lib/review-server", () => ({
+  reviewContext: async () => ({ ownerId: "user", workspaceId: null, role: null, events: [] }),
+  reviewWorkspaces: async () => [],
+}));
 
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { AuthenticatedAssessment } from "../components/AuthenticatedAssessment";

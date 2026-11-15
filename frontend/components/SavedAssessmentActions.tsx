@@ -6,11 +6,12 @@ import { useRouter } from "next/navigation";
 import { ASSESSMENT_TIMEOUT_MS, type AssessmentInput, type AssessmentResult } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
 import { DESCRIPTION_NOT_SAVED, REGISTER_PATH } from "@/lib/register";
+import type { ReviewEvent } from "@/lib/review";
 
 const DELETE_FAILED = "The assessment couldn't be deleted. Please try again.";
 
 export function SavedAssessmentActions({
-  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable,
+  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, isOwner = true, review,
 }: {
   assessmentId: string;
   input: AssessmentInput;
@@ -19,6 +20,8 @@ export function SavedAssessmentActions({
   duplicateHref: string;
   versionCount: number;
   deletable: boolean;
+  isOwner?: boolean;
+  review?: ReviewEvent;
 }) {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
@@ -31,7 +34,7 @@ export function SavedAssessmentActions({
     setDownloading(true);
     setError("");
     try {
-      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result);
+      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, undefined, review);
     } catch {
       setError("The report could not be generated. Please try again.");
     } finally {
@@ -74,16 +77,16 @@ export function SavedAssessmentActions({
     ) : (
       <div className="actions wrap">
         <div>
-          <Link className="secondary" href={duplicateHref}>Duplicate</Link>
+          {isOwner && <Link className="secondary" href={duplicateHref}>Duplicate</Link>}
           {deletable
             ? <button ref={deleteButton} className="destructive" type="button" onClick={() => setConfirming(true)}>Delete</button>
-            : <span className="method-note">Assessments with a version in review or approved can’t be deleted.</span>}
+            : <span className="method-note">Submitted assessments can’t be deleted; their audit history is retained.</span>}
         </div>
         <div>
           <button className="secondary" type="button" disabled={downloading} onClick={download}>
             {downloading ? "Preparing report…" : "Download report (PDF) ↓"}
           </button>
-          <Link className="primary" href={reassessHref}>Re-assess <span>→</span></Link>
+          {isOwner && <Link className="primary" href={reassessHref}>Re-assess <span>→</span></Link>}
         </div>
       </div>
     )}

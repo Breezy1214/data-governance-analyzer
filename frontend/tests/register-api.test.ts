@@ -139,7 +139,7 @@ describe("deleting a saved assessment", () => {
     mocks.from.mockReturnValue(table({ data: { id: ASSESSMENT_ID }, error: null }, { data: [], error: null }));
     const response = await remove(del(), context());
     expect(response.status).toBe(409);
-    expect((await response.json()).message).toMatch(/in review or approved/);
+    expect((await response.json()).message).toMatch(/submitted for review/);
   });
 
   it("reports 404 for an assessment that isn't visible to this user", async () => {

@@ -60,7 +60,7 @@ export async function loadVersions(client: Client, assessmentId: string): Promis
 export async function deleteAssessment(client: Client, assessmentId: string) {
   if (!isUuid(assessmentId)) throw new RegisterError(404);
   const { data, error } = await client.from("assessments").delete().eq("id", assessmentId).select("id");
-  if (error) throw new RegisterError(503);
+  if (error) throw new RegisterError(error.code === "23503" ? 409 : 503);
   // Nothing deleted: either it isn't visible to this user, or RLS kept it because a decision is pending.
   if (data.length === 0) throw new RegisterError((await assessmentExists(client, assessmentId)) ? 409 : 404);
 }

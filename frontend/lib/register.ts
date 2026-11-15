@@ -19,6 +19,7 @@ export const STATUS_LABELS = {
   in_review: "In review",
   approved: "Approved",
   rejected: "Rejected",
+  changes_requested: "Changes requested",
 } as const;
 type AssessmentStatus = keyof typeof STATUS_LABELS;
 export const DESCRIPTION_NOT_SAVED = "Not saved. The description stays in the browser tab where it was written.";

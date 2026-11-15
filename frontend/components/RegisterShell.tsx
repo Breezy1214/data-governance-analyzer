@@ -6,6 +6,7 @@ import { BrandMark, Icon } from "./Icons";
 const NAV = [
   { href: "/", label: "New assessment", icon: "plus" },
   { href: REGISTER_PATH, label: "My assessments", icon: "register" },
+  { href: "/reviews", label: "Workspace reviews", icon: "register" },
 ] as const;
 
 export function RegisterShell({ email, section, current, title, intro, children }: {

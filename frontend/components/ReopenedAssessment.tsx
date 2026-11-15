@@ -1,10 +1,14 @@
 import { AuthenticatedAssessment } from "./AuthenticatedAssessment";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import { assessmentTitle } from "@/lib/register";
+import { reviewContext } from "@/lib/review-server";
+import { notFound } from "next/navigation";
 
 /** Re-assessing adds versions to the same assessment; duplicating starts a new one from the same answers. */
 export async function ReopenedAssessment({ page, mode }: { page: AssessmentPageProps; mode: "reassess" | "duplicate" }) {
-  const { session, selected, latest } = await loadAssessmentPage(page);
+  const { client, session, selected, latest } = await loadAssessmentPage(page);
+  const context = await reviewContext(client, selected.id, session.user.id);
+  if (context.ownerId !== session.user.id) notFound();
   const title = assessmentTitle(selected.input);
   const notice = mode === "reassess"
     ? <>Re-assessing “{title}” from version {selected.version}. The new result is saved as version {latest.version + 1},

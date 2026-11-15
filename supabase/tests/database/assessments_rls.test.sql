@@ -69,14 +69,14 @@ select throws_ok(
   '42501', null, 'an owner cannot create an assessment for someone else');
 select throws_ok(
   $$update assessment_versions set result = pg_temp.result(0, 'LOW') where version = 1$$,
-  '42501', null, 'only the status of a saved version can be edited');
+  '42501', null, 'scoring results cannot be edited');
 select throws_ok(
   $$delete from assessment_versions where version = 1$$,
   '42501', null, 'a single version cannot be deleted, so history is kept');
 select throws_ok(
   $$update assessment_versions set status = 'approved' where version = 1$$,
   '42501', null, 'an owner cannot approve their own assessment');
-update assessment_versions set status = 'in_review' where version = 1;
+select transition_review((select id from saved), create_review_workspace('Register test'), 'in_review', 'Ready', 'draft');
 select is((select status from assessment_versions where version = 1), 'in_review', 'the status change is saved');
 
 -- User B can neither see nor change A's register.
@@ -85,9 +85,9 @@ select pg_temp.act_as('00000000-0000-4000-8000-00000000000b');
 select is_empty($$select 1 from assessments$$, 'another user sees none of the owner''s assessments');
 select is_empty($$select 1 from assessment_versions$$, 'another user sees none of the owner''s versions');
 select is_empty($$select 1 from assessment_register$$, 'another user''s register is empty');
-select is_empty(
+select throws_ok(
   $$update assessment_versions set status = 'draft' returning 1$$,
-  'another user cannot change the owner''s versions');
+  '42501', null, 'another user cannot change the owner''s versions');
 select is_empty(
   $$delete from assessments where id = (select assessment_id from saved) returning 1$$,
   'another user cannot delete the owner''s assessment');
@@ -117,19 +117,19 @@ select pg_temp.act_as('00000000-0000-4000-8000-00000000000a');
 select is_empty(
   $$delete from assessments where id = (select assessment_id from saved) returning 1$$,
   'an assessment with a version in review cannot be deleted');
-update assessment_versions set status = 'draft' where version = 1;
+create temp table private_draft on commit drop as
+  select * from save_assessment_version(null, pg_temp.answers(), pg_temp.result());
 select isnt_empty(
-  $$delete from assessments where id = (select assessment_id from saved) returning 1$$,
+  $$delete from assessments where id = (select assessment_id from private_draft) returning 1$$,
   'the owner deletes an undecided assessment');
-select is_empty($$select 1 from assessment_versions$$, 'deleting an assessment deletes all its versions');
+select is_empty($$select 1 from assessment_versions where assessment_id = (select assessment_id from private_draft)$$,
+  'deleting a private assessment deletes its versions');
 
--- Deleting an account deletes its register.
-select save_assessment_version(null, pg_temp.answers(), pg_temp.result());
+-- Reviewed evidence cannot disappear through an account-deletion cascade.
 reset role;
-delete from auth.users where id = '00000000-0000-4000-8000-00000000000a';
-select is_empty(
-  $$select 1 from assessments where user_id = '00000000-0000-4000-8000-00000000000a'$$,
-  'deleting an account deletes its assessments');
+select throws_ok(
+  $$delete from auth.users where id = '00000000-0000-4000-8000-00000000000a'$$,
+  '23503', null, 'deleting an account cannot erase reviewed records');
 
 select * from finish();
 rollback;

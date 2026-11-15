@@ -4,6 +4,8 @@ import { AssessmentRecord, RecommendationsView, ScoreBreakdown } from "@/compone
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
 import { SavedAssessmentActions } from "@/components/SavedAssessmentActions";
+import { ReviewControls } from "@/components/ReviewControls";
+import { reviewContext, reviewWorkspaces } from "@/lib/review-server";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
   DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle,
@@ -12,11 +14,15 @@ import {
 export const metadata: Metadata = { title: "Saved assessment · Data Governance Readiness Analyzer" };
 
 export default async function SavedAssessment(props: AssessmentPageProps) {
-  const { session, versions, selected, latest } = await loadAssessmentPage(props);
+  const { client, session, versions, selected, latest } = await loadAssessmentPage(props);
+  const [context, workspaces] = await Promise.all([
+    reviewContext(client, selected.id, session.user.id), reviewWorkspaces(client, session.user.id),
+  ]);
+  const isOwner = context.ownerId === session.user.id;
   const { input, result } = selected;
   const title = assessmentTitle(input);
   // Deleting removes every version, so it is offered only while no decision is pending or made.
-  const deletable = versions.every((entry) => entry.status === "draft" || entry.status === "rejected");
+  const deletable = isOwner && versions.every((entry) => entry.status === "draft");
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
   return (
@@ -51,7 +57,9 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
           <p className="method-note">Re-assessing adds a new version. Earlier versions are kept unchanged.</p>
         </div>
 
+        <ReviewControls versionId={selected.id} status={selected.status} context={context} userId={session.user.id} workspaces={workspaces} />
         <SavedAssessmentActions assessmentId={selected.assessmentId} input={input} result={result}
+          isOwner={isOwner} review={context.events.at(-1)?.to_status === "approved" && selected.status === "approved" ? context.events.at(-1) : undefined}
           reassessHref={reopen("reassess")} duplicateHref={reopen("duplicate")}
           versionCount={versions.length} deletable={deletable} />
       </div>

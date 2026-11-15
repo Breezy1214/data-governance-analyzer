@@ -26,5 +26,5 @@ export async function loadAssessmentPage({ params, searchParams }: AssessmentPag
   const requested = Number(version);
   const selected = version === undefined ? versions.at(-1) : versions.find((entry) => entry.version === requested);
   if (!selected) notFound();
-  return { session, versions, selected, latest: versions.at(-1)! };
+  return { client, session, versions, selected, latest: versions.at(-1)! };
 }

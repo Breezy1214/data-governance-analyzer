@@ -3,7 +3,7 @@ import { RegisterError, deleteAssessment } from "@/lib/register-server";
 
 const MESSAGES = {
   404: "That assessment could not be found.",
-  409: "This assessment has a version in review or approved, so it can't be deleted.",
+  409: "This assessment has been submitted for review, so it can't be deleted.",
   503: "The register is unavailable. Please try again.",
 } as const;
 
