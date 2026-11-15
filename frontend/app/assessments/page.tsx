@@ -3,15 +3,13 @@ import Link from "next/link";
 import { RISK_LABELS } from "@/components/AssessmentResultView";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
-import { signedIn } from "@/lib/register-page";
-import { listRegister } from "@/lib/register-server";
+import { loadRegister } from "@/lib/register-page";
 import { REGISTER_PATH, STATUS_LABELS, assessmentPath } from "@/lib/register";
 
 export const metadata: Metadata = { title: "My assessments · Data Governance Readiness Analyzer" };
 
 export default async function MyAssessments() {
-  const { client, session } = await signedIn();
-  const entries = await listRegister(client);
+  const { session, entries } = await loadRegister();
   return (
     <RegisterShell email={session.user.email} section="My assessments" current={REGISTER_PATH} title="My assessments"
       intro="Every assessment you complete is saved here with its answers, result and versions. Use-case descriptions are never saved.">

@@ -38,8 +38,9 @@ def test_demo_matches_the_authenticated_result(client):
     client.app.dependency_overrides[require_session] = lambda: {"sub": "scoring-test"}
     signed_in = client.post("/assessments", json=sample_payload()).json()
     demo = client.post("/demo/assessments", json=sample_payload()).json()
-    signed_in.pop("assessedAt")
-    demo.pop("assessedAt")
+    for body in (signed_in, demo):
+        body.pop("assessedAt")
+    assert signed_in.pop("saved") is None
     assert demo == signed_in
 
 

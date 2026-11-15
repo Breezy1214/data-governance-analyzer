@@ -106,7 +106,6 @@ class ScoredAssessment(RecommendationResult):
 
 
 class AssessmentResponse(ScoredAssessment):
-    """What the API returns: the scoring plus the deployment that produced it and the answers it accepted."""
+    """What the API returns: the scoring plus the deployment that produced it."""
 
     apiVersion: str
-    answers: AssessmentRequest

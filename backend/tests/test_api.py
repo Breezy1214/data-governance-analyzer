@@ -41,12 +41,6 @@ def test_assessment_returns_transparent_score():
     }
 
 
-def test_response_returns_the_answers_it_accepted_for_saving():
-    # The frontend saves these, not the raw request, so defaults such as schemaVersion are filled in.
-    body = client.post("/assessments", json=sample_payload()).json()
-    assert body["answers"] == {**sample_payload(), "schemaVersion": "3.0"}
-
-
 def test_invalid_input_returns_clear_client_error_without_echoing_input():
     oversized = "sensitive " * 120
     response = client.post("/assessments", json=sample_payload(description=oversized, dataTypes=[]))
