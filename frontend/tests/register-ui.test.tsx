@@ -4,10 +4,9 @@ import { assessmentResult, completeInput, stubAssessmentApi } from "./assessment
 import { expectNoViolations } from "./axe";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
-const pages = vi.hoisted(() => ({ signedIn: vi.fn(), loadAssessmentPage: vi.fn(), listRegister: vi.fn() }));
+const pages = vi.hoisted(() => ({ loadRegister: vi.fn(), loadAssessmentPage: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("../lib/register-page", () => ({ signedIn: pages.signedIn, loadAssessmentPage: pages.loadAssessmentPage }));
-vi.mock("../lib/register-server", () => ({ listRegister: pages.listRegister }));
+vi.mock("../lib/register-page", () => pages);
 
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { AuthenticatedAssessment } from "../components/AuthenticatedAssessment";
@@ -60,13 +59,13 @@ describe("register helpers", () => {
   });
 
   it("skips register rows it can't read instead of showing partial data", () => {
-    const row = {
-      assessment_id: ID, version: 2, version_count: 2, status: "draft", score: 86, risk_level: "HIGH",
-      answers, saved_at: "2026-11-12T15:00:00Z",
+    const entry = {
+      assessmentId: ID, version: 2, versionCount: 2, status: "draft", score: 86, level: "HIGH",
+      answers, savedAt: "2026-11-12T15:00:00Z",
     };
-    expect(toRegisterEntry(row)).toMatchObject({ assessmentId: ID, version: 2, level: "HIGH", status: "draft" });
-    expect(toRegisterEntry({ ...row, status: "archived" })).toBeNull();
-    expect(toRegisterEntry({ ...row, risk_level: "SEVERE" })).toBeNull();
+    expect(toRegisterEntry(entry)).toMatchObject({ assessmentId: ID, version: 2, level: "HIGH", status: "draft" });
+    expect(toRegisterEntry({ ...entry, status: "archived" })).toBeNull();
+    expect(toRegisterEntry({ ...entry, level: "SEVERE" })).toBeNull();
   });
 });
 
@@ -136,12 +135,11 @@ describe("saving from the wizard", () => {
 
 describe("My assessments", () => {
   it("lists each assessment's latest version with risk level, status and date", async () => {
-    pages.signedIn.mockResolvedValue({ client: {}, session });
-    pages.listRegister.mockResolvedValue([{
+    pages.loadRegister.mockResolvedValue({ session, entries: [{
       assessmentId: ID, version: 2, versionCount: 2, status: "in_review", score: 86, level: "HIGH",
       title: "Patient or clinical research · Email addresses, Health information",
       savedAt: "2026-11-12T15:00:00Z",
-    }]);
+    }] });
     const { container } = render(await MyAssessments());
 
     const row = screen.getByRole("row", { name: /patient or clinical research/i });

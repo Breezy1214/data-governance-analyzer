@@ -14,6 +14,8 @@ class Settings:
     supabase_audience: str = "authenticated"
     demo_rate_per_client: int = 30
     demo_rate_total: int = 600
+    # The register_api role's connection string; without it, signed-in results are scored but not saved.
+    database_url: str = ""
 
     def validate_auth(self) -> None:
         parsed = urlsplit(self.supabase_url)
@@ -33,4 +35,5 @@ class Settings:
             supabase_audience=os.getenv("SUPABASE_JWT_AUDIENCE", cls.supabase_audience),
             demo_rate_per_client=int(os.getenv("DEMO_RATE_PER_CLIENT", cls.demo_rate_per_client)),
             demo_rate_total=int(os.getenv("DEMO_RATE_TOTAL", cls.demo_rate_total)),
+            database_url=os.getenv("DATABASE_URL", ""),
         )
