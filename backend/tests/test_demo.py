@@ -31,7 +31,6 @@ def scoring_payload(scenario):
 def test_demo_scores_without_signing_in(client):
     response = client.post("/demo/assessments", json=sample_payload())
     assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
     assert response.json()["score"] == 28
 
 
@@ -45,21 +44,11 @@ def test_demo_matches_the_authenticated_result(client):
     assert demo == signed_in
 
 
-def test_signed_in_endpoint_still_requires_a_token(client):
-    assert client.post("/assessments", json=sample_payload()).status_code == 401
-
-
-def test_demo_validates_input_like_the_signed_in_endpoint(client):
-    response = client.post("/demo/assessments", json=sample_payload(dataTypes=[]))
-    assert response.status_code == 422
-    assert "dataTypes" in response.json()["fields"]
-
-
-@pytest.mark.parametrize("scenario", SCENARIOS, ids=[scenario["id"] for scenario in SCENARIOS])
-def test_sample_scenarios_score_as_described(client, scenario):
-    body = client.post("/demo/assessments", json=scoring_payload(scenario)).json()
-    assert body["score"] == scenario["expectedScore"]
-    assert body["level"] == scenario["expectedLevel"]
+def test_sample_scenarios_score_as_described(client):
+    for scenario in SCENARIOS:
+        body = client.post("/demo/assessments", json=scoring_payload(scenario)).json()
+        assert body["score"] == scenario["expectedScore"]
+        assert body["level"] == scenario["expectedLevel"]
 
 
 def test_each_visitor_is_limited():

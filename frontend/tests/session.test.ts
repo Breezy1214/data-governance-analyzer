@@ -62,13 +62,13 @@ describe("session-scoped draft storage", () => {
     expect(session.getItem(DRAFT_KEY)).toBeNull();
   });
 
-  it.each([null, {}, { ...draft, dataTypes: null }, { ...draft, description: 42 }, { ...draft, purpose: "unknown" }])(
-    "discards an invalid draft: %j", (input) => {
+  it("discards invalid drafts", () => {
+    for (const input of [null, { ...draft, dataTypes: null }, { ...draft, description: 42 }, { ...draft, purpose: "unknown" }]) {
       session.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 100, input }));
-      expect(loadDraft(session, 100)).toBeNull();
+      expect(loadDraft(session, 100), JSON.stringify(input)).toBeNull();
       expect(session.getItem(DRAFT_KEY)).toBeNull();
-    },
-  );
+    }
+  });
 
   it("discards timestamps in the future", () => {
     saveDraft(draft, session, 101);

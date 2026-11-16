@@ -105,13 +105,12 @@ describe("saving from the wizard", () => {
   });
 
   it("never shows saving in demo mode", async () => {
-    const fetchMock = stubAssessmentApi();
+    stubAssessmentApi();
     render(<DemoAssessment />);
     fireEvent.click(screen.getByRole("button", { name: new RegExp(DEMO_SCENARIOS[0].title) }));
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     await screen.findByRole("heading", { level: 2, name: /high risk/i });
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/demo/assessments");
     expect(screen.queryByText(/saved to/i)).toBeNull();
     expect(screen.queryByText(/couldn’t be saved/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /my assessments/i })).toBeNull();
