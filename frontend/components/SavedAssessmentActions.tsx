@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ASSESSMENT_TIMEOUT_MS, type AssessmentInput, type AssessmentResult } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
 import { DESCRIPTION_NOT_SAVED, REGISTER_PATH } from "@/lib/register";
+import { ConfirmPanel } from "@/components/ConfirmPanel";
 
 const DELETE_FAILED = "The assessment couldn't be deleted. Please try again.";
 
@@ -56,21 +58,27 @@ export function SavedAssessmentActions({
     setConfirming(false);
   }
 
+  // The Delete button is hidden while the prompt is open, so render it before returning focus.
+  const cancelDelete = () => {
+    flushSync(() => setConfirming(false));
+    deleteButton.current?.focus();
+  };
+
   const versions = versionCount === 1 ? "its only version" : `all ${versionCount} versions`;
   return <>
     {error && <p className="error" role="alert">{error}</p>}
     {confirming ? (
-      <div className="card confirm-delete" role="group" aria-labelledby="confirm-delete-heading">
-        <h3 className="card-title" id="confirm-delete-heading">Delete this assessment?</h3>
-        <p className="lede">This permanently deletes {versions}. It can’t be undone.</p>
-        <div className="actions">
-          <button className="secondary" type="button" disabled={deleting}
-            onClick={() => { setConfirming(false); deleteButton.current?.focus(); }}>Keep it</button>
-          <button className="destructive" type="button" disabled={deleting} onClick={remove}>
-            {deleting ? "Deleting…" : "Delete permanently"}
-          </button>
-        </div>
-      </div>
+      <ConfirmPanel
+        id="confirm-delete"
+        title="Delete this assessment?"
+        cancelLabel="Keep it"
+        confirmLabel={deleting ? "Deleting…" : "Delete permanently"}
+        onCancel={cancelDelete}
+        onConfirm={remove}
+        busy={deleting}
+      >
+        This permanently deletes {versions}. It can’t be undone.
+      </ConfirmPanel>
     ) : (
       <div className="actions wrap">
         <div>

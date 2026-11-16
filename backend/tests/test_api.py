@@ -34,6 +34,7 @@ def test_assessment_returns_transparent_score():
     assert body["schemaVersion"] == "3.0"
     assert body["rulesVersion"] == "2.0"
     assert body["mappingVersion"] == "2.0"
+    assert body["maxFactorPoints"] == 24
     assert {factor["ruleId"] for factor in body["factors"]} == {
         "DATA_SENSITIVITY_DIRECT",
         "PARTICIPANTS_ONE",

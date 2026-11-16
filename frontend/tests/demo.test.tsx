@@ -59,7 +59,7 @@ describe("demo mode", () => {
   });
 
   it("stores nothing and leaves a signed-in draft in the same tab untouched", () => {
-    saveDraft(completeInput);
+    saveDraft({ input: completeInput });
     const saved = sessionStorage.getItem(DRAFT_KEY);
     vi.useFakeTimers();
     render(<DemoAssessment />);

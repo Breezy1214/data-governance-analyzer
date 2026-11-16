@@ -42,6 +42,7 @@ export const assessmentResult: AssessmentResult = {
     { ruleId: "SECONDARY_USE", category: "purpose", label: "Reuse beyond the stated purpose", points: 8 },
     { ruleId: "PURPOSE_HEALTH_RESEARCH", category: "purpose", label: "Intended use: Patient or clinical research", points: 6 },
   ],
+  maxFactorPoints: 24,
   recommendations: [
     {
       id: "TREAT_HASHES_AS_PERSONAL_DATA",

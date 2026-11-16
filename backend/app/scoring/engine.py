@@ -52,6 +52,7 @@ def score_assessment(
         level=level,
         guidance=guidance,
         factors=factors,
+        maxFactorPoints=max(rule.points for rule in ruleset.rules),
         limitations=limitations,
         assessedAt=assessed_at or datetime.now(timezone.utc).isoformat(),
     )

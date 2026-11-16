@@ -17,6 +17,12 @@ def test_threshold_boundaries():
         assert RULESET_V2_0.thresholds.level_for(score) == expected_level
 
 
+def test_result_carries_the_heaviest_rule_of_its_rules_version():
+    result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
+    assert result.maxFactorPoints == max(rule.points for rule in RULESET_V2_0.rules) == 24
+    assert all(factor.points <= result.maxFactorPoints for factor in result.factors)
+
+
 def test_low_risk_internal_analytics_with_only_email_addresses():
     result = score_assessment(sample_request(participants="internal", purpose="analytics"), assessed_at=ASSESSED_AT)
     assert result.score == 14  # direct identifiers (12) + analytics (2)
