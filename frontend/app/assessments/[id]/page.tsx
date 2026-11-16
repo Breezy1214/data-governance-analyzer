@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AssessmentRecord, RecommendationsView, ScoreBreakdown } from "@/components/AssessmentResultView";
+import { AssessmentRecord, ScoreBreakdown } from "@/components/AssessmentResultView";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
-import { SavedAssessmentActions } from "@/components/SavedAssessmentActions";
+import { SavedAssessmentSimulation } from "@/components/SavedAssessmentSimulation";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
   DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle,
@@ -30,30 +30,29 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
         )}
         <h2>The proposed use case is <em><span className="risk-icon" aria-hidden="true" />{result.level.toLowerCase()} risk.</em></h2>
         <ScoreBreakdown result={result} />
-        <RecommendationsView result={result} />
+        <SavedAssessmentSimulation input={input} result={result} actions={{
+          assessmentId: selected.assessmentId, reassessHref: reopen("reassess"), duplicateHref: reopen("duplicate"),
+          versionCount: versions.length, deletable,
+        }}>
+          <AssessmentRecord input={input} result={result} description={DESCRIPTION_NOT_SAVED}
+            status={STATUS_LABELS[selected.status]} open />
 
-        <AssessmentRecord input={input} result={result} description={DESCRIPTION_NOT_SAVED}
-          status={STATUS_LABELS[selected.status]} open />
-
-        <div className="card">
-          <h3 className="card-title">Versions</h3>
-          <ol className="version-list">
-            {versions.toReversed().map((entry) => (
-              <li key={entry.id} data-risk={entry.result.level.toLowerCase()}>
-                <Link href={assessmentPath(entry.assessmentId, entry.version)}
-                  aria-current={entry.version === selected.version ? "page" : undefined}>Version {entry.version}</Link>
-                <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{entry.result.level} · {entry.result.score}/100</span>
-                <span className="badge">{STATUS_LABELS[entry.status]}</span>
-                <LocalTime value={entry.savedAt} />
-              </li>
-            ))}
-          </ol>
-          <p className="method-note">Re-assessing adds a new version. Earlier versions are kept unchanged.</p>
-        </div>
-
-        <SavedAssessmentActions assessmentId={selected.assessmentId} input={input} result={result}
-          reassessHref={reopen("reassess")} duplicateHref={reopen("duplicate")}
-          versionCount={versions.length} deletable={deletable} />
+          <div className="card">
+            <h3 className="card-title">Versions</h3>
+            <ol className="version-list">
+              {versions.toReversed().map((entry) => (
+                <li key={entry.id} data-risk={entry.result.level.toLowerCase()}>
+                  <Link href={assessmentPath(entry.assessmentId, entry.version)}
+                    aria-current={entry.version === selected.version ? "page" : undefined}>Version {entry.version}</Link>
+                  <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{entry.result.level} · {entry.result.score}/100</span>
+                  <span className="badge">{STATUS_LABELS[entry.status]}</span>
+                  <LocalTime value={entry.savedAt} />
+                </li>
+              ))}
+            </ol>
+            <p className="method-note">Re-assessing adds a new version. Earlier versions are kept unchanged.</p>
+          </div>
+        </SavedAssessmentSimulation>
       </div>
     </RegisterShell>
   );
