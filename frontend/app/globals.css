@@ -271,7 +271,7 @@ textarea::placeholder { color: var(--muted); }
 .simulator-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .simulator-head h4 { margin: 0; font-size: 15px; font-weight: 600; }
 .simulator-scores { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: center; margin-top: 12px; }
-.simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border-left: 3px solid var(--risk-color); border-radius: 10px; background: var(--paper); }
+.simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
 .simulator-assessed b { font-family: var(--font-mono), monospace; font-size: 15px; }
 .simulator-assessed .method-note { margin: 0; }
 .simulator-simulated { display: flex; align-items: center; gap: 16px; }
