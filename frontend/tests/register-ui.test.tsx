@@ -185,6 +185,20 @@ describe("a saved assessment", () => {
     expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
   });
 
+  it("returns focus to Delete when the prompt is cancelled or dismissed with Escape", () => {
+    render(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
+      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.keyDown(screen.getByRole("group", { name: "Delete this assessment?" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Delete this assessment?" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
+  });
+
   it("explains when a reviewed assessment can't be deleted", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({ message: "A version is in review or approved, so it can't be deleted." }, { status: 409 })));

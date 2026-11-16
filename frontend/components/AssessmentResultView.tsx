@@ -56,6 +56,9 @@ function ReferenceList({ items }: { items: Reference[] }) {
 }
 
 export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
+  // Bars share one scale, the heaviest rule in this result's rules version, so their lengths compare (SCRUM-28).
+  // Results saved before the API sent that scale fall back to their own heaviest factor.
+  const factorScale = result.maxFactorPoints ?? Math.max(1, ...result.factors.map((factor) => factor.points));
   return (
     <div className="result-grid">
       <div className="card score-card">
@@ -78,7 +81,7 @@ export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
           {result.factors.map((factor) => (
             <li key={factor.label}>
               <div><span>{factor.label}</span><b>+{factor.points}</b></div>
-              <span className="factor-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, factor.points)}%` }} /></span>
+              <span className="factor-bar" aria-hidden="true"><i style={{ width: `${(factor.points / factorScale) * 100}%` }} /></span>
             </li>
           ))}
         </ul>

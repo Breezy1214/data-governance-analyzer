@@ -74,7 +74,7 @@ function Simulator({ input, result, endpoint, onPlanChange }: Props) {
         {error} <button className="secondary" type="button" onClick={() => { setError(null); setAttempt((value) => value + 1); }}>Try again</button>
       </p>
     );
-    if (!simulation) return <p className="simulator-note" role="status">Preparing the what-if simulator…</p>;
+    if (!simulation) return <p className="simulator-note">Preparing the what-if simulator…</p>;
     if (!matches) return <p className="simulator-note">What-if simulation uses the current scoring rules, so it isn’t available for this result.</p>;
     return <p className="simulator-note">None of these recommendations changes a scored answer, so there is nothing to simulate.</p>;
   };
