@@ -101,6 +101,8 @@ class ScoredAssessment(RecommendationResult):
     level: RiskLevel
     guidance: str
     factors: list[RiskFactor]
+    # The heaviest single rule in this rules version, so factor bars keep the scale they were scored on.
+    maxFactorPoints: int = Field(ge=1)
     limitations: list[str]
     assessedAt: str
 

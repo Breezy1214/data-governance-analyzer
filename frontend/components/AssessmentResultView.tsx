@@ -1,5 +1,5 @@
 import type { AssessmentInput, AssessmentResult, Reference, RiskLevel } from "@/lib/assessment";
-import { DATA_TYPE_LABELS, MAX_FACTOR_POINTS, PURPOSE_LABELS, RISK_THRESHOLDS } from "@/lib/assessment";
+import { DATA_TYPE_LABELS, PURPOSE_LABELS, RISK_THRESHOLDS } from "@/lib/assessment";
 import { BASED_ON_LABEL, EVERY_ASSESSMENT_LABEL, REFERENCE_HEADING, formatCheckedOn } from "@/lib/report";
 import { LocalTime } from "./LocalTime";
 
@@ -55,8 +55,9 @@ function ReferenceList({ items }: { items: Reference[] }) {
 }
 
 export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
-  // Bars share one scale, the heaviest rubric rule, so their lengths compare (SCRUM-28).
-  const factorScale = Math.max(MAX_FACTOR_POINTS, ...result.factors.map((factor) => factor.points));
+  // Bars share one scale, the heaviest rule in this result's rules version, so their lengths compare (SCRUM-28).
+  // Results saved before the API sent that scale fall back to their own heaviest factor.
+  const factorScale = result.maxFactorPoints ?? Math.max(1, ...result.factors.map((factor) => factor.points));
   return (
     <div className="result-grid">
       <div className="card score-card">
@@ -146,7 +147,7 @@ export function AssessmentRecord({ input, result, description = input.descriptio
       <dl>
         <div><dt>Use case</dt><dd>{description}</dd></div>
         <div><dt>Data</dt><dd>{input.dataTypes.map((item) => DATA_TYPE_LABELS[item]).join(", ")}</dd></div>
-        <div><dt>Purpose</dt><dd>{input.purpose ? PURPOSE_LABELS[input.purpose] : "Not answered"}</dd></div>
+        <div><dt>Purpose</dt><dd>{PURPOSE_LABELS[input.purpose]}</dd></div>
         {status && <div><dt>Status</dt><dd>{status}</dd></div>}
         <div><dt>Scoring rules version</dt><dd>{result.rulesVersion}</dd></div>
         <div><dt>Recommendation catalog version</dt><dd>{result.mappingVersion}</dd></div>

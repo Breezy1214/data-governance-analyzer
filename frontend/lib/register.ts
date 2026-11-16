@@ -64,7 +64,7 @@ function isStatus(value: unknown): value is AssessmentStatus {
 
 /** A name built from the answers alone, since the free-text description is never saved. */
 export function assessmentTitle(input: Pick<AssessmentInput, "purpose" | "dataTypes">) {
-  const purpose = input.purpose ? PURPOSE_LABELS[input.purpose].replace(/\s*\(.*\)$/, "") : "Untitled assessment";
+  const purpose = PURPOSE_LABELS[input.purpose].replace(/\s*\(.*\)$/, "");
   const types = input.dataTypes.map((type) => DATA_TYPE_LABELS[type]);
   const shown = types.slice(0, 2).join(", ");
   return types.length > 2 ? `${purpose} · ${shown} +${types.length - 2} more` : `${purpose} · ${shown}`;

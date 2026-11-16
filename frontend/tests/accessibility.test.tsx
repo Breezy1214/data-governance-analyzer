@@ -3,7 +3,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } from "../components/AccountForms";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, MAX_FACTOR_POINTS, QUESTION_COUNT, QUESTION_LABELS } from "../lib/assessment";
+import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_COUNT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 import { expectNoViolations } from "./axe";
@@ -72,7 +72,7 @@ describe("assessment flow accessibility", () => {
   });
   it("restores drafts across repeated mounts in Strict Mode", async () => {
     const draft = { ...EMPTY_INPUT, description: "Share loyalty member emails with a partner brand." };
-    saveDraft(draft);
+    saveDraft({ input: draft });
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const view = render(<StrictMode><AssessmentWizard /></StrictMode>);
       await waitFor(() => expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe(draft.description));
@@ -307,11 +307,11 @@ describe("demo UX traps (SCRUM-28)", () => {
     expect(window.sessionStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 
-  it("scales factor bars against the heaviest rubric rule, not the 100-point cap", async () => {
+  it("scales factor bars against the heaviest rule the API reports, not the 100-point cap", async () => {
     const { container } = render(<AssessmentWizard />);
     await reachResults();
     const widths = Array.from(container.querySelectorAll<HTMLElement>(".factor-bar i")).map((bar) => parseFloat(bar.style.width));
-    const expected = assessmentResult.factors.map((factor) => (factor.points / MAX_FACTOR_POINTS) * 100);
+    const expected = assessmentResult.factors.map((factor) => (factor.points / assessmentResult.maxFactorPoints!) * 100);
     expect(widths).toHaveLength(expected.length);
     widths.forEach((width, index) => expect(width).toBeCloseTo(expected[index]));
     expect(Math.max(...widths)).toBe(100);
@@ -339,5 +339,22 @@ describe("demo UX traps (SCRUM-28)", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: /answer questions/i }).hasAttribute("disabled")).toBe(false);
     await expectNoViolations(container);
+  });
+
+  it.each([
+    ["the saved version link", { assessmentId: "7d1c3b1e-6a8f-4c2d-9b1a-2f5e8c9d0a11", version: 3 }, /saved to my assessments as version 3/i],
+    ["the retry prompt for a failed save", null, /couldn’t be saved/i],
+  ])("keeps %s after a refresh", async (_name, saved, message) => {
+    stubAssessmentApi(new Response(JSON.stringify({ ...assessmentResult, saved })));
+    const first = render(<AssessmentWizard />);
+    await act(() => new Promise((done) => setTimeout(done, 0)));
+    await reachResults();
+    expect(document.body.textContent).toMatch(message);
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    first.unmount();
+
+    render(<AssessmentWizard />);
+    await screen.findByText(/what drives this score/i);
+    expect(document.body.textContent).toMatch(message);
   });
 });

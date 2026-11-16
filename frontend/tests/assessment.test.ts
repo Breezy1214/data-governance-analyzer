@@ -1,11 +1,11 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ASSESSMENT_TIMEOUT_MS,
   EMPTY_INPUT,
-  MAX_FACTOR_POINTS,
+  completeAnswers,
   isAssessmentInput,
+  isAssessmentResult,
+  isDraftInput,
   requestAssessment,
   toggleRegulation,
   toScoringPayload,
@@ -158,15 +158,27 @@ describe("assessment client", () => {
 
 describe("questionnaire defaults and scale (SCRUM-28)", () => {
   it("starts with no purpose selected so it cannot silently add points", () => {
+    const unpicked = { ...baseline, purpose: EMPTY_INPUT.purpose };
     expect(EMPTY_INPUT.purpose).toBe("");
-    expect(isAssessmentInput(EMPTY_INPUT)).toBe(true);
-    expect(validateQuestions({ ...baseline, purpose: EMPTY_INPUT.purpose })).not.toBeNull();
+    expect(isDraftInput(EMPTY_INPUT)).toBe(true);
+    expect(validateQuestions(unpicked)).not.toBeNull();
+    expect(completeAnswers(unpicked)).toBeNull();
+    expect(completeAnswers(baseline)).toEqual(baseline);
   });
 
-  it("keeps the factor-bar scale in step with the heaviest backend rule", () => {
-    const rules = readFileSync(join(__dirname, "../../backend/app/scoring/rules.py"), "utf8");
-    const points = [...rules.matchAll(/^\s*Rule\("[A-Z_]+",\s*"[^"]+",\s*"[^"]*",\s*(\d+),/gm)].map((match) => Number(match[1]));
-    expect(points.length).toBeGreaterThan(10);
-    expect(MAX_FACTOR_POINTS).toBe(Math.max(...points));
+  it("only treats answers with an intended use as scoreable", () => {
+    expect(isAssessmentInput({ ...baseline, purpose: "" })).toBe(false);
+    expect(isDraftInput({ ...baseline, purpose: "" })).toBe(true);
+    expect(isDraftInput({ ...baseline, purpose: "unknown" })).toBe(false);
+  });
+
+  it("accepts the factor scale the API sends, and results saved before it was sent", () => {
+    const older = { ...assessmentResult, maxFactorPoints: undefined };
+    expect(isAssessmentResult(assessmentResult)).toBe(true);
+    expect(isAssessmentResult(older)).toBe(true);
+    // A scale smaller than a factor it scales, or not a positive whole number, is not one the API produced.
+    expect(isAssessmentResult({ ...assessmentResult, maxFactorPoints: 12 })).toBe(false);
+    expect(isAssessmentResult({ ...assessmentResult, maxFactorPoints: 0 })).toBe(false);
+    expect(isAssessmentResult({ ...assessmentResult, maxFactorPoints: "24" })).toBe(false);
   });
 });

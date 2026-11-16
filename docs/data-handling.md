@@ -63,7 +63,7 @@ A capitalized phrase is left alone when it names an organization ("Grant Thornto
 
 ## Data flow
 
-1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work. Once scored, the current step and the returned result (score, factors, recommendations; no description text) are kept in the same entry, so a refresh reopens the results screen instead of step 1.
+1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work. Once scored, the current step, the returned result (score, factors, recommendations; no description text) and, when signed in, the saved assessment's random ID and version number are kept in the same entry, so a refresh reopens the results screen with its "Saved as version N" link (or its retry prompt, if saving failed) instead of step 1.
 2. On **Assess risk**, the browser sends only the scored fields to same-origin `POST /api/assessments`
    (or `POST /api/assessments/{id}/versions` when re-assessing). The Next.js server forwards them to FastAPI
    `POST /assessments` with the user's verified access token. Nothing goes in the URL or query string. FastAPI

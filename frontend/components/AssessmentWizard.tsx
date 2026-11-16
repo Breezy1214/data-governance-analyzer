@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
   AssessmentInput,
@@ -12,6 +13,7 @@ import {
   DATA_TYPE_LABELS,
   DESCRIPTION_MAX_LENGTH,
   DataType,
+  DraftInput,
   EMPTY_INPUT,
   PURPOSE_LABELS,
   QUESTION_COUNT,
@@ -20,6 +22,7 @@ import {
   REGULATION_LABELS,
   Regulation,
   SavedVersion,
+  completeAnswers,
   requestAssessment,
   toggleRegulation,
   validateDescription,
@@ -33,10 +36,11 @@ import {
   DocumentImportError,
   extractDocumentText,
 } from "@/lib/document-import";
-import { IDLE_TIMEOUT_MS, Step, clearDraft, loadSession, purgeLegacyDrafts, saveDraft } from "@/lib/session";
+import { IDLE_TIMEOUT_MS, Step, clearDraft, loadSession, purgeLegacyDrafts, reachableStep, saveDraft } from "@/lib/session";
 import { containsSensitiveData, redactSensitiveData } from "@/lib/sensitive-data";
 import { bindDraft } from "@/lib/auth-client";
 import { BrandMark, Icon, IconName } from "@/components/Icons";
+import { ConfirmPanel } from "@/components/ConfirmPanel";
 import { AssessmentRecord, RISK_BANDS, RecommendationsView, ScoreBreakdown } from "@/components/AssessmentResultView";
 
 const STEPS: { label: string; icon: IconName }[] = [
@@ -110,7 +114,7 @@ const PRIVACY_STATS: Stat[] = [
   { title: "Description saved", badge: "Never", value: 0, unit: "chars", detail: <>Only answers and results go to <b>My assessments</b></> },
 ];
 
-function statsFor(step: number, input: AssessmentInput, result: AssessmentResult | null, privacyStats: Stat[]): Stat[] {
+function statsFor(step: number, input: DraftInput, result: AssessmentResult | null, privacyStats: Stat[]): Stat[] {
   if (step === 0) return [...INTRO_STATS, ...privacyStats];
   if (step === 1) {
     const answers = CHOICE_FIELDS.map((field) => input[field]);
@@ -156,13 +160,13 @@ export function AssessmentWizard({
   /** Rendered above the description, with a way to prefill the assessment. */
   intro?: React.ComponentType<{ prefill: Prefill }>;
   /** Answers to start from, such as a saved assessment being re-assessed or duplicated. */
-  initialInput?: AssessmentInput;
+  initialInput?: DraftInput;
   notice?: React.ReactNode;
 } = {}) {
   const [step, setStep] = useState<Step>(0);
   const [sample, setSample] = useState<string | null>(null);
   const [maxReached, setMaxReached] = useState(0);
-  const [input, setInput] = useState<AssessmentInput>(initialInput);
+  const [input, setInput] = useState<DraftInput>(initialInput);
   const [result, setResult] = useState<AssessmentResult | null>(null);
   // Undefined when this endpoint never saves, null when saving failed.
   const [saved, setSaved] = useState<SavedVersion | null>();
@@ -176,8 +180,6 @@ export function AssessmentWizard({
   const [dragging, setDragging] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const startOverButton = useRef<HTMLButtonElement>(null);
-  const keepAssessmentButton = useRef<HTMLButtonElement>(null);
-  const wasConfirmingReset = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const mainHeading = useRef<HTMLHeadingElement>(null);
   const pendingAssessment = useRef<AbortController | null>(null);
@@ -226,6 +228,8 @@ export function AssessmentWizard({
         // A refresh returns to the same screen, including results (SCRUM-28).
         setInput(restored.input);
         setResult(restored.result);
+        setSaved(restored.saved);
+        setSavedTo(restored.savedTo);
         setStep(restored.step);
         setMaxReached(restored.result ? 3 : restored.step);
       }
@@ -241,21 +245,14 @@ export function AssessmentWizard({
       clearDraft();
       return;
     }
-    const save = () => saveDraft(input, undefined, Date.now(), { step, result });
+    const save = () => saveDraft({ input, step, result, saved, savedTo });
     const pending = window.setTimeout(save, DRAFT_SAVE_DELAY_MS);
     window.addEventListener("pagehide", save);
     return () => {
       window.clearTimeout(pending);
       window.removeEventListener("pagehide", save);
     };
-  }, [input, result, step, draftReady, keepDrafts]);
-
-  // Move focus into the start-over confirmation, and back to its trigger on cancel.
-  useEffect(() => {
-    if (confirmingReset) keepAssessmentButton.current?.focus();
-    else if (wasConfirmingReset.current) startOverButton.current?.focus();
-    wasConfirmingReset.current = confirmingReset;
-  }, [confirmingReset]);
+  }, [input, result, step, saved, savedTo, draftReady, keepDrafts]);
 
   // Clear the draft after a period of inactivity, even if the tab stays open.
   useEffect(() => {
@@ -280,7 +277,7 @@ export function AssessmentWizard({
     mainHeading.current?.focus();
   }, [step]);
 
-  const update = <K extends keyof AssessmentInput>(key: K, value: AssessmentInput[K]) => {
+  const update = <K extends keyof DraftInput>(key: K, value: DraftInput[K]) => {
     cancelPendingWork();
     setInput((current) => ({ ...current, [key]: value }));
     if (result) {
@@ -292,13 +289,14 @@ export function AssessmentWizard({
     setReportError(null);
   };
 
-  const moveTo = (nextStep: Step) => {
+  // `scored` lets assess move on with a result that isn't in state yet.
+  const moveTo = (nextStep: Step, scored = result) => {
     cancelPendingWork();
     setConfirmingReset(false);
-    // The description is only editable here, so leaving this step is the one gate it must pass.
-    if (step === 0 && nextStep > 0) {
-      const message = validateDescription(input.description);
-      if (message) { setError(message); return; }
+    // Results are only reached through assess, so the description is the gate a person can hit here.
+    if (reachableStep(nextStep, input, scored) < nextStep) {
+      setError(validateDescription(input.description));
+      return;
     }
     setError(null);
     setStep(nextStep);
@@ -315,19 +313,19 @@ export function AssessmentWizard({
 
   const assess = async () => {
     if (pendingAssessment.current) return;
-    const message = validateQuestions(input);
-    if (message) { setError(message); return; }
+    const answers = completeAnswers(input);
+    if (!answers) { setError(validateQuestions(input)); return; }
     const controller = new AbortController();
     pendingAssessment.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const outcome = await requestAssessment(input, controller.signal, endpointFor?.(savedTo));
+      const outcome = await requestAssessment(answers, controller.signal, endpointFor?.(savedTo));
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
       setResult(outcome.result);
       setSaved(outcome.saved);
       if (outcome.saved) setSavedTo(outcome.saved.assessmentId);
-      moveTo(2);
+      moveTo(2, outcome.result);
     } catch (failure) {
       if (controller.signal.aborted || pendingAssessment.current !== controller) return;
       if (failure instanceof AssessmentServiceError && failure.status === 401) {
@@ -346,13 +344,14 @@ export function AssessmentWizard({
   };
 
   const download = async () => {
-    if (!result || pendingReport.current) return;
+    const answers = completeAnswers(input);
+    if (!result || !answers || pendingReport.current) return;
     const controller = new AbortController();
     pendingReport.current = controller;
     setDownloading(true);
     setReportError(null);
     try {
-      await downloadAssessmentReport(input, result, controller.signal);
+      await downloadAssessmentReport(answers, result, controller.signal);
     } catch {
       if (controller.signal.aborted || pendingReport.current !== controller) return;
       setReportError("The report could not be generated. Your assessment is still here—please try again.");
@@ -412,6 +411,12 @@ export function AssessmentWizard({
     : saved && <p className="save-note" role="status">
         Saved to <Link href={assessmentPath(saved.assessmentId, saved.version)}>My assessments</Link> as version {saved.version}.
       </p>;
+  // A result only exists while the answers it scored are unchanged, so these are always complete then.
+  const scoredAnswers = result && completeAnswers(input);
+  const cancelReset = () => {
+    flushSync(() => setConfirmingReset(false));
+    startOverButton.current?.focus();
+  };
   const progress = ((step + 1) / STEPS.length) * 100;
   const stats = statsFor(step, input, result, privacyStats);
   const renderChoice = (field: ChoiceField) => (
@@ -419,7 +424,7 @@ export function AssessmentWizard({
       key={field}
       field={field}
       value={input[field]}
-      onChange={(value) => update(field, value as AssessmentInput[ChoiceField])}
+      onChange={(value) => update(field, value as DraftInput[ChoiceField])}
     />
   );
 
@@ -633,25 +638,20 @@ export function AssessmentWizard({
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
               <RecommendationsView result={result} />
 
-              <AssessmentRecord input={input} result={result} />
+              {scoredAnswers && <AssessmentRecord input={scoredAnswers} result={result} />}
               {saveStatus}
               {reportError && <p className="error" role="alert">{reportError}</p>}
               {confirmingReset && (
-                <div
-                  className="confirm-reset card"
+                <ConfirmPanel
                   id="confirm-reset"
-                  role="group"
-                  aria-labelledby="confirm-reset-title"
-                  aria-describedby="confirm-reset-detail"
-                  onKeyDown={(event) => { if (event.key === "Escape") setConfirmingReset(false); }}
+                  title="Start over?"
+                  cancelLabel="Keep my assessment"
+                  confirmLabel="Yes, start over"
+                  onCancel={cancelReset}
+                  onConfirm={reset}
                 >
-                  <h3 className="card-title" id="confirm-reset-title">Start over?</h3>
-                  <p id="confirm-reset-detail">This clears your answers and this assessment. Download the report first if you need a record.</p>
-                  <div className="actions end">
-                    <button ref={keepAssessmentButton} className="secondary" type="button" onClick={() => setConfirmingReset(false)}>Keep my assessment</button>
-                    <button className="destructive" type="button" onClick={reset}>Yes, start over</button>
-                  </div>
-                </div>
+                  This clears your answers and this assessment. Download the report first if you need a record.
+                </ConfirmPanel>
               )}
               <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button ref={startOverButton} className="destructive" type="button" aria-expanded={confirmingReset} aria-controls={confirmingReset ? "confirm-reset" : undefined} onClick={() => setConfirmingReset(true)}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>
