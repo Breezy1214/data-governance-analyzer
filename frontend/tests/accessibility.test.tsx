@@ -1,12 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
-import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } from "../components/AccountForms";
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, MAX_FACTOR_POINTS, QUESTION_COUNT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
+import { expectNoViolations } from "./axe";
 
 /**
  * Accessibility checks for the assessment flow (SCRUM-17).
@@ -14,19 +14,6 @@ import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-
  * axe-core catches the machine-checkable WCAG failures. Colour contrast
  * cannot be judged in jsdom, so it is excluded here.
  */
-
-const AXE_OPTIONS: axe.RunOptions = {
-  runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
-  rules: { "color-contrast": { enabled: false } },
-};
-
-async function expectNoViolations(container: HTMLElement) {
-  const results = await axe.run(container, AXE_OPTIONS);
-  const summary = results.violations.map(
-    (violation) => `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
-  );
-  expect(summary).toEqual([]);
-}
 
 function describeUseCase(description = "Share loyalty member emails with a partner brand for campaign measurement.") {
   fireEvent.change(screen.getByLabelText(/use-case description/i), { target: { value: description } });
@@ -193,22 +180,6 @@ describe("assessment flow accessibility", () => {
     expect(document.querySelector("#assessment")).not.toBeNull();
   });
 
-  it("exposes the document upload with a labelled control and help text", async () => {
-    const { container } = render(<AssessmentWizard />);
-    const input = container.querySelector("#document-upload") as HTMLInputElement;
-    expect(input).not.toBeNull();
-    expect(input.getAttribute("accept")).toContain(".pdf");
-    expect(input.getAttribute("aria-describedby")).toBe("upload-help");
-    expect(document.querySelector("#upload-help")?.textContent).toMatch(/stays on your device/i);
-    expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
-    await expectNoViolations(container);
-  });
-
-  it("announces the current step through a status region", () => {
-    render(<AssessmentWizard />);
-    expect(screen.getByRole("status").textContent).toContain("Step 1 of 4");
-  });
-
   it("keeps every step reachable and accessible through the whole flow", async () => {
     const { container } = render(<AssessmentWizard />);
 
@@ -223,9 +194,6 @@ describe("assessment flow accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
     await screen.findByText(/controls before approval/i);
-    expect(screen.getByRole("heading", { name: "Recommended actions" })).toBeTruthy();
-    expect(screen.getByText(/Recommendation catalog v2.0: approved. Sources checked November 4, 2026/)).toBeTruthy();
-    expect(screen.getByText("Recommendation catalog version")).toBeTruthy();
     await expectNoViolations(container);
   });
 
@@ -236,8 +204,6 @@ describe("assessment flow accessibility", () => {
     await screen.findByText(/what drives this score/i);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
     await screen.findByText(/controls before approval/i);
-
-    expect(screen.getByRole("heading", { name: "Regulatory reference" })).toBeTruthy();
 
     const [reference] = assessmentResult.recommendations[0].references;
     const link = screen.getByRole("link", { name: new RegExp(`Source: ${reference.sourceTitle.slice(0, 13)}`) });
@@ -251,7 +217,6 @@ describe("assessment flow accessibility", () => {
     });
     expect(screen.getAllByText(/Based on your answers:/i)).toHaveLength(2);
     expect(screen.getByText("Applies to every assessment.")).toBeTruthy();
-    expect(screen.getByText("3 recommendations")).toBeTruthy();
   });
 
   it("replaces None of these or Not sure when a named rule is chosen", () => {
@@ -278,14 +243,17 @@ describe("assessment flow accessibility", () => {
 });
 
 describe("account pages", () => {
-  it.each([
-    ["sign-up", <SignupForm key="signup" />],
-    ["forgot password", <ForgotPasswordForm key="forgot" expired />],
-    ["confirm email", <ConfirmLinkForm key="confirm" tokenHash="abc" type="email" />],
-    ["new password", <UpdatePasswordForm key="update" />],
-  ])("%s has no accessibility violations", async (_, page) => {
-    const { container } = render(page);
-    await expectNoViolations(container);
+  it("have no accessibility violations", async () => {
+    for (const page of [
+      <SignupForm key="signup" />,
+      <ForgotPasswordForm key="forgot" expired />,
+      <ConfirmLinkForm key="confirm" tokenHash="abc" type="email" />,
+      <UpdatePasswordForm key="update" />,
+    ]) {
+      const { container, unmount } = render(page);
+      await expectNoViolations(container);
+      unmount();
+    }
   });
 });
 

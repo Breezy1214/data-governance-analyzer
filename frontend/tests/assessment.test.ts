@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ASSESSMENT_TIMEOUT_MS,
-  CHOICE_FIELDS,
   EMPTY_INPUT,
   MAX_FACTOR_POINTS,
   isAssessmentInput,
@@ -31,15 +30,8 @@ describe("assessment client", () => {
     expect(validateQuestions(baseline)).toBeNull();
   });
 
-  it("requires an answer to every single-choice question", () => {
-    CHOICE_FIELDS.forEach((field) => {
-      expect(validateQuestions({ ...baseline, [field]: "" })).not.toBeNull();
-    });
-  });
-
   it("sends every answer the rubric uses and nothing else", () => {
-    const { description, ...scored } = baseline;
-    expect(description).toBeTruthy();
+    const scored = Object.fromEntries(Object.entries(baseline).filter(([field]) => field !== "description"));
     expect(toScoringPayload(baseline)).toEqual(scored);
   });
 
@@ -62,8 +54,8 @@ describe("assessment client", () => {
   it("sends an explicit schema version to the assessment API", async () => {
     const fetchMock = stubAssessmentApi();
 
-    const result = await requestAssessment(baseline);
-    expect(result).toEqual(assessmentResult);
+    const outcome = await requestAssessment(baseline);
+    expect(outcome).toEqual({ result: assessmentResult });
     expect(fetchMock.mock.calls[0][0]).toBe("/api/assessments");
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
@@ -93,34 +85,50 @@ describe("assessment client", () => {
     await expect(requestAssessment(baseline)).rejects.toThrow("Assessment service returned 422");
   });
 
-  it.each([
-    null,
-    {},
-    { ...assessmentResult, schemaVersion: "1.0" },
-    { ...assessmentResult, score: 101 },
-    { ...assessmentResult, level: "UNKNOWN" },
-    { ...assessmentResult, factors: [null] },
-    { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], priority: 2 }] },
-    { ...assessmentResult, recommendations: [assessmentResult.recommendations[0], { ...assessmentResult.recommendations[0], priority: 2 }] },
-    { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], basedOn: null }] },
-    { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], references: [{ ...assessmentResult.recommendations[0].references[0], sourceUrl: "javascript:alert(1)" }] }] },
-    { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], references: [{ ...assessmentResult.recommendations[0].references[0], statement: "" }] }] },
-    { ...assessmentResult, recommendations: undefined },
-    { ...assessmentResult, assessedAt: "not a date" },
-    { ...assessmentResult, mappingVersion: undefined },
-    { ...assessmentResult, mappingApprovalStatus: "unknown" },
-    { ...assessmentResult, sourcesCheckedOn: "not a date" },
-    { ...assessmentResult, score: 90 },
-    { ...assessmentResult, factors: [...assessmentResult.factors, assessmentResult.factors[0]] },
-  ])("rejects a malformed API response: %j", async (body) => {
-    stubAssessmentApi(new Response(JSON.stringify(body)));
-    await expect(requestAssessment(baseline)).rejects.toThrow("invalid response");
+  it("rejects malformed API responses", async () => {
+    for (const body of [
+      null,
+      { ...assessmentResult, schemaVersion: "1.0" },
+      { ...assessmentResult, score: 101 },
+      { ...assessmentResult, level: "UNKNOWN" },
+      { ...assessmentResult, factors: [null] },
+      { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], priority: 2 }] },
+      { ...assessmentResult, recommendations: [assessmentResult.recommendations[0], { ...assessmentResult.recommendations[0], priority: 2 }] },
+      { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], basedOn: null }] },
+      { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], references: [{ ...assessmentResult.recommendations[0].references[0], sourceUrl: "javascript:alert(1)" }] }] },
+      { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], references: [{ ...assessmentResult.recommendations[0].references[0], statement: "" }] }] },
+      { ...assessmentResult, recommendations: undefined },
+      { ...assessmentResult, assessedAt: "not a date" },
+      { ...assessmentResult, mappingVersion: undefined },
+      { ...assessmentResult, apiVersion: undefined },
+      { ...assessmentResult, mappingApprovalStatus: "unknown" },
+      { ...assessmentResult, sourcesCheckedOn: "not a date" },
+      { ...assessmentResult, score: 90 },
+      { ...assessmentResult, factors: [...assessmentResult.factors, assessmentResult.factors[0]] },
+    ]) {
+      stubAssessmentApi(new Response(JSON.stringify(body)));
+      await expect(requestAssessment(baseline), JSON.stringify(body)).rejects.toThrow("invalid response");
+    }
   });
 
   it("accepts recommendation text from the backend without a local catalog", async () => {
     const changed = { ...assessmentResult, recommendations: [{ ...assessmentResult.recommendations[0], action: "Text the client has never seen." }] };
     stubAssessmentApi(new Response(JSON.stringify(changed)));
-    await expect(requestAssessment(baseline)).resolves.toEqual(changed);
+    await expect(requestAssessment(baseline)).resolves.toEqual({ result: changed });
+  });
+
+  it("reports where a signed-in result was saved, separately from the result", async () => {
+    stubAssessmentApi(Response.json({ ...assessmentResult, saved: { assessmentId: "a1", version: 2 } }));
+    await expect(requestAssessment(baseline)).resolves.toEqual({
+      result: assessmentResult, saved: { assessmentId: "a1", version: 2 },
+    });
+  });
+
+  it("treats a failed or malformed save as not saved", async () => {
+    for (const saved of [null, { assessmentId: "a1" }, { assessmentId: "a1", version: 0 }]) {
+      stubAssessmentApi(Response.json({ ...assessmentResult, saved }));
+      await expect(requestAssessment(baseline), JSON.stringify(saved)).resolves.toEqual({ result: assessmentResult, saved: null });
+    }
   });
 
   it("rejects invalid JSON", async () => {

@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from app.scoring.models import (
     SCHEMA_VERSION,
     AssessmentRequest,
-    AssessmentResponse,
     RiskFactor,
+    ScoredAssessment,
 )
 from app.scoring.recommendations import map_recommendations
 from app.scoring.rules import RuleSet, get_ruleset
@@ -24,7 +24,7 @@ def score_assessment(
     request: AssessmentRequest,
     ruleset: RuleSet | None = None,
     assessed_at: str | None = None,
-) -> AssessmentResponse:
+) -> ScoredAssessment:
     ruleset = ruleset or get_ruleset()
 
     factors = [
@@ -44,7 +44,7 @@ def score_assessment(
 
     limitations = [lim.copy for lim in ruleset.limitations if lim.applies(request)]
 
-    return AssessmentResponse(
+    return ScoredAssessment(
         **mapped.model_dump(),
         schemaVersion=SCHEMA_VERSION,
         rulesVersion=ruleset.version,

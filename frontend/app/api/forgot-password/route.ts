@@ -1,6 +1,6 @@
-import { accountError, json, parseEmail, sameOriginPost, serverAuth } from "@/lib/auth-server";
+import { accountError, json, parseEmail, sameOriginRoute, serverAuth } from "@/lib/auth-server";
 
-export const POST = sameOriginPost(async (request) => {
+export const POST = sameOriginRoute(async (request) => {
   const input = await request.json().catch(() => null);
   const email = parseEmail(input?.email);
   const client = await serverAuth();

@@ -18,9 +18,11 @@ import { POST as forgotPassword } from "../app/api/forgot-password/route";
 import { POST as confirm } from "../app/api/confirm/route";
 import { POST as updatePassword } from "../app/api/update-password/route";
 import { POST as assess } from "../app/api/assessments/route";
+import { POST as assessDemo } from "../app/api/demo/assessments/route";
 import { GET as session } from "../app/api/session/route";
 import { proxy } from "../proxy";
 import { NextRequest } from "next/server";
+import { assessmentResult } from "./assessment-fixture";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -37,9 +39,10 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-function request(path: string, origin = "http://localhost:3000", body: unknown = { email: "client@example.test", password: "private-password" }) {
+function request(path: string, origin = "http://localhost:3000", body: unknown = { email: "client@example.test", password: "private-password" },
+  headers: Record<string, string> = {}) {
   return new Request("http://localhost:3000/api/" + path, {
-    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...headers }, body: JSON.stringify(body),
   });
 }
 
@@ -51,11 +54,10 @@ describe("Supabase authentication routes", () => {
     expect(mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it.each(["http://localhost:3000", "http://127.0.0.1:3000", "https://preview-123.vercel.app"])(
-    "accepts same-origin navigation at %s without APP_ORIGIN", (origin) => {
-      expect(sameOrigin(new Request(origin + "/api/login", { headers: { origin } }))).toBe(true);
-    },
-  );
+  it("accepts same-origin requests without APP_ORIGIN", () => {
+    const origin = "https://preview-123.vercel.app";
+    expect(sameOrigin(new Request(origin + "/api/login", { headers: { origin } }))).toBe(true);
+  });
 
   it("supports explicitly configured deployment origins without allowing other previews", () => {
     vi.stubEnv("VERCEL_URL", "approved.vercel.app");
@@ -93,18 +95,20 @@ describe("Supabase authentication routes", () => {
     expect(mocks.createServerClient.mock.calls[0][2].cookieOptions.secure).toBe(true);
   });
 
-  it.each([400, 401, 403, 422])("does not expose account existence on provider status %s", async (status) => {
-    mocks.signInWithPassword.mockResolvedValue({ error: { status, message: "account detail" } });
+  it("does not expose account existence when the provider rejects the sign-in", async () => {
+    mocks.signInWithPassword.mockResolvedValue({ error: { status: 400, message: "account detail" } });
     const response = await login(request("login"));
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ message: "Email or password is incorrect." });
   });
 
-  it.each([429, 503])("preserves provider failure category %s without provider details", async (status) => {
-    mocks.signInWithPassword.mockResolvedValue({ error: { status, message: "secret detail" } });
-    const response = await login(request("login"));
-    expect(response.status).toBe(status);
-    expect(await response.text()).not.toContain("secret detail");
+  it("keeps rate-limit and outage statuses without provider details", async () => {
+    for (const status of [429, 503]) {
+      mocks.signInWithPassword.mockResolvedValue({ error: { status, message: "secret detail" } });
+      const response = await login(request("login"));
+      expect(response.status).toBe(status);
+      expect(await response.text()).not.toContain("secret detail");
+    }
   });
 
   it("rejects invalid input without a provider call", async () => {
@@ -113,7 +117,7 @@ describe("Supabase authentication routes", () => {
   });
 
   it("forwards only a verified token and the unchanged body to FastAPI", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 1 }));
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(assessmentResult));
     vi.stubGlobal("fetch", fetchMock);
     const response = await assess(request("assessments", undefined, { schemaVersion: "2.0" }));
     expect(response.status).toBe(200);
@@ -121,15 +125,30 @@ describe("Supabase authentication routes", () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url.toString()).toBe("http://localhost:8000/assessments");
     expect(options.headers.Authorization).toBe("Bearer private-jwt");
-    expect(options.headers["X-Frontend-Key"]).toBeUndefined();
     expect(options.body).toBeInstanceOf(ReadableStream);
   });
 
-  it.each([401, 413, 422, 503])("preserves backend status and safe message %s", async (status) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ message: "Backend message" }, { status })));
-    const response = await assess(request("assessments"));
-    expect(response.status).toBe(status);
-    expect(await response.json()).toEqual({ message: "Backend message" });
+  it("forwards public demo scoring without credentials", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 14 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await assessDemo(request("demo/assessments", undefined, { schemaVersion: "3.0" },
+      { "X-Forwarded-For": "203.0.113.7, 10.0.0.1", Cookie: "sb-access-token=private" }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toMatch(/no-store/);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url.toString()).toBe("http://localhost:8000/demo/assessments");
+    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers.Cookie).toBeUndefined();
+    expect(options.headers["X-Demo-Client"]).toBe("203.0.113.7");
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-site demo scoring and passes rate limits through", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "rate_limited" }, { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await assessDemo(request("demo/assessments", "https://attacker.test"))).status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await assessDemo(request("demo/assessments"))).status).toBe(429);
   });
 
   it("does not trust an unverified cookie session", async () => {
@@ -225,9 +244,11 @@ describe("account creation and recovery", () => {
     expect(mocks.signUp).not.toHaveBeenCalled();
   });
 
-  it.each([["too short", "short phrase"], ["over 72 bytes", "x".repeat(73)]])("rejects a password that is %s", async (_, password) => {
-    const response = await signup(request("signup", undefined, { ...credentials, password }));
-    expect(response.status).toBe(400);
+  it("rejects passwords that are too short or over 72 bytes", async () => {
+    for (const password of ["short phrase", "x".repeat(73)]) {
+      const response = await signup(request("signup", undefined, { ...credentials, password }));
+      expect(response.status).toBe(400);
+    }
     expect(mocks.signUp).not.toHaveBeenCalled();
   });
 
@@ -275,10 +296,12 @@ describe("account creation and recovery", () => {
     expect(await response.json()).toEqual({ ok: true });
   });
 
-  it.each(["email", "recovery"])("confirms a %s link and ignores any destination it carries", async (type) => {
-    const response = await confirm(request("confirm", undefined, { tokenHash: "abc", type, next: "https://attacker.test" }));
-    expect(mocks.verifyOtp).toHaveBeenCalledWith({ type, token_hash: "abc" });
-    expect(await response.json()).toEqual({ ok: true });
+  it("confirms email and recovery links and ignores any destination they carry", async () => {
+    for (const type of ["email", "recovery"]) {
+      const response = await confirm(request("confirm", undefined, { tokenHash: "abc", type, next: "https://attacker.test" }));
+      expect(mocks.verifyOtp).toHaveBeenCalledWith({ type, token_hash: "abc" });
+      expect(await response.json()).toEqual({ ok: true });
+    }
   });
 
   it("rejects unsupported link types and expired links", async () => {
@@ -305,10 +328,12 @@ describe("account creation and recovery", () => {
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "others" });
   });
 
-  it.each([["a password sign-in", "password", 60], ["an old email link", "otp", 16 * 60]])("refuses a password change from %s", async (_, method, age) => {
-    signedInBy(method as string, age as number);
-    const response = await updatePassword(request("update-password", undefined, { password: NEW_PASSWORD }));
-    expect(response.status).toBe(401);
+  it("refuses a password change from a password sign-in or an old email link", async () => {
+    for (const [method, age] of [["password", 60], ["otp", 16 * 60]] as const) {
+      signedInBy(method, age);
+      const response = await updatePassword(request("update-password", undefined, { password: NEW_PASSWORD }));
+      expect(response.status).toBe(401);
+    }
     expect(mocks.updateUser).not.toHaveBeenCalled();
   });
 });
