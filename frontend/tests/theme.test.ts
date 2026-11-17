@@ -50,6 +50,12 @@ const PAIRS: [string, string, number][] = [
   ["muted", "surface", 4.5],
   ["muted", "paper", 4.5],
   ["muted", "surface-hover", 4.5],
+  ["ink", "fill", 4.5],
+  ["ink", "fill-hover", 4.5],
+  ["muted", "fill", 4.5],
+  ["ink", "button", 4.5],
+  ["ink", "button-hover", 4.5],
+  ["danger", "button", 4.5],
   ["accent-strong", "surface", 4.5],
   ["accent-strong", "paper", 4.5],
   // Buttons, the current step and selected choices
@@ -57,7 +63,6 @@ const PAIRS: [string, string, number][] = [
   ["on-brand", "brand-hover", 4.5],
   ["brand", "brand-soft", 4.5],
   ["ink", "brand-soft", 4.5],
-  ["on-danger", "danger-hover", 4.5],
   ["danger", "surface", 4.5],
   ["disabled-fg", "disabled-bg", 4.5],
   // Feedback states

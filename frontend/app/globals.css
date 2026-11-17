@@ -13,6 +13,12 @@
   --paper: light-dark(#edf3f4, #0c1a1e);
   --surface: light-dark(#ffffff, #132529);
   --surface-hover: light-dark(#f0f6f7, #1a3036);
+  /* Quiet controls are a tonal fill, not an outline; it reads on both --paper and --surface. */
+  --fill: light-dark(#e2ebed, #1f383e);
+  --fill-hover: light-dark(#d5e2e5, #28464d);
+  /* Raised buttons: white in light, a step above the card surface in dark. */
+  --button: light-dark(#ffffff, #1f383e);
+  --button-hover: light-dark(#f0f6f7, #28464d);
   --white: #ffffff;
   /* Decorative rules only; not enough contrast for control boundaries. */
   --line: light-dark(#dde5e7, #22393f);
@@ -32,7 +38,6 @@
   --warning: light-dark(#9a4a0b, #eba15c);
   --warning-bg: light-dark(#fbefe3, #352514);
   --danger: light-dark(#a8322a, #f0877d);
-  --danger-hover: light-dark(#8c2620, #f4a39b);
   --danger-bg: light-dark(#fbeceb, #3a1b1a);
 
   /* Risk levels map onto the feedback states and are always paired with a text label and shape. */
@@ -44,12 +49,15 @@
   --disabled-bg: light-dark(#e3e8ea, #1f3338);
   --disabled-fg: var(--muted);
 
-  /* Text on filled brand and danger controls. */
+  /* Text on filled brand controls. */
   --on-brand: light-dark(#ffffff, #05201f);
-  --on-danger: light-dark(#ffffff, #2a0a08);
 
   --shadow: 0 1px 2px light-dark(rgba(22, 49, 58, .04), rgba(0, 0, 0, .3)), 0 6px 20px light-dark(rgba(22, 49, 58, .06), rgba(0, 0, 0, .25));
   --scrim: light-dark(rgba(22, 49, 58, .4), rgba(0, 0, 0, .6));
+  /* Buttons sit raised on a soft shadow (no edge lines) and sink when pressed, so they read as pressable. */
+  --raise: 0 1px 2px light-dark(rgba(22, 49, 58, .14), rgba(0, 0, 0, .45)), 0 3px 8px light-dark(rgba(22, 49, 58, .08), rgba(0, 0, 0, .25));
+  --raise-hover: 0 2px 4px light-dark(rgba(22, 49, 58, .14), rgba(0, 0, 0, .45)), 0 6px 14px light-dark(rgba(22, 49, 58, .1), rgba(0, 0, 0, .3));
+  --press: inset 0 2px 4px light-dark(rgba(22, 49, 58, .2), rgba(0, 0, 0, .5));
 }
 
 /* The scheme follows the device unless the theme switch sets data-theme on <html>. */
@@ -84,7 +92,7 @@ button, input, textarea, select { font: inherit; }
 
 /* App shell: sidebar navigation beside the main area. */
 .app { display: grid; grid-template-columns: 256px minmax(0, 1fr); min-height: 100svh; }
-.sidebar { position: sticky; top: 0; height: 100svh; overflow-y: auto; display: flex; flex-direction: column; padding: 22px 16px; background: var(--surface); border-right: 1px solid var(--line); }
+.sidebar { position: sticky; top: 0; height: 100svh; overflow-y: auto; display: flex; flex-direction: column; padding: 22px 16px; background: var(--surface); border-right: 1px solid transparent; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; color: var(--ink); text-decoration: none; }
 .brand-mark { flex: 0 0 auto; color: var(--brand); }
 .brand b { display: block; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
@@ -117,7 +125,7 @@ button, input, textarea, select { font: inherit; }
 .page-header h1 { margin: 0 0 6px; font-size: clamp(26px, 2.4vw, 32px); font-weight: 500; letter-spacing: -.02em; }
 .page-header p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .header-chips { display: flex; gap: 10px; }
-.chip { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 14px; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: 10px; background: var(--surface); font-size: 14px; white-space: nowrap; }
 
 .workspace { flex: 1; display: grid; grid-template-columns: 270px minmax(0, 1fr); align-items: start; gap: 24px; padding-bottom: 32px; }
 .stat-rail { position: sticky; top: 16px; display: grid; gap: 14px; }
@@ -174,21 +182,21 @@ textarea::placeholder { color: var(--muted); }
 .actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; }
 .actions.end { justify-content: flex-end; }
 .actions > div { display: flex; flex-wrap: wrap; gap: 10px; }
-.confirm-panel { margin-top: 24px; border: 1px solid var(--danger); }
+.confirm-panel { margin-top: 24px; }
 .confirm-panel p { margin: 0; color: var(--muted); line-height: 1.5; }
 .confirm-panel .actions { margin-top: 16px; }
-.primary, .secondary, .destructive { min-height: 44px; padding: 0 20px; border: 1px solid; border-radius: 10px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: transform .18s, background .18s, color .18s, border-color .18s; }
-.primary { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
+.primary, .secondary, .destructive { min-height: 44px; padding: 0 20px; border: 1px solid; border-radius: 10px; font-weight: 600; white-space: nowrap; cursor: pointer; box-shadow: var(--raise); transition: transform .12s, box-shadow .18s, background .18s, color .18s; }
+.primary { border-color: transparent; background: var(--brand); color: var(--on-brand); }
 .primary span { display: inline-block; margin-left: 12px; transition: transform .18s; }
-.primary:hover:not(:disabled) { border-color: var(--brand-hover); background: var(--brand-hover); }
+.primary:hover:not(:disabled) { background: var(--brand-hover); }
 .primary:hover:not(:disabled) span { transform: translateX(4px); }
-.primary:hover:not(:disabled), .secondary:hover:not(:disabled), .destructive:hover:not(:disabled) { transform: translateY(-1px); }
-.primary:active:not(:disabled), .secondary:active:not(:disabled), .destructive:active:not(:disabled) { transform: translateY(0); }
-.secondary { border-color: var(--control-line); background: var(--surface); color: var(--ink); }
-.secondary:hover:not(:disabled) { border-color: var(--brand); background: var(--surface-hover); }
-.destructive { border-color: var(--danger); background: var(--surface); color: var(--danger); }
-.destructive:hover:not(:disabled) { border-color: var(--danger-hover); background: var(--danger-hover); color: var(--on-danger); }
-.primary:disabled, .secondary:disabled, .destructive:disabled { border-color: var(--disabled-bg); background: var(--disabled-bg); color: var(--disabled-fg); cursor: not-allowed; }
+:is(.primary, .secondary, .destructive):hover:not(:disabled) { box-shadow: var(--raise-hover); }
+:is(.primary, .secondary, .destructive):active:not(:disabled) { transform: translateY(1px); box-shadow: var(--press); }
+.secondary { border-color: transparent; background: var(--button); color: var(--ink); }
+.secondary:hover:not(:disabled) { background: var(--button-hover); }
+.destructive { border-color: transparent; background: var(--button); color: var(--danger); }
+.destructive:hover:not(:disabled) { background: var(--danger-bg); }
+.primary:disabled, .secondary:disabled, .destructive:disabled { border-color: transparent; background: var(--disabled-bg); color: var(--disabled-fg); box-shadow: none; cursor: not-allowed; }
 /* Only the button whose action is running is aria-busy; its label says what is happening and the spinner shows it is still going. */
 :is(.primary, .secondary, .destructive)[aria-busy="true"] { cursor: progress; }
 :is(.primary, .secondary, .destructive)[aria-busy="true"]::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .8s linear infinite; }
@@ -202,12 +210,12 @@ textarea::placeholder { color: var(--muted); }
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .binary-row { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Choice tiles: a native radio or checkbox inside a label, or a toggle button with aria-pressed. */
-.choice { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s, background .18s; }
-.choice:hover { border-color: var(--brand); background: var(--surface-hover); }
+.choice { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid transparent; border-radius: 10px; background: var(--button); box-shadow: var(--raise); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s, background .18s; }
+.choice:hover { background: var(--button-hover); box-shadow: var(--raise-hover); }
 .choice-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .choice:has(.choice-input:focus-visible), .theme-toggle label:has(.choice-input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 /* Selection is shown by the mark as well as the fill, not colour alone. Radios are round, checkboxes square. */
-:is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) { border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
+:is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) { background: var(--brand-soft); box-shadow: var(--press); color: var(--brand); font-weight: 600; }
 .choice-mark { display: grid; place-items: center; flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid var(--control-line); border-radius: 5px; color: var(--on-brand); font-size: 11px; }
 .choice:has([type="radio"]) .choice-mark { border-radius: 50%; }
 :is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) .choice-mark { border-color: var(--brand); background: var(--brand); }
@@ -223,8 +231,8 @@ textarea::placeholder { color: var(--muted); }
 :where(.account-controls) a { color: inherit; font-size: 14px; }
 .sample-note a, .save-note a, .register-table a { color: var(--brand); font-weight: 600; }
 .error .secondary { margin-left: auto; }
-.demo-card { display: grid; gap: 4px; margin-top: 28px; padding: 16px 18px; border: 1px solid var(--control-line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .18s, background .18s; }
-.demo-card:hover { border-color: var(--brand); background: var(--surface-hover); }
+.demo-card { display: grid; gap: 4px; margin-top: 28px; padding: 16px 18px; border: 1px solid transparent; border-radius: 12px; background: var(--fill); color: var(--ink); text-decoration: none; transition: background .18s; }
+.demo-card:hover { background: var(--fill-hover); }
 .demo-card b { color: var(--brand); font-size: 16px; }
 .demo-card span { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .select-field { display: block; padding-top: 22px; border-top: 1px solid var(--line); }
@@ -252,15 +260,15 @@ textarea::placeholder { color: var(--muted); }
 .band-list li[aria-current] b { color: var(--ink); }
 .score-guidance { margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.5; }
 .factor-list { list-style: none; margin: 0; padding: 0; }
-.factor-list li { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+.factor-list li { padding: 10px 0; }
 .factor-list li > div { display: flex; justify-content: space-between; gap: 20px; font-size: 15px; }
 .factor-list b { color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 13px; white-space: nowrap; }
-.factor-bar { display: block; height: 4px; margin-top: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.factor-bar { display: block; height: 4px; margin-top: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .factor-bar i { display: block; height: 100%; border-radius: inherit; background: var(--risk-color); }
 .method-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
 /* Recommendations step: one outcome summary, then a scannable list with details on demand. */
-.step-panel > .card + .card { margin-top: 18px; }
+.step-panel > .card + .card, .result-grid + .card { margin-top: 18px; }
 .outcome-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
 .risk-pill { padding: 6px 12px; border-radius: 99px; background: var(--risk-bg); font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .08em; }
 .outcome-counts { color: var(--muted); font-size: 13px; }
@@ -275,7 +283,7 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-list h4 { margin: 4px 0; font-size: 16px; font-weight: 600; }
 .recommendation-list p { margin: 0; line-height: 1.55; }
 .recommendation-action { color: var(--muted); font-size: 14px; }
-.recommendation-references { margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font-size: 13px; line-height: 1.55; }
+.recommendation-references { margin-top: 10px; padding: 10px 14px; border-radius: 10px; background: var(--paper); font-size: 13px; line-height: 1.55; }
 .recommendation-references h5 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
 .recommendation-references ul { display: grid; gap: 6px; margin: 0; padding-left: 16px; color: var(--muted); }
 .recommendation-references a { color: var(--brand); font-weight: 600; }
@@ -326,12 +334,12 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-why summary::before { content: "▸" / ""; transition: transform .18s; }
 .recommendation-why[open] summary::before { transform: rotate(90deg); }
 .recommendation-why summary:hover { color: var(--brand-hover); }
-.recommendation-why > div { display: grid; gap: 10px; margin-top: 10px; padding-left: 14px; border-left: 2px solid var(--line); color: var(--muted); font-size: 13px; }
+.recommendation-why > div { display: grid; gap: 10px; margin-top: 10px; padding-left: 18px; color: var(--muted); font-size: 13px; }
 .recommendation-why b { color: var(--ink); font-weight: 600; }
 .recommendation-trace { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
 .recommendation-trace b { margin-right: 2px; }
 .recommendation-trace ul { display: contents; list-style: none; }
-.recommendation-trace li { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.recommendation-trace li { padding: 2px 8px; border-radius: 6px; background: var(--paper); color: var(--ink); }
 .safeguards .method-note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
 
 .summary summary { font-weight: 600; cursor: pointer; }
@@ -356,7 +364,7 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .register-table .register-actions { padding-block: 6px; text-align: right; }
 /* Sits above the row's stretched link so it stays its own click target. */
 .row-action { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: color .18s, border-color .18s, background .18s; }
-.row-action:hover:not(:disabled) { border-color: var(--danger); background: var(--surface); color: var(--danger); }
+.row-action:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger); }
 .row-action:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .row-action:disabled { cursor: progress; }
 .confirm-dialog { width: min(460px, calc(100% - 32px)); margin: auto; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; white-space: normal; }
@@ -375,7 +383,7 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .register-table tbody tr:has(a:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: -3px; }
 .register-table tbody th a::after { content: ""; position: absolute; inset: 0; }
 .register-table tbody th a:focus-visible { outline: none; }
-.badge-neutral { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.badge-neutral { background: var(--fill); color: var(--ink); }
 .empty-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 8px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
 .compact, .error .secondary { min-height: 36px; padding: 0 14px; }
 .compact { font-size: 14px; }
@@ -384,18 +392,18 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .account-menu { display: flex; }
 
 /* Theme switch: a segmented control of native radios. */
-.theme-toggle { display: inline-flex; gap: 2px; min-width: 0; margin: 0; padding: 3px; border: 1px solid var(--control-line); border-radius: 99px; background: var(--surface); }
+.theme-toggle { display: inline-flex; gap: 2px; min-width: 0; margin: 0; padding: 3px; border: 1px solid transparent; border-radius: 99px; background: var(--fill); }
 .theme-toggle label { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); cursor: pointer; transition: background .18s, color .18s; }
-.theme-toggle label:hover { background: var(--surface-hover); color: var(--ink); }
+.theme-toggle label:hover { background: var(--fill-hover); color: var(--ink); }
 .theme-toggle label:has(:checked) { background: var(--brand); color: var(--on-brand); }
 .auth-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.account-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; max-width: 280px; padding: 4px 10px 4px 4px; border: 1px solid var(--control-line); border-radius: 99px; background: var(--surface); color: var(--ink); font-size: 14px; cursor: pointer; anchor-name: --account-menu; transition: border-color .18s, background .18s; }
-.account-trigger:hover { border-color: var(--brand); background: var(--surface-hover); }
+.account-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; max-width: 280px; padding: 4px 10px 4px 4px; border: 1px solid transparent; border-radius: 99px; background: var(--fill); color: var(--ink); font-size: 14px; cursor: pointer; anchor-name: --account-menu; transition: border-color .18s, background .18s; }
+.account-trigger:hover { background: var(--fill-hover); }
 .account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-trigger svg { flex: 0 0 auto; transition: transform .18s; }
 .account-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
 .avatar { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 600; text-transform: uppercase; }
-.account-panel { position: fixed; inset: auto; top: 60px; right: 16px; width: min(300px, 100vw - 32px); margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.account-panel { position: fixed; inset: auto; top: 60px; right: 16px; width: min(300px, 100vw - 32px); margin: 0; padding: 16px; border: 1px solid transparent; border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 @supports (anchor-name: --a) {
   .account-panel { position-anchor: --account-menu; top: calc(anchor(bottom) + 8px); right: anchor(right); }
 }
@@ -433,7 +441,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 @media (max-width: 820px) {
   .simulator-scores { grid-template-columns: minmax(0, 1fr); }
   .app { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar { position: static; height: auto; padding: 16px; border-right: 0; }
   .brand { padding-bottom: 14px; }
   .step-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .progress-card { margin-top: 12px; }
