@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { assessmentResult, completeInput, stubAssessmentApi } from "./assessment-fixture";
 import { expectNoViolations } from "./axe";
 
@@ -156,12 +156,15 @@ describe("My assessments", () => {
   describe("deleting from the list", () => {
     const title = "Overlap analysis · Names";
 
-    beforeEach(() => {
+    beforeAll(() => {
       // jsdom has no modal dialogs yet.
       Object.assign(HTMLDialogElement.prototype, {
         showModal(this: HTMLDialogElement) { this.setAttribute("open", ""); },
         close(this: HTMLDialogElement) { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); },
       });
+    });
+
+    beforeEach(() => {
       pages.loadRegister.mockResolvedValue({ session, entries: [{
         assessmentId: ID, version: 3, versionCount: 3, status: "draft", score: 70, level: "HIGH", title,
         savedAt: "2026-11-12T15:00:00Z",
