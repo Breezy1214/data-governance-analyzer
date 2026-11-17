@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
@@ -247,7 +247,8 @@ export function AssessmentWizard({
   }, [draftOwner, keepDrafts]);
 
   // Saving redacts the description, so it waits for a pause in typing instead of running on every key.
-  useEffect(() => {
+  // A layout effect, so the pagehide flush always holds the state already on screen (a passive effect can lag the commit).
+  useLayoutEffect(() => {
     if (!draftReady || !keepDrafts) return;
     if (input === EMPTY_INPUT && !result) {
       clearDraft();
