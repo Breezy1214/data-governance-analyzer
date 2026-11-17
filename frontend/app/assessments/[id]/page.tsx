@@ -20,7 +20,8 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
   return (
-    <RegisterShell email={session.user.email} section="Saved assessment" current={REGISTER_PATH} title={title}
+    <RegisterShell email={session.user.email} section="Saved assessment" parent={{ href: REGISTER_PATH, label: "My assessments" }}
+      current={REGISTER_PATH} title={title}
       intro={<>Version {selected.version} of {versions.length} · {STATUS_LABELS[selected.status]} · Saved <LocalTime value={selected.savedAt} /></>}>
       <div className="step-panel risk-result" data-risk={result.level.toLowerCase()}>
         {selected.version !== latest.version && (

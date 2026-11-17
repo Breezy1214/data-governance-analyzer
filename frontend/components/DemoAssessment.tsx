@@ -36,11 +36,12 @@ export function DemoAssessment() {
     keepDrafts={false}
     privacyStats={DEMO_STATS}
     intro={ScenarioPicker}
+    notice={<>Sample mode: nothing you enter here is saved. <Link href="/signup">Create an account</Link> to keep your results.</>}
     account={
       <div className="account-controls">
         <span className="badge">Demo mode</span>
         <Link href="/login">Sign in</Link>
-        <Link href="/signup">Create account</Link>
+        <Link className="primary compact" href="/signup">Create account</Link>
       </div>
     } />;
 }

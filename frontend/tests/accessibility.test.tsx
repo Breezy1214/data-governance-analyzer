@@ -21,13 +21,13 @@ function describeUseCase(description = "Share loyalty member emails with a partn
 }
 
 function completeQuestions(dataType = /email addresses/i) {
-  fireEvent.click(screen.getByRole("button", { name: dataType }));
+  fireEvent.click(screen.getByRole("checkbox", { name: dataType }));
   const regulations = screen.getByRole("group", { name: QUESTION_LABELS.regulations });
-  fireEvent.click(within(regulations).getByRole("button", { name: "Not sure" }));
+  fireEvent.click(within(regulations).getByRole("checkbox", { name: "Not sure" }));
   CHOICE_FIELDS.forEach((key) => {
     const group = screen.getByRole("group", { name: CHOICE_QUESTIONS[key].legend });
     const [first] = Object.values(CHOICE_QUESTIONS[key].options);
-    fireEvent.click(within(group).getByRole("button", { name: first }));
+    fireEvent.click(within(group).getByRole("radio", { name: first }));
   });
   choosePurpose();
 }
@@ -109,7 +109,7 @@ describe("assessment flow accessibility", () => {
     answerQuestions();
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
-    fireEvent.click(screen.getByRole("button", { name: /phone numbers/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /phone numbers/i }));
     expect(signal.aborted).toBe(true);
     await act(async () => resolve(new Response(JSON.stringify(assessmentResult))));
     expect(screen.queryByText(/what drives this score/i)).toBeNull();
@@ -223,12 +223,12 @@ describe("assessment flow accessibility", () => {
     render(<AssessmentWizard />);
     describeUseCase();
     const group = screen.getByRole("group", { name: QUESTION_LABELS.regulations });
-    const button = (name: string) => within(group).getByRole("button", { name });
-    fireEvent.click(button("None of these"));
-    expect(button("None of these").getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(button("HIPAA"));
-    expect(button("None of these").getAttribute("aria-pressed")).toBe("false");
-    expect(button("HIPAA").getAttribute("aria-pressed")).toBe("true");
+    const checkbox = (name: string) => within(group).getByRole<HTMLInputElement>("checkbox", { name });
+    fireEvent.click(checkbox("None of these"));
+    expect(checkbox("None of these").checked).toBe(true);
+    fireEvent.click(checkbox("HIPAA"));
+    expect(checkbox("None of these").checked).toBe(false);
+    expect(checkbox("HIPAA").checked).toBe(true);
   });
 
   it("does not rely on colour alone to convey the risk level", async () => {

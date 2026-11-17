@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RISK_LABELS } from "@/components/AssessmentResultView";
+import { Icon } from "@/components/Icons";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
 import { loadRegister } from "@/lib/register-page";
@@ -16,6 +17,7 @@ export default async function MyAssessments() {
       <div className="step-panel">
         {entries.length === 0 ? (
           <div className="card register-empty">
+            <span className="empty-icon"><Icon name="register" size={24} /></span>
             <h2>No saved assessments yet</h2>
             <p className="lede">Complete an assessment and its result is saved here automatically.</p>
             <Link className="primary" href="/">Start an assessment <span>→</span></Link>
@@ -41,7 +43,7 @@ export default async function MyAssessments() {
                     <td data-risk={entry.level.toLowerCase()}>
                       <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.level]} · {entry.score}</span>
                     </td>
-                    <td><span className="badge">{STATUS_LABELS[entry.status]}</span></td>
+                    <td><span className="badge badge-neutral">{STATUS_LABELS[entry.status]}</span></td>
                     <td><LocalTime value={entry.savedAt} /></td>
                   </tr>
                 ))}

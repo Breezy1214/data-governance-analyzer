@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
+import { APPLY_SAVED_THEME } from "@/lib/theme-preference";
 
 const sans = Inter({
   variable: "--font-sans",
@@ -19,7 +20,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    // The saved theme is set on <html> before hydration, so React is told not to compare it.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: APPLY_SAVED_THEME }} />
+      </head>
       <body className={`${sans.variable} ${mono.variable}`}>{children}</body>
     </html>
   );
