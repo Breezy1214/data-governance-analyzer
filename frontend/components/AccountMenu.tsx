@@ -35,7 +35,7 @@ export function AccountMenu({ email, onSignOut }: { email: string; onSignOut?: (
     </button>
     <div className="account-panel" id={panel} popover="auto" onToggle={(event) => setOpen(event.newState === "open")}>
       <p className="account-who">Signed in as <b>{email}</b></p>
-      <button className="secondary" type="button" disabled={busy} onClick={onSignOut ?? logout}>{busy ? "Signing out…" : "Sign out"}</button>
+      <button className="secondary" type="button" disabled={busy} aria-busy={busy} onClick={onSignOut ?? logout}>{busy ? "Signing out…" : "Sign out"}</button>
       {error && <p className="error" role="alert">{error}</p>}
     </div>
   </div>;

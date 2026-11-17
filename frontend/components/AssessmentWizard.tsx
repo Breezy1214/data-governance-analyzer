@@ -421,7 +421,7 @@ export function AssessmentWizard({
   );
   const saveStatus = saved === null
     ? <div className="error" role="alert"><span>This result couldn’t be saved to My assessments. Your answers are still here.</span>
-        <button className="secondary" type="button" disabled={loading} onClick={assess}>{loading ? "Saving…" : "Try saving again"}</button></div>
+        <button className="secondary" type="button" disabled={loading} aria-busy={loading} onClick={assess}>{loading ? "Saving…" : "Try saving again"}</button></div>
     : saved && <p className="save-note" role="status">
         Saved to <Link href={assessmentPath(saved.assessmentId, saved.version)}>My assessments</Link> as version {saved.version}.
       </p>;
@@ -491,7 +491,7 @@ export function AssessmentWizard({
             <div className="header-chips">
               <span className="chip">Rubric v{result.rulesVersion} · {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}</span>
               {step === 3 && (
-                <button className="secondary" type="button" disabled={downloading} onClick={download}>
+                <button className="secondary" type="button" disabled={downloading} aria-busy={downloading} onClick={download}>
                   {downloading ? "Preparing report…" : "Download report (PDF)"}
                 </button>
               )}
@@ -564,6 +564,7 @@ export function AssessmentWizard({
                     className="secondary"
                     type="button"
                     disabled={importing}
+                    aria-busy={importing}
                     onClick={() => fileInput.current?.click()}
                   >
                     {importing ? "Reading…" : "Choose file"}
@@ -633,7 +634,7 @@ export function AssessmentWizard({
                 {renderChoice("identifierConsistency")}
               </div>
               {error && <p className="error" role="alert">{error}</p>}
-              <div className="actions"><button className="secondary" type="button" onClick={() => moveTo(0)}>← Back</button><button className="primary" type="button" disabled={loading} onClick={assess}>{loading ? "Assessing…" : "Assess risk"} <span>→</span></button></div>
+              <div className="actions"><button className="secondary" type="button" onClick={() => moveTo(0)}>← Back</button><button className="primary" type="button" disabled={loading} aria-busy={loading} onClick={assess}>{loading ? "Assessing…" : "Assess risk"} <span>→</span></button></div>
             </div>
           )}
 
@@ -670,7 +671,7 @@ export function AssessmentWizard({
                   This clears your answers and this assessment. Download the report first if you need a record.
                 </ConfirmPanel>
               )}
-              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button ref={startOverButton} className="destructive" type="button" aria-expanded={confirmingReset} aria-controls={confirmingReset ? "confirm-reset" : undefined} onClick={() => setConfirmingReset(true)}>Start over</button><button className="primary" type="button" disabled={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
+              <div className="actions wrap"><button className="secondary" type="button" onClick={() => moveTo(2)}>← Back</button><div><button ref={startOverButton} className="destructive" type="button" aria-expanded={confirmingReset} aria-controls={confirmingReset ? "confirm-reset" : undefined} onClick={() => setConfirmingReset(true)}>Start over</button><button className="primary" type="button" disabled={downloading} aria-busy={downloading} onClick={download}>{downloading ? "Preparing report…" : "Download report (PDF) ↓"}</button></div></div>
             </div>
           )}
         </section>

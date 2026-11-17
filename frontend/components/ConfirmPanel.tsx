@@ -29,7 +29,7 @@ export function ConfirmPanel({
       <p id={`${id}-detail`}>{children}</p>
       <div className="actions end">
         <button autoFocus className="secondary" type="button" disabled={busy} onClick={onCancel}>{cancelLabel}</button>
-        <button className="destructive" type="button" disabled={busy} onClick={onConfirm}>{confirmLabel}</button>
+        <button className="destructive" type="button" disabled={busy} aria-busy={busy} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </div>
   );

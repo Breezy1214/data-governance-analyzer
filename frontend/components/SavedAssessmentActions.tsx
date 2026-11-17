@@ -93,7 +93,7 @@ export function SavedAssessmentActions({
             : <span className="method-note">Assessments with a version in review or approved can’t be deleted.</span>}
         </div>
         <div>
-          <button className="secondary" type="button" disabled={downloading} onClick={download}>
+          <button className="secondary" type="button" disabled={downloading} aria-busy={downloading} onClick={download}>
             {downloading ? "Preparing report…" : "Download report (PDF) ↓"}
           </button>
           <Link className="primary" href={reassessHref}>Re-assess <span>→</span></Link>
