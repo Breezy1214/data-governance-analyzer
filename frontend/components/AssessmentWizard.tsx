@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import {
@@ -39,8 +39,9 @@ import {
 import { IDLE_TIMEOUT_MS, Step, clearDraft, loadSession, purgeLegacyDrafts, reachableStep, saveDraft } from "@/lib/session";
 import { containsSensitiveData, redactSensitiveData } from "@/lib/sensitive-data";
 import { bindDraft } from "@/lib/auth-client";
-import { BrandMark, Icon, IconName } from "@/components/Icons";
+import { Brand, Icon, IconName } from "@/components/Icons";
 import { ConfirmPanel } from "@/components/ConfirmPanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { AssessmentRecord, RISK_BANDS, ScoreBreakdown } from "@/components/AssessmentResultView";
 import { SafeguardSimulator } from "@/components/SafeguardSimulator";
 import { SIMULATIONS_ENDPOINT, type SimulatedPlan } from "@/lib/simulation";
@@ -59,12 +60,19 @@ const ASSESSMENT_ERRORS: Record<number, string> = {
 const ASSESSMENT_UNAVAILABLE = "The assessment service is unavailable. Your answers are still in this tab—please try again.";
 const DRAFT_SAVE_DELAY_MS = 400;
 
-function Choice({ selected, children, onClick }: { selected: boolean; children: React.ReactNode; onClick: () => void }) {
+/** A checkbox, or a radio when given a group name. The native input supplies the keyboard and screen-reader behaviour. */
+function Choice({ name, selected, children, onClick }: {
+  name?: string;
+  selected: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" className="choice" aria-pressed={selected} onClick={onClick}>
-      <span aria-hidden="true" className="choice-mark">{selected ? "✓" : ""}</span>
+    <label className="choice">
+      <input className="choice-input" type={name ? "radio" : "checkbox"} name={name} checked={selected} onChange={onClick} />
+      <span aria-hidden="true" className="choice-mark" />
       {children}
-    </button>
+    </label>
   );
 }
 
@@ -81,7 +89,7 @@ function ChoiceQuestion({ field, value, onChange }: {
       <p>{detail}</p>
       <div className={entries.length > 3 ? "choice-grid" : "binary-row"}>
         {entries.map(([key, label]) => (
-          <Choice key={key} selected={value === key} onClick={() => onChange(key)}>{label}</Choice>
+          <Choice key={key} name={field} selected={value === key} onClick={() => onChange(key)}>{label}</Choice>
         ))}
       </div>
     </fieldset>
@@ -244,7 +252,8 @@ export function AssessmentWizard({
   }, [draftOwner, keepDrafts]);
 
   // Saving redacts the description, so it waits for a pause in typing instead of running on every key.
-  useEffect(() => {
+  // A layout effect, so the pagehide flush always holds the state already on screen (a passive effect can lag the commit).
+  useLayoutEffect(() => {
     if (!draftReady || !keepDrafts) return;
     if (input === EMPTY_INPUT && !result) {
       clearDraft();
@@ -438,10 +447,7 @@ export function AssessmentWizard({
       <a className="skip-link" href="#assessment">Skip to the assessment</a>
 
       <aside className="sidebar" aria-label="Assessment progress">
-        <a className="brand" href="#top" aria-label="Data Governance Readiness Analyzer home">
-          <BrandMark />
-          <span><b>Readiness</b><small>Data governance</small></span>
-        </a>
+        <Brand href="#top" />
         <p className="nav-label">Steps</p>
         <ol className="step-list">
           {STEPS.map(({ label, icon }, index) => (
@@ -472,6 +478,7 @@ export function AssessmentWizard({
         <div className="topbar">
           <Icon name="grid" size={18} />
           <b>{STEPS[step].label}</b>
+          <ThemeToggle />
           {account}
         </div>
 
@@ -483,6 +490,11 @@ export function AssessmentWizard({
           {result && (
             <div className="header-chips">
               <span className="chip">Rubric v{result.rulesVersion} · {result.mappingApprovalStatus === "approved" ? "approved" : "approval pending"}</span>
+              {step === 3 && (
+                <button className="secondary" type="button" disabled={downloading} onClick={download}>
+                  {downloading ? "Preparing report…" : "Download report (PDF)"}
+                </button>
+              )}
             </div>
           )}
         </header>

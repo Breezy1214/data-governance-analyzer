@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AUTH_EVENT, AUTH_TIMEOUT_MS, SIGN_OUT_FAILED, clearPrivateState, signOut, type AuthSession } from "@/lib/auth-client";
 import { ASSESSMENTS_ENDPOINT, type AssessmentInput } from "@/lib/assessment";
 import { REGISTER_PATH, versionsEndpoint } from "@/lib/register";
+import { AccountMenu } from "./AccountMenu";
 import { AssessmentWizard } from "./AssessmentWizard";
 
 export function AuthenticatedAssessment({ session, reopened }: {
@@ -79,7 +80,6 @@ export function AuthenticatedAssessment({ session, reopened }: {
           // A reopened assessment comes from the register, so it doesn't replace the draft kept in this tab.
           keepDrafts={!reopened}
           account={<div className="account-controls"><Link href={REGISTER_PATH}>My assessments</Link>
-            <span>{session.user.email}</span>
-            <button className="secondary" onClick={logout}>Sign out</button></div>} />}
+            <AccountMenu email={session.user.email} onSignOut={logout} /></div>} />}
   </>;
 }

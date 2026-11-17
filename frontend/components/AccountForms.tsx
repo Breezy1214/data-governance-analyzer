@@ -5,12 +5,19 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { clearPrivateState, notifyAuthChange, postAuth } from "@/lib/auth-client";
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
 import { PASSWORD_MAX_BYTES, PASSWORD_MIN_CHARACTERS } from "@/lib/password-policy";
+import { Brand } from "./Icons";
+import { ThemeToggle } from "./ThemeToggle";
 
 const BACK_TO_SIGN_IN = <p className="auth-note"><Link href="/login">Back to sign in</Link></p>;
 
 export function AuthShell({ title, children }: { title: string; children: ReactNode }) {
   return <main className="auth-page">
-    <header className="auth-heading"><h1>{title}</h1>
+    <header className="auth-heading">
+      <div className="auth-top">
+        <Brand />
+        <ThemeToggle />
+      </div>
+      <h1>{title}</h1>
       <p>Data Governance Readiness Analyzer</p></header>
     {children}
   </main>;
@@ -45,13 +52,17 @@ export function EmailField({ disabled, autoComplete = "email" }: { disabled: boo
   </>;
 }
 
-function NewPasswordField({ label, disabled }: { label: string; disabled: boolean }) {
+/** A password input with a show/hide toggle. A new password also gets the policy hint and length limits. */
+export function PasswordField({ label, disabled, isNew = false }: { label: string; disabled: boolean; isNew?: boolean }) {
   const [visible, setVisible] = useState(false);
   return <>
     <label htmlFor="password">{label}</label>
-    <input id="password" name="password" type={visible ? "text" : "password"} autoComplete="new-password" required
-      minLength={PASSWORD_MIN_CHARACTERS} maxLength={PASSWORD_MAX_BYTES} aria-describedby="password-hint" disabled={disabled} />
-    <p id="password-hint" className="auth-note">{AUTH_MESSAGES.passwordRules}</p>
+    <input id="password" name="password" type={visible ? "text" : "password"} required disabled={disabled}
+      autoComplete={isNew ? "new-password" : "current-password"}
+      minLength={isNew ? PASSWORD_MIN_CHARACTERS : undefined}
+      maxLength={isNew ? PASSWORD_MAX_BYTES : 1024}
+      aria-describedby={isNew ? "password-hint" : undefined} />
+    {isNew && <p id="password-hint" className="auth-note">{AUTH_MESSAGES.passwordRules}</p>}
     <label className="auth-toggle">
       <input type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} /> Show password
     </label>
@@ -88,7 +99,7 @@ export function SignupForm() {
   return <AuthShell title="Create an account">
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       <EmailField disabled={busy} />
-      <NewPasswordField label="Password" disabled={busy} />
+      <PasswordField label="Password" disabled={busy} isNew />
       {error && <p className="error" role="alert">{error}</p>}
       <button className="primary" disabled={busy}>{busy ? "Creating account..." : "Create account"}</button>
       <p className="auth-note">Already have an account? <Link href="/login">Sign in</Link></p>
@@ -155,7 +166,7 @@ export function UpdatePasswordForm() {
 
   return <AuthShell title="Choose a new password">
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
-      <NewPasswordField label="New password" disabled={busy} />
+      <PasswordField label="New password" disabled={busy} isNew />
       {error && <p className="error" role="alert">{error}</p>}
       <button className="primary" disabled={busy}>{busy ? "Saving..." : "Save password"}</button>
     </form>

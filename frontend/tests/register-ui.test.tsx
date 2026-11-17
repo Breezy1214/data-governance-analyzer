@@ -13,6 +13,7 @@ import { AuthenticatedAssessment } from "../components/AuthenticatedAssessment";
 import { DemoAssessment } from "../components/DemoAssessment";
 import { SavedAssessmentActions } from "../components/SavedAssessmentActions";
 import MyAssessments from "../app/assessments/page";
+import LoadingAssessments from "../app/assessments/loading";
 import SavedAssessment from "../app/assessments/[id]/page";
 import { toScoringPayload } from "../lib/assessment";
 import { DEMO_SCENARIOS } from "../lib/demo-scenarios";
@@ -147,6 +148,12 @@ describe("My assessments", () => {
     expect(row.textContent).toContain("High · 86");
     expect(row.textContent).toContain("In review");
     expect(within(row).getByText(/Nov 12, 2026/).getAttribute("datetime")).toBe("2026-11-12T15:00:00Z");
+    await expectNoViolations(container);
+  });
+  it("shows a busy skeleton while the register loads", async () => {
+    const { container } = render(<LoadingAssessments />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Loading…");
+    expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     await expectNoViolations(container);
   });
 });

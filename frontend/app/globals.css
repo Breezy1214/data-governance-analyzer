@@ -3,36 +3,37 @@
 /*
  * Design tokens (SCRUM-24). Every colour in the app comes from this block;
  * components reference the semantic tokens, never raw values. lib/theme.ts
- * mirrors the values the PDF report needs.
+ * mirrors the light values the PDF report needs. Each light-dark() pair is
+ * (light, dark): the dark scheme keeps the teal identity on deep ink surfaces,
+ * with the same contrast minimums.
  */
 :root {
-  --ink: #16313a;
-  --muted: #536368;
-  --paper: #edf3f4;
-  --surface: #ffffff;
-  --surface-hover: #f0f6f7;
+  --ink: light-dark(#16313a, #dce8ea);
+  --muted: light-dark(#536368, #9db0b5);
+  --paper: light-dark(#edf3f4, #0c1a1e);
+  --surface: light-dark(#ffffff, #132529);
+  --surface-hover: light-dark(#f0f6f7, #1a3036);
   --white: #ffffff;
   /* Decorative rules only; not enough contrast for control boundaries. */
-  --line: #dde5e7;
+  --line: light-dark(#dde5e7, #22393f);
   /* Boundary for interactive controls: 3:1 against --surface (WCAG 1.4.11). */
-  --control-line: #7d8b90;
+  --control-line: light-dark(#7d8b90, #5f7b82);
 
   /* Brand teal: primary actions, the current step and selected choices. */
-  --brand: #0f6e75;
-  --brand-hover: #0a585e;
-  --brand-soft: #e3f1f2;
+  --brand: light-dark(#0f6e75, #4fb3ba);
+  --brand-hover: light-dark(#0a585e, #73c9cf);
+  --brand-soft: light-dark(#e3f1f2, #143a3e);
 
-  /* Accent: --accent on dark panels, --accent-strong on light surfaces. */
-  --accent: #7fd3d8;
+  /* Accent for emphasised text such as factor points. */
   --accent-strong: var(--brand);
 
-  --success: #2e6a4a;
-  --success-bg: #e6f1ea;
-  --warning: #9a4a0b;
-  --warning-bg: #fbefe3;
-  --danger: #a8322a;
-  --danger-hover: #8c2620;
-  --danger-bg: #fbeceb;
+  --success: light-dark(#2e6a4a, #6cc596);
+  --success-bg: light-dark(#e6f1ea, #12302a);
+  --warning: light-dark(#9a4a0b, #eba15c);
+  --warning-bg: light-dark(#fbefe3, #352514);
+  --danger: light-dark(#a8322a, #f0877d);
+  --danger-hover: light-dark(#8c2620, #f4a39b);
+  --danger-bg: light-dark(#fbeceb, #3a1b1a);
 
   /* Risk levels map onto the feedback states and are always paired with a text label and shape. */
   --risk-low: var(--success);
@@ -40,17 +41,20 @@
   --risk-high: var(--danger);
 
   --focus-ring: var(--brand);
-  --focus-ring-on-dark: var(--accent);
-  --disabled-bg: #e3e8ea;
+  --disabled-bg: light-dark(#e3e8ea, #1f3338);
   --disabled-fg: var(--muted);
 
-  /* Text and rules on the dark --ink panels. */
-  --on-ink: #cfdde0;
-  --on-ink-strong: var(--white);
-  --ink-line: #2c4a53;
+  /* Text on filled brand and danger controls. */
+  --on-brand: light-dark(#ffffff, #05201f);
+  --on-danger: light-dark(#ffffff, #2a0a08);
 
-  --shadow: 0 1px 2px rgba(22, 49, 58, .04), 0 6px 20px rgba(22, 49, 58, .06);
+  --shadow: 0 1px 2px light-dark(rgba(22, 49, 58, .04), rgba(0, 0, 0, .3)), 0 6px 20px light-dark(rgba(22, 49, 58, .06), rgba(0, 0, 0, .25));
 }
+
+/* The scheme follows the device unless the theme switch sets data-theme on <html>. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 .auth-page { width: min(100% - 40px, 460px); margin: 72px auto; }
@@ -65,8 +69,7 @@
 .auth-message { line-height: 1.6; margin-top: 32px; }
 .auth-form .auth-toggle { display: flex; align-items: center; gap: 8px; font-weight: 400; }
 .auth-form .auth-toggle input { width: auto; min-height: 0; padding: 0; }
-.account-controls { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
-.account-controls span { overflow-wrap: anywhere; min-width: 0; }
+.account-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }
@@ -75,7 +78,7 @@ button, input, textarea, select { font: inherit; }
 [tabindex="-1"]:focus { outline: none; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.skip-link { position: absolute; left: -9999px; top: 0; z-index: 10; background: var(--brand); color: var(--white); padding: 12px 18px; border-radius: 10px; }
+.skip-link { position: absolute; left: -9999px; top: 0; z-index: 10; background: var(--brand); color: var(--on-brand); padding: 12px 18px; border-radius: 10px; }
 .skip-link:focus { left: 8px; top: 8px; }
 
 /* App shell: sidebar navigation beside the main area. */
@@ -94,8 +97,8 @@ button, input, textarea, select { font: inherit; }
 .step-name { flex: 1; min-width: 0; }
 .step-number { font-family: var(--font-mono), monospace; font-size: 11px; color: var(--muted); }
 /* Selected step: filled row and bold weight, not colour alone. */
-.step-list .current button, .step-list .current button:hover:not(:disabled) { background: var(--brand); color: var(--white); font-weight: 600; }
-.step-list .current .step-number { color: var(--white); }
+.step-list .current button, .step-list .current button:hover:not(:disabled) { background: var(--brand); color: var(--on-brand); font-weight: 600; }
+.step-list .current .step-number { color: var(--on-brand); }
 .step-list .complete .step-number::after { content: " ✓" / ""; color: var(--brand); }
 .progress-card { margin-top: auto; padding: 16px; border-radius: 14px; background: var(--paper); }
 .progress-copy { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
@@ -107,6 +110,8 @@ button, input, textarea, select { font: inherit; }
 .main-area { min-width: 0; display: flex; flex-direction: column; padding: 16px clamp(16px, 3vw, 36px) 0; }
 .topbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 40px; color: var(--brand); font-size: 14px; }
 .topbar b { font-weight: 500; }
+/* The page label takes the spare width, so the theme switch and account controls sit at the end. */
+.topbar > :is(b, .breadcrumbs) { margin-right: auto; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px 24px; margin: 14px 0 26px; }
 .page-header h1 { margin: 0 0 6px; font-size: clamp(26px, 2.4vw, 32px); font-weight: 500; letter-spacing: -.02em; }
 .page-header p { margin: 0; max-width: 62ch; color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -116,7 +121,7 @@ button, input, textarea, select { font: inherit; }
 .workspace { flex: 1; display: grid; grid-template-columns: 270px minmax(0, 1fr); align-items: start; gap: 24px; padding-bottom: 32px; }
 .stat-rail { position: sticky; top: 16px; display: grid; gap: 14px; }
 .stat-card { padding: 16px 18px; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
-.stat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.stat-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
 .badge { padding: 3px 8px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .stat-value { margin: 10px 0 6px; color: var(--brand); font-size: 30px; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
 .stat-value small { margin-left: 6px; color: var(--muted); font-size: 14px; letter-spacing: 0; }
@@ -155,18 +160,24 @@ textarea::placeholder { color: var(--muted); }
 .dropzone button { flex: 0 0 auto; }
 .import-status:empty { margin: 0; }
 
-/* Alerts: icon, tinted background, and message text, so the state is not carried by colour alone. */
-.error { display: flex; gap: 10px; align-items: flex-start; margin: 18px 0 0; padding: 10px 14px; border-left: 3px solid var(--danger); border-radius: 8px; background: var(--danger-bg); color: var(--danger); font-size: 14px; font-weight: 600; line-height: 1.5; }
-.error::before { content: "!" / ""; flex: 0 0 18px; height: 18px; margin-top: 1px; border-radius: 50%; background: var(--danger); color: var(--white); font-size: 12px; line-height: 18px; text-align: center; }
+/* Alerts share one shape: icon, tint and text, so the state is never carried by colour alone.
+   Info is the default; .save-note is success, .limitations a warning and .error a failure. */
+.sample-note, .save-note, .limitations, .error { --alert-color: var(--brand); --alert-bg: var(--brand-soft); --alert-icon: "i"; position: relative; padding: 10px 14px 10px 42px; border-radius: 10px; background: var(--alert-bg); color: var(--ink); font-size: 14px; line-height: 1.5; }
+:is(.sample-note, .save-note, .limitations, .error)::before { content: var(--alert-icon) / ""; position: absolute; top: 12px; left: 14px; width: 18px; height: 18px; border-radius: 50%; background: var(--alert-color); color: var(--surface); font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
+.sample-note { margin: 0 0 18px; }
+.save-note { --alert-color: var(--success); --alert-bg: var(--success-bg); --alert-icon: "✓"; margin: 14px 0 0; }
+.limitations { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; margin-top: 18px; }
+.error { --alert-color: var(--danger); --alert-bg: var(--danger-bg); --alert-icon: "!"; margin: 18px 0 0; color: var(--danger); font-weight: 600; }
+.error:has(> button) { display: flex; align-items: center; gap: 10px; }
 
-.actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; }
+.actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; }
 .actions.end { justify-content: flex-end; }
-.actions > div { display: flex; gap: 10px; }
+.actions > div { display: flex; flex-wrap: wrap; gap: 10px; }
 .confirm-panel { margin-top: 24px; border: 1px solid var(--danger); }
 .confirm-panel p { margin: 0; color: var(--muted); line-height: 1.5; }
 .confirm-panel .actions { margin-top: 16px; }
-.primary, .secondary, .destructive { min-height: 44px; padding: 0 20px; border: 1px solid; border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform .18s, background .18s, color .18s, border-color .18s; }
-.primary { border-color: var(--brand); background: var(--brand); color: var(--white); }
+.primary, .secondary, .destructive { min-height: 44px; padding: 0 20px; border: 1px solid; border-radius: 10px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: transform .18s, background .18s, color .18s, border-color .18s; }
+.primary { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
 .primary span { display: inline-block; margin-left: 12px; transition: transform .18s; }
 .primary:hover:not(:disabled) { border-color: var(--brand-hover); background: var(--brand-hover); }
 .primary:hover:not(:disabled) span { transform: translateX(4px); }
@@ -175,9 +186,11 @@ textarea::placeholder { color: var(--muted); }
 .secondary { border-color: var(--control-line); background: var(--surface); color: var(--ink); }
 .secondary:hover:not(:disabled) { border-color: var(--brand); background: var(--surface-hover); }
 .destructive { border-color: var(--danger); background: var(--surface); color: var(--danger); }
-.destructive:hover:not(:disabled) { border-color: var(--danger-hover); background: var(--danger-hover); color: var(--white); }
-/* Disabled buttons are only shown while work is in progress; their label says what is happening. */
+.destructive:hover:not(:disabled) { border-color: var(--danger-hover); background: var(--danger-hover); color: var(--on-danger); }
+/* Disabled buttons are only shown while work is in progress; their label says what is happening, and a spinner shows it is still running. */
 .primary:disabled, .secondary:disabled, .destructive:disabled { border-color: var(--disabled-bg); background: var(--disabled-bg); color: var(--disabled-fg); cursor: progress; }
+:is(.primary, .secondary, .destructive):disabled::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
 
 .question-block { margin: 0; padding: 22px 0; border: 0; border-top: 1px solid var(--line); }
 .question-block:first-child { padding-top: 0; border-top: 0; }
@@ -186,25 +199,32 @@ textarea::placeholder { color: var(--muted); }
 .question-block p { margin: 6px 0 14px; color: var(--muted); font-size: 13px; }
 .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .binary-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s, background .18s; }
+/* Choice tiles: a native radio or checkbox inside a label, or a toggle button with aria-pressed. */
+.choice { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s, background .18s; }
 .choice:hover { border-color: var(--brand); background: var(--surface-hover); }
-/* Selection is shown by the tick as well as the fill, not colour alone. */
-.choice[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
-.choice-mark { display: grid; place-items: center; flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid var(--control-line); border-radius: 5px; font-size: 11px; }
-.choice[aria-pressed="true"] .choice-mark { border-color: var(--brand); background: var(--brand); color: var(--white); }
+.choice-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.choice:has(.choice-input:focus-visible), .theme-toggle label:has(.choice-input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+/* Selection is shown by the mark as well as the fill, not colour alone. Radios are round, checkboxes square. */
+:is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) { border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
+.choice-mark { display: grid; place-items: center; flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid var(--control-line); border-radius: 5px; color: var(--on-brand); font-size: 11px; }
+.choice:has([type="radio"]) .choice-mark { border-radius: 50%; }
+:is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) .choice-mark { border-color: var(--brand); background: var(--brand); }
+:is(.choice[aria-pressed="true"], .choice:has([type="checkbox"]:checked)) .choice-mark::after { content: "✓" / ""; }
+.choice:has([type="radio"]:checked) .choice-mark::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--on-brand); }
 .binary-row .choice { min-width: 110px; }
 .scenario-picker .lede { margin-top: -8px; }
 .scenario-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
 .scenario { width: 100%; height: 100%; display: grid; align-content: start; justify-items: start; gap: 8px; padding: 14px 16px; border-radius: 12px; }
 .scenario b { font-size: 15px; font-weight: 600; line-height: 1.35; }
 .scenario > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.sample-note { margin: 0 0 18px; padding: 10px 14px; border-radius: 10px; background: var(--brand-soft); color: var(--ink); font-size: 14px; line-height: 1.5; }
-.account-controls a { color: inherit; font-size: 14px; }
-.save-note { margin: 14px 0 0; padding: 10px 14px; border-left: 3px solid var(--success); border-radius: 8px; background: var(--success-bg); font-size: 14px; line-height: 1.5; }
-.save-note a, .register-table a { color: var(--brand); font-weight: 600; }
-.error .secondary { margin-left: auto; min-height: 36px; padding: 0 14px; }
-.demo-entry { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
-.demo-entry a { color: var(--brand); font-weight: 600; }
+/* Zero specificity, so button-styled links keep their own colours. */
+:where(.account-controls) a { color: inherit; font-size: 14px; }
+.sample-note a, .save-note a, .register-table a { color: var(--brand); font-weight: 600; }
+.error .secondary { margin-left: auto; }
+.demo-card { display: grid; gap: 4px; margin-top: 28px; padding: 16px 18px; border: 1px solid var(--control-line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color .18s, background .18s; }
+.demo-card:hover { border-color: var(--brand); background: var(--surface-hover); }
+.demo-card b { color: var(--brand); font-size: 16px; }
+.demo-card span { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .select-field { display: block; padding-top: 22px; border-top: 1px solid var(--line); }
 
 /* Panels set data-risk; colour is always paired with a label and a shape. */
@@ -243,10 +263,8 @@ textarea::placeholder { color: var(--muted); }
 .risk-pill { padding: 6px 12px; border-radius: 99px; background: var(--risk-bg); font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .08em; }
 .outcome-counts { color: var(--muted); font-size: 13px; }
 .outcome-guidance { margin: 14px 0 0; font-size: 17px; font-weight: 500; line-height: 1.5; }
-/* A caution rather than a failure, so it uses the warning state. */
-.limitations { margin-top: 18px; padding: 12px 16px; border-left: 3px solid var(--warning); border-radius: 10px; background: var(--warning-bg); }
 .workspace .limitations h3 { margin: 0; color: var(--warning); font-size: 14px; font-weight: 600; }
-.limitations p { margin: 4px 0 0; color: var(--ink); font-size: 13px; line-height: 1.55; }
+.limitations p { margin: 4px 0 0; font-size: 13px; line-height: 1.55; }
 
 .recommendation-list { list-style: none; margin: 0; padding: 0; }
 .recommendation-list > li { display: grid; grid-template-columns: 44px minmax(0, 1fr); padding: 18px 0; border-top: 1px solid var(--line); }
@@ -324,11 +342,11 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .nav-list a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: var(--ink); font-size: 15px; text-decoration: none; transition: background .18s, color .18s; }
 .nav-list a:hover { background: var(--surface-hover); }
-.nav-list a[aria-current="page"] { background: var(--brand); color: var(--white); font-weight: 600; }
+.nav-list a[aria-current="page"] { background: var(--brand); color: var(--on-brand); font-weight: 600; }
 .register-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .register-empty { display: grid; justify-items: start; gap: 4px; }
 .register-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.register-table th, .register-table td { padding: 14px 12px 14px 0; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.register-table th, .register-table td { padding: 14px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
 .register-table thead th { padding-top: 0; border-top: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
 .register-table tbody th { font-weight: 400; }
 .register-table small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
@@ -339,13 +357,61 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .version-list a { min-width: 84px; color: var(--brand); font-weight: 600; }
 .version-list a[aria-current="page"] { color: var(--ink); text-decoration: none; }
 .version-list time { margin-left: auto; color: var(--muted); }
+/* The title link stretches over its row, so the whole row is one click target with one tab stop. */
+.register-table tbody tr { position: relative; transition: background .18s; }
+.register-table tbody tr:hover { background: var(--surface-hover); }
+.register-table tbody tr:has(a:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: -3px; }
+.register-table tbody th a::after { content: ""; position: absolute; inset: 0; }
+.register-table tbody th a:focus-visible { outline: none; }
+.badge-neutral { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.empty-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 8px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
+.compact, .error .secondary { min-height: 36px; padding: 0 14px; }
+.compact { font-size: 14px; }
+
+/* Account menu: a disclosure on the native popover, so Esc, outside clicks and focus return come from the browser. */
+.account-menu { display: flex; }
+
+/* Theme switch: a segmented control of native radios. */
+.theme-toggle { display: inline-flex; gap: 2px; min-width: 0; margin: 0; padding: 3px; border: 1px solid var(--control-line); border-radius: 99px; background: var(--surface); }
+.theme-toggle label { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); cursor: pointer; transition: background .18s, color .18s; }
+.theme-toggle label:hover { background: var(--surface-hover); color: var(--ink); }
+.theme-toggle label:has(:checked) { background: var(--brand); color: var(--on-brand); }
+.auth-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; max-width: 280px; padding: 4px 10px 4px 4px; border: 1px solid var(--control-line); border-radius: 99px; background: var(--surface); color: var(--ink); font-size: 14px; cursor: pointer; anchor-name: --account-menu; transition: border-color .18s, background .18s; }
+.account-trigger:hover { border-color: var(--brand); background: var(--surface-hover); }
+.account-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-trigger svg { flex: 0 0 auto; transition: transform .18s; }
+.account-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+.avatar { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 600; text-transform: uppercase; }
+.account-panel { position: fixed; inset: auto; top: 60px; right: 16px; width: min(300px, 100vw - 32px); margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+@supports (anchor-name: --a) {
+  .account-panel { position-anchor: --account-menu; top: calc(anchor(bottom) + 8px); right: anchor(right); }
+}
+.account-who { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.account-who b { display: block; margin-top: 2px; color: var(--ink); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.account-panel .secondary { width: 100%; }
+
+.breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.breadcrumbs li + li::before { content: "›" / ""; margin-right: 6px; color: var(--muted); }
+.breadcrumbs a { color: var(--brand); font-weight: 500; }
+.breadcrumbs [aria-current] { color: var(--ink); }
+
+/* Skeletons stand in for server-loaded pages; the region is aria-busy and the shapes are hidden from assistive tech. */
+.skeleton { display: block; border-radius: 8px; background: var(--line); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.skeleton-title { width: min(60%, 360px); height: 34px; }
+.skeleton-line { height: 14px; margin-top: 16px; }
+.skeleton-line:nth-child(3n + 2) { width: 72%; }
+.skeleton-line:nth-child(3n) { width: 48%; }
+.auth-heading .brand { display: inline-flex; padding: 0; }
 
 footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 52px; padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 
 @media (max-width: 1180px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .stat-rail ~ .step-panel { grid-column: 1; }
-  .stat-rail { position: static; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  /* In one column the step content leads; the summary follows it. */
+  .stat-rail { position: static; order: 1; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -365,9 +431,13 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   .register-table thead { display: none; }
   .register-table, .register-table tbody, .register-table tr, .register-table th, .register-table td { display: block; }
   .register-table tr { padding: 12px 0; border-top: 1px solid var(--line); }
-  .register-table th, .register-table td { padding: 4px 0; border-top: 0; }
+  .register-table th, .register-table td { padding: 4px 12px; border-top: 0; }
+  .account-email { display: none; }
+  .account-trigger { padding-right: 8px; }
   .version-list time { margin-left: 0; }
-  .header-chips, .nav-label { display: none; }
+  /* The step list already marks the current step, so the progress card is dropped to save height. */
+  .header-chips, .nav-label, .progress-card { display: none; }
+  .page-header { margin: 8px 0 18px; }
   .sidebar { padding: 16px 12px; }
   .step-list button { gap: 8px; padding: 10px 8px; font-size: 14px; }
   .step-list svg { display: none; }
@@ -386,7 +456,10 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 
 /* Windows High Contrast / forced colours: keep focus, selection and risk shapes visible. */
 @media (forced-colors: active) {
-  .choice[aria-pressed="true"] { border-width: 3px; }
+  :is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) { border-width: 3px; }
+  .theme-toggle label:has(:checked) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  :is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) .choice-mark { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .choice:has([type="radio"]:checked) .choice-mark::after { background: HighlightText; }
   .risk-icon, .progress-track i, .factor-bar i { forced-color-adjust: none; background: CanvasText; }
   .ring-value { stroke: CanvasText; }
   .safeguard-toggle input { forced-color-adjust: none; border: 1px solid CanvasText; background: Canvas; }
@@ -396,4 +469,5 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  :is(.primary, .secondary, .destructive):disabled::before, .skeleton { animation: none; }
 }
