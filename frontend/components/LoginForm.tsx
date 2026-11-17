@@ -28,7 +28,7 @@ export function LoginForm({ expired = false }: { expired?: boolean }) {
       <EmailField disabled={busy} autoComplete="username" />
       <PasswordField label="Password" disabled={busy} />
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+      <button className="primary" disabled={busy} aria-busy={busy}>{busy ? "Signing in..." : "Sign in"}</button>
       <p className="auth-note"><Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot your password?</Link></p>
     </form>
     <Link className="demo-card" href="/demo">

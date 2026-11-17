@@ -101,7 +101,7 @@ export function SignupForm() {
       <EmailField disabled={busy} />
       <PasswordField label="Password" disabled={busy} isNew />
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? "Creating account..." : "Create account"}</button>
+      <button className="primary" disabled={busy} aria-busy={busy}>{busy ? "Creating account..." : "Create account"}</button>
       <p className="auth-note">Already have an account? <Link href="/login">Sign in</Link></p>
     </form>
   </AuthShell>;
@@ -125,7 +125,7 @@ export function ForgotPasswordForm({ expired = false }: { expired?: boolean }) {
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       <EmailField disabled={busy} />
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? "Sending..." : "Send reset link"}</button>
+      <button className="primary" disabled={busy} aria-busy={busy}>{busy ? "Sending..." : "Send reset link"}</button>
       {BACK_TO_SIGN_IN}
     </form>
   </AuthShell>;
@@ -145,7 +145,7 @@ export function ConfirmLinkForm({ tokenHash, type }: { tokenHash: string; type: 
   return <AuthShell title={recovery ? "Reset your password" : "Confirm your email"}>
     <div className="auth-form" aria-busy={busy}>
       {error && <p className="error" role="alert">{error}</p>}
-      {tokenHash && <button className="primary" type="button" disabled={busy} onClick={confirm}>
+      {tokenHash && <button className="primary" type="button" disabled={busy} aria-busy={busy} onClick={confirm}>
         {busy ? "Checking..." : recovery ? "Continue" : "Confirm email"}
       </button>}
       {BACK_TO_SIGN_IN}
@@ -168,7 +168,7 @@ export function UpdatePasswordForm() {
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       <PasswordField label="New password" disabled={busy} isNew />
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? "Saving..." : "Save password"}</button>
+      <button className="primary" disabled={busy} aria-busy={busy}>{busy ? "Saving..." : "Save password"}</button>
     </form>
   </AuthShell>;
 }

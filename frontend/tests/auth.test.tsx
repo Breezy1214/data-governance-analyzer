@@ -36,7 +36,9 @@ describe("sign in", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     render(<LoginForm />);
     fireEvent.submit(screen.getByRole("button", { name: "Sign in" }).closest("form")!);
-    expect((screen.getByRole("button", { name: "Signing in..." }) as HTMLButtonElement).disabled).toBe(true);
+    const button = screen.getByRole<HTMLButtonElement>("button", { name: "Signing in..." });
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
   });
 });
 

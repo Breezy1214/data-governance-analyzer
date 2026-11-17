@@ -81,6 +81,11 @@ describe("colour tokens", () => {
     expect(failing).toEqual([]);
   });
 
+  it("shows the busy spinner only on aria-busy buttons, not on every disabled one", () => {
+    expect(css).not.toMatch(/:disabled::before/);
+    expect(css).toMatch(/\[aria-busy="true"\]::before/);
+  });
+
   it("keeps raw colour values inside the :root token block", () => {
     const outsideRoot = css.replace(rootBlock, "");
     expect(outsideRoot.match(/#[0-9a-f]{3,8}\b|rgba?\(/gi) ?? []).toEqual([]);

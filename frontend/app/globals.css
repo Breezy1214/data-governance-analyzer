@@ -187,9 +187,10 @@ textarea::placeholder { color: var(--muted); }
 .secondary:hover:not(:disabled) { border-color: var(--brand); background: var(--surface-hover); }
 .destructive { border-color: var(--danger); background: var(--surface); color: var(--danger); }
 .destructive:hover:not(:disabled) { border-color: var(--danger-hover); background: var(--danger-hover); color: var(--on-danger); }
-/* Disabled buttons are only shown while work is in progress; their label says what is happening, and a spinner shows it is still running. */
-.primary:disabled, .secondary:disabled, .destructive:disabled { border-color: var(--disabled-bg); background: var(--disabled-bg); color: var(--disabled-fg); cursor: progress; }
-:is(.primary, .secondary, .destructive):disabled::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .8s linear infinite; }
+.primary:disabled, .secondary:disabled, .destructive:disabled { border-color: var(--disabled-bg); background: var(--disabled-bg); color: var(--disabled-fg); cursor: not-allowed; }
+/* Only the button whose action is running is aria-busy; its label says what is happening and the spinner shows it is still going. */
+:is(.primary, .secondary, .destructive)[aria-busy="true"] { cursor: progress; }
+:is(.primary, .secondary, .destructive)[aria-busy="true"]::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(1turn); } }
 
 .question-block { margin: 0; padding: 22px 0; border: 0; border-top: 1px solid var(--line); }
@@ -425,5 +426,5 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
-  :is(.primary, .secondary, .destructive):disabled::before, .skeleton { animation: none; }
+  :is(.primary, .secondary, .destructive)[aria-busy="true"]::before, .skeleton { animation: none; }
 }
