@@ -1,0 +1,361 @@
+{
+ "scenario": "clinic-ai-vendor",
+ "result": {
+  "mappingVersion": "2.0",
+  "mappingApprovalStatus": "approved",
+  "sourcesCheckedOn": "2026-11-04",
+  "recommendations": [
+   {
+    "id": "AVOID_READABLE_IDENTIFIERS",
+    "priority": 1,
+    "title": "Stop handing over readable identifiers",
+    "action": "Remove or de-identify identifiers if the purpose does not need them. If records must be linked, use a matching method that lets each party keep its identifiers in its own environment.",
+    "rationale": "Encryption only protects data in transit. Once a recipient decrypts it, they hold fully identified records and you can no longer control how those records are reused. Many uses work without identifiers at all. When records do need linking, matching methods that compare single-use hashes through a neutral party let both sides find what they have in common without handing over identifiers.",
+    "basedOn": [
+     "Identifiers exchanged in readable form"
+    ],
+    "references": []
+   },
+   {
+    "id": "DE_IDENTIFY_SENSITIVE_RECORDS",
+    "priority": 2,
+    "title": "De-identify sensitive records",
+    "action": "De-identify sensitive records before they leave the originating system, and have a specialist confirm the method.",
+    "rationale": "Regulated or high-impact information increases potential harm if directly identifying values remain exposed. Values that replace identifiers can still carry re-identification risk, so they need protecting too.",
+    "basedOn": [
+     "Regulated or highly sensitive information"
+    ],
+    "references": [
+     {
+      "publisher": "U.S. Department of Health and Human Services",
+      "statement": "HHS guidance describes two ways to meet the HIPAA de-identification standard for health information: Expert Determination and Safe Harbor.",
+      "sourceTitle": "Guidance Regarding Methods for De-identification of Protected Health Information",
+      "sourceUrl": "https://www.hhs.gov/hipaa/for-professionals/special-topics/de-identification/index.html"
+     }
+    ]
+   },
+   {
+    "id": "LIMIT_CUSTODY_CHANGES",
+    "priority": 3,
+    "title": "Limit changes of custody",
+    "action": "Check whether the use case works without moving identifiable data. If it must move, record who holds it at each step and how it is returned or deleted.",
+    "rationale": "Each change of custody adds a party whose handling you can no longer directly control. The strongest position is that identifying information never changes hands before, during, or after the exchange.",
+    "basedOn": [
+     "Data may end up in another party's custody"
+    ],
+    "references": []
+   },
+   {
+    "id": "VERIFY_RULE_ENFORCEMENT",
+    "priority": 4,
+    "title": "Verify who enforces the rules",
+    "action": "Ask the operator to show how the agreed rules are enforced, and confirm your organization can verify that enforcement itself.",
+    "rationale": "A promise from a platform is weaker than a control the data owner can check. Approval for internal analytics also doesn't make a platform safe for work with outside partners.",
+    "basedOn": [
+     "Your organization may not control the environment or enforce the rules"
+    ],
+    "references": []
+   },
+   {
+    "id": "DELETE_AFTER_EXCHANGE",
+    "priority": 5,
+    "title": "Agree what gets deleted afterward",
+    "action": "Agree which keys, hashes, tokens, and copies each party must delete after the exchange, and get confirmation that they did.",
+    "rationale": "Anything kept after the exchange can be used to re-identify people later.",
+    "basedOn": [
+     "Keys, hashes, tokens, or copies may be kept afterward"
+    ],
+    "references": []
+   },
+   {
+    "id": "DOCUMENT_AI_TRAINING_DATA",
+    "priority": 6,
+    "title": "Document AI training data",
+    "action": "Record where training data came from, how deletion requests will be handled, and whether identifiers are needed at all.",
+    "rationale": "Once data has trained a model, it is hard to trace or remove.",
+    "basedOn": [
+     "Intended use: AI model training"
+    ],
+    "references": []
+   },
+   {
+    "id": "RESTRICT_ACCESS",
+    "priority": 7,
+    "title": "Restrict and review access",
+    "action": "Limit access to named roles and review permissions regularly.",
+    "rationale": "Named ownership and periodic review reduce unnecessary exposure throughout the approved use.",
+    "basedOn": [
+     "One outside organization takes part"
+    ],
+    "references": []
+   },
+   {
+    "id": "MINIMIZE_FIELDS",
+    "priority": 8,
+    "title": "Minimize the data",
+    "action": "Collect and share only the fields required for the approved purpose.",
+    "rationale": "Using fewer fields reduces the impact of every identified data-sensitivity and purpose risk.",
+    "basedOn": [
+     "Regulated or highly sensitive information"
+    ],
+    "references": []
+   },
+   {
+    "id": "SET_LIFECYCLE_RESPONSIBILITIES",
+    "priority": 9,
+    "title": "Set lifecycle responsibilities",
+    "action": "Set retention, deletion, and incident-response responsibilities before launch.",
+    "rationale": "A defined lifecycle limits how long risk persists and makes ownership clear if an incident occurs.",
+    "basedOn": [],
+    "references": []
+   },
+   {
+    "id": "RECORD_THE_DECISION",
+    "priority": 10,
+    "title": "Record the decision",
+    "action": "Record the approved purpose, data owner, and control evidence in the governance register.",
+    "rationale": "A reviewable record connects the approved use and its safeguards to the risks identified in this assessment. Contracts and paperwork support this, but where possible the rules should also be built into the system.",
+    "basedOn": [],
+    "references": []
+   }
+  ],
+  "schemaVersion": "3.0",
+  "rulesVersion": "2.0",
+  "score": 86,
+  "level": "HIGH",
+  "guidance": "Pause implementation until privacy, security, and governance controls are approved.",
+  "factors": [
+   {
+    "ruleId": "DATA_SENSITIVITY_HIGH",
+    "category": "data_sensitivity",
+    "label": "Regulated or highly sensitive information",
+    "points": 24
+   },
+   {
+    "ruleId": "PARTICIPANTS_ONE",
+    "category": "access",
+    "label": "One outside organization takes part",
+    "points": 12
+   },
+   {
+    "ruleId": "IDENTIFIERS_CLEARTEXT",
+    "category": "identifiers",
+    "label": "Identifiers exchanged in readable form",
+    "points": 18
+   },
+   {
+    "ruleId": "CUSTODY_CHANGE",
+    "category": "custody",
+    "label": "Data may end up in another party's custody",
+    "points": 10
+   },
+   {
+    "ruleId": "ENVIRONMENT_NOT_OWNED",
+    "category": "custody",
+    "label": "Your organization may not control the environment or enforce the rules",
+    "points": 6
+   },
+   {
+    "ruleId": "RETAINED_ARTIFACTS",
+    "category": "lifecycle",
+    "label": "Keys, hashes, tokens, or copies may be kept afterward",
+    "points": 8
+   },
+   {
+    "ruleId": "PURPOSE_AI",
+    "category": "purpose",
+    "label": "Intended use: AI model training",
+    "points": 8
+   }
+  ],
+  "limitations": [
+   "HIPAA applicability and required agreements need specialist review; this tool does not determine compliance."
+  ],
+  "assessedAt": "2026-11-16T10:00:00+00:00",
+  "apiVersion": "0.1.0"
+ },
+ "simulation": {
+  "rulesVersion": "2.0",
+  "mappingVersion": "2.0",
+  "assessed": {
+   "score": 86,
+   "level": "HIGH"
+  },
+  "safeguards": [
+   {
+    "recommendationId": "AVOID_READABLE_IDENTIFIERS",
+    "field": "identifierProtection",
+    "answer": "notExchanged",
+    "points": 18
+   },
+   {
+    "recommendationId": "DE_IDENTIFY_SENSITIVE_RECORDS",
+    "field": "dataTypes",
+    "answer": [
+     "names",
+     "phone"
+    ],
+    "points": 12
+   },
+   {
+    "recommendationId": "LIMIT_CUSTODY_CHANGES",
+    "field": "custodyChange",
+    "answer": "no",
+    "points": 10
+   },
+   {
+    "recommendationId": "DELETE_AFTER_EXCHANGE",
+    "field": "retainedArtifacts",
+    "answer": "no",
+    "points": 8
+   },
+   {
+    "recommendationId": "VERIFY_RULE_ENFORCEMENT",
+    "field": "environmentControl",
+    "answer": "own",
+    "points": 6
+   }
+  ],
+  "outcomes": [
+   {
+    "score": 86,
+    "level": "HIGH"
+   },
+   {
+    "score": 68,
+    "level": "HIGH"
+   },
+   {
+    "score": 74,
+    "level": "HIGH"
+   },
+   {
+    "score": 56,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 76,
+    "level": "HIGH"
+   },
+   {
+    "score": 58,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 64,
+    "level": "HIGH"
+   },
+   {
+    "score": 46,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 78,
+    "level": "HIGH"
+   },
+   {
+    "score": 60,
+    "level": "HIGH"
+   },
+   {
+    "score": 66,
+    "level": "HIGH"
+   },
+   {
+    "score": 48,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 68,
+    "level": "HIGH"
+   },
+   {
+    "score": 50,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 56,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 38,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 80,
+    "level": "HIGH"
+   },
+   {
+    "score": 62,
+    "level": "HIGH"
+   },
+   {
+    "score": 68,
+    "level": "HIGH"
+   },
+   {
+    "score": 50,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 70,
+    "level": "HIGH"
+   },
+   {
+    "score": 52,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 58,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 40,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 72,
+    "level": "HIGH"
+   },
+   {
+    "score": 54,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 60,
+    "level": "HIGH"
+   },
+   {
+    "score": 42,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 62,
+    "level": "HIGH"
+   },
+   {
+    "score": 44,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 50,
+    "level": "MEDIUM"
+   },
+   {
+    "score": 32,
+    "level": "MEDIUM"
+   }
+  ],
+  "plan": {
+   "score": 32,
+   "level": "MEDIUM",
+   "applied": [
+    "AVOID_READABLE_IDENTIFIERS",
+    "DE_IDENTIFY_SENSITIVE_RECORDS",
+    "LIMIT_CUSTODY_CHANGES",
+    "DELETE_AFTER_EXCHANGE",
+    "VERIFY_RULE_ENFORCEMENT"
+   ]
+  }
+ }
+}

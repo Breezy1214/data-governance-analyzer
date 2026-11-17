@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssessmentInput } from "../lib/assessment";
-import { DISCLAIMER, ReportModel, buildReportModel, downloadAssessmentReport, formatCheckedOn, renderAssessmentPdf } from "../lib/report";
+import { DISCLAIMER, ReportModel, buildReportModel, downloadAssessmentReport, formatCheckedOn, renderAssessmentPdf, toPdfText } from "../lib/report";
 import { assessmentResult, completeInput as input } from "./assessment-fixture";
 
 const result = assessmentResult;
@@ -98,13 +98,18 @@ describe("report model", () => {
 });
 
 describe("pdf rendering", () => {
+  it("keeps text within what the standard PDF fonts can draw", () => {
+    expect(toPdfText("86 → 32 (−54) ≥ 1 · café “quoted” — ok")).toBe("86 -> 32 (-54) >= 1 · café “quoted” — ok");
+    expect(toPdfText("Partner 🤝 名前")).toBe("Partner ? ??");
+  });
+
   it("does not download a report cancelled during generation", async () => {
     const pdfModule = await import("jspdf");
     const doc = new pdfModule.jsPDF();
     const save = vi.spyOn(doc, "save").mockReturnThis();
     vi.spyOn(pdfModule, "jsPDF").mockImplementation(function () { return doc; });
     const controller = new AbortController();
-    const download = downloadAssessmentReport(input, result, controller.signal);
+    const download = downloadAssessmentReport(input, result, null, controller.signal);
     controller.abort();
     await download;
     expect(save).not.toHaveBeenCalled();

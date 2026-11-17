@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from psycopg import Error as DatabaseError
 from psycopg_pool import PoolTimeout
 
-from app.auth import TokenVerifier
+from app.auth import TokenVerifier, require_session
 from app.config import Settings
 from app.logging_config import configure_logging, logger
 from app.rate_limit import SlidingWindowLimiter, require_demo_quota
@@ -18,7 +18,8 @@ from app.register.routes import router as register_router
 from app.register.store import PostgresRegisterStore
 from app.request_limits import RequestBodyLimitMiddleware
 from app.scoring import AssessmentRequest, AssessmentResponse
-from app.service import score_and_log
+from app.scoring.models import Simulation
+from app.service import score_and_log, simulate_and_log
 
 configure_logging()
 
@@ -111,6 +112,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
               dependencies=[Depends(require_demo_quota)])
     def create_demo_assessment(payload: AssessmentRequest, response: Response) -> AssessmentResponse:
         return score_and_log(payload, response, demo=True, api_version=settings.version)
+
+    # What-if re-scoring for the result on screen. Neither route touches the register, so a simulation can
+    # never change a saved assessment. One call returns every combination, so toggling needs no more requests.
+    @app.post("/simulations", response_model=Simulation, tags=["simulation"], dependencies=[Depends(require_session)])
+    def create_simulation(payload: AssessmentRequest, response: Response) -> Simulation:
+        return simulate_and_log(payload, response, demo=False)
+
+    @app.post("/demo/simulations", response_model=Simulation, tags=["simulation"],
+              dependencies=[Depends(require_demo_quota)])
+    def create_demo_simulation(payload: AssessmentRequest, response: Response) -> Simulation:
+        return simulate_and_log(payload, response, demo=True)
 
     app.include_router(register_router)
     return app

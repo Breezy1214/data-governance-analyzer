@@ -1,4 +1,4 @@
-import type { AssessmentInput, AssessmentResult, Reference, RiskLevel } from "@/lib/assessment";
+import type { AssessmentInput, AssessmentResult, Recommendation, Reference, RiskLevel } from "@/lib/assessment";
 import { DATA_TYPE_LABELS, PURPOSE_LABELS, RISK_THRESHOLDS } from "@/lib/assessment";
 import { BASED_ON_LABEL, EVERY_ASSESSMENT_LABEL, REFERENCE_HEADING, formatCheckedOn } from "@/lib/report";
 import { LocalTime } from "./LocalTime";
@@ -16,7 +16,8 @@ export const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = 
 const RING_RADIUS = 70;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
-function ScoreRing({ score }: { score: number }) {
+/** `display` replaces the printed number, so the simulator can count up to a new score. */
+export function ScoreRing({ score, display = score }: { score: number; display?: React.ReactNode }) {
   const filled = (score / 100) * RING_LENGTH;
   return (
     <div className="score-ring">
@@ -31,7 +32,7 @@ function ScoreRing({ score }: { score: number }) {
           transform="rotate(-90 90 90)"
         />
       </svg>
-      <div><span className="score-number">{score}</span><span className="score-total">out of 100</span></div>
+      <div><span className="score-number">{display}</span><span className="score-total">out of 100</span></div>
     </div>
   );
 }
@@ -90,7 +91,14 @@ export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
   );
 }
 
-export function RecommendationsView({ result }: { result: AssessmentResult }) {
+export function RecommendationsView({ result, order = result.recommendations, toolbar, safeguard }: {
+  result: AssessmentResult;
+  /** The same recommendations, possibly re-sorted; numbering keeps each one's priority. */
+  order?: Recommendation[];
+  toolbar?: React.ReactNode;
+  /** The what-if control for a recommendation, if it has one. */
+  safeguard?: (item: Recommendation) => React.ReactNode;
+}) {
   return <>
     <div className="card">
       <div className="outcome-head">
@@ -105,13 +113,15 @@ export function RecommendationsView({ result }: { result: AssessmentResult }) {
 
     <div className="card safeguards">
       <h3 className="card-title">Recommended actions</h3>
+      {toolbar}
       <ol className="recommendation-list">
-        {result.recommendations.map((item) => (
+        {order.map((item) => (
           <li key={item.id}>
             <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
             <div>
               <h4>{item.title}</h4>
               <p className="recommendation-action">{item.action}</p>
+              {safeguard?.(item)}
               <ReferenceList items={item.references} />
               <details className="recommendation-why">
                 <summary>Why this applies</summary>

@@ -12,6 +12,7 @@ import {
   RiskLevel,
 } from "./assessment";
 import { redactSensitiveData } from "./sensitive-data";
+import type { SimulatedPlan } from "./simulation";
 import { PALETTE, RISK_COLORS } from "./theme";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
@@ -24,10 +25,13 @@ export const BASED_ON_LABEL = "Based on your answers:";
 export const EVERY_ASSESSMENT_LABEL = "Applies to every assessment.";
 export const REFERENCE_HEADING = "Regulatory reference";
 
-export type ReportSection =
+export type ReportSection = (
   | { heading: string; kind: "paragraph"; body: string }
   | { heading: string; kind: "pairs"; pairs: { label: string; value: string }[] }
-  | { heading: string; kind: "list"; items: string[]; ordered?: boolean };
+  | { heading: string; kind: "list"; items: string[]; ordered?: boolean }
+) & { newPage?: boolean };
+
+export const SIMULATION_HEADING = "What-if simulation: not part of this assessment";
 
 export type ReportModel = {
   title: string;
@@ -59,6 +63,7 @@ function recommendationText(item: Recommendation): string {
 export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
+  simulated: SimulatedPlan | null = null,
 ): ReportModel {
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: redactSensitiveData(input.description).trim() },
@@ -110,6 +115,8 @@ export function buildReportModel(
     });
   }
 
+  if (simulated) sections.push(...simulationSections(simulated));
+
   sections.push({ heading: "Disclaimer", kind: "paragraph", body: DISCLAIMER });
 
   return {
@@ -126,6 +133,37 @@ export function buildReportModel(
   };
 }
 
+/** Starts a new page so the projection can't be mistaken for the assessed result. */
+function simulationSections({ source, assessed, simulated, safeguards }: SimulatedPlan): ReportSection[] {
+  const outcome = (item: { score: number; level: string }) => `${item.score} out of 100 (${item.level})`;
+  return [
+    {
+      heading: SIMULATION_HEADING,
+      kind: "paragraph",
+      newPage: true,
+      body: "This page is a projection, not an assessment, and nothing on it was saved. It shows how the score "
+        + "would change if the safeguards below were in place and the matching answers changed. "
+        + `The assessed score, ${outcome(assessed)}, remains the record of this assessment.`,
+    },
+    {
+      heading: source === "selected" ? "Safeguards selected in the simulator" : "Suggested safeguard plan",
+      kind: "list",
+      ordered: true,
+      items: safeguards.map((item) =>
+        `${item.title}: removes ${item.points} points. New answer to "${item.question}": ${item.answer}.`),
+    },
+    {
+      heading: "Simulated outcome",
+      kind: "pairs",
+      pairs: [
+        { label: "Assessed score (the record)", value: outcome(assessed) },
+        { label: "Simulated score", value: outcome(simulated) },
+        { label: "Change", value: `${assessed.score - simulated.score} points lower` },
+      ],
+    },
+  ];
+}
+
 function answerLabel(field: ChoiceField, input: AssessmentInput): string {
   const options: Record<string, string> = CHOICE_QUESTIONS[field].options;
   return options[input[field]] ?? "Not answered";
@@ -138,8 +176,20 @@ const LINE_HEIGHT = 14;
 
 type Doc = import("jspdf").jsPDF;
 
+const PDF_REPLACEMENTS: Record<string, string> = { "−": "-", "→": "->", "←": "<-", "≥": ">=", "≤": "<=", "≠": "!=" };
+
+/**
+ * The PDF's standard fonts only cover WinAnsi (Latin-1 plus some punctuation), so anything else, such as a
+ * minus sign, an arrow or an emoji pasted into a description, would print as garbage.
+ */
+export function toPdfText(text: string): string {
+  return text
+    .replace(/[−→←≥≤≠]/g, (char) => PDF_REPLACEMENTS[char])
+    .replace(/[^\t\n\x20-\x7e\xa0-\xff€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/gu, "?");
+}
+
 function wrap(doc: Doc, text: string, width: number): string[] {
-  return doc.splitTextToSize(text, width) as string[];
+  return doc.splitTextToSize(toPdfText(text), width) as string[];
 }
 
 export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
@@ -178,7 +228,7 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(PALETTE.muted);
-  writeLines(model.meta.map((item) => `${item.label}: ${item.value}`));
+  writeLines(model.meta.flatMap((item) => wrap(doc, `${item.label}: ${item.value}`, CONTENT_WIDTH)));
   y += 6;
 
   // Risk banner: shape and text label, so the level never depends on colour.
@@ -196,6 +246,7 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   y += 16;
 
   for (const section of model.sections) {
+    if (section.newPage && y > MARGIN) newPage();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     const heading = wrap(doc, section.heading, CONTENT_WIDTH);
@@ -270,9 +321,10 @@ const REPORT_FILENAME = "data-governance-assessment.pdf";
 export async function downloadAssessmentReport(
   input: AssessmentInput,
   result: AssessmentResult,
+  simulated: SimulatedPlan | null = null,
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) return;
-  const doc = await renderAssessmentPdf(buildReportModel(input, result));
+  const doc = await renderAssessmentPdf(buildReportModel(input, result, simulated));
   if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }

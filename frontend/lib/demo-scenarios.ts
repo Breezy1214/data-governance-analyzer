@@ -16,3 +16,4 @@ export type DemoScenario = {
 export const DEMO_SCENARIOS = scenarios as DemoScenario[];
 
 export const DEMO_ASSESSMENT_ENDPOINT = "/api/demo/assessments";
+export const DEMO_SIMULATION_ENDPOINT = "/api/demo/simulations";

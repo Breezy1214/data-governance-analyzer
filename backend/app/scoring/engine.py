@@ -14,10 +14,18 @@ from app.scoring.models import (
     SCHEMA_VERSION,
     AssessmentRequest,
     RiskFactor,
+    RiskLevel,
     ScoredAssessment,
 )
 from app.scoring.recommendations import map_recommendations
-from app.scoring.rules import RuleSet, get_ruleset
+from app.scoring.rules import Rule, RuleSet, get_ruleset
+
+
+def rate(request: AssessmentRequest, ruleset: RuleSet) -> tuple[list[Rule], int, RiskLevel]:
+    """The rules an assessment fires, its capped score, and its level."""
+    fired = [rule for rule in ruleset.rules if rule.applies(request)]
+    score = min(ruleset.score_cap, sum(rule.points for rule in fired))
+    return fired, score, ruleset.thresholds.level_for(score)
 
 
 def score_assessment(
@@ -27,15 +35,11 @@ def score_assessment(
 ) -> ScoredAssessment:
     ruleset = ruleset or get_ruleset()
 
+    fired, score, level = rate(request, ruleset)
     factors = [
         RiskFactor(ruleId=rule.id, category=rule.category, label=rule.label, points=rule.points)
-        for rule in ruleset.rules
-        if rule.applies(request)
+        for rule in fired
     ]
-
-    raw_score = sum(factor.points for factor in factors)
-    score = min(ruleset.score_cap, raw_score)
-    level = ruleset.thresholds.level_for(score)
     guidance = ruleset.guidance_by_level[level]
 
     active_labels = {factor.ruleId: factor.label for factor in factors}

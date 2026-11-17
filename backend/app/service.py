@@ -6,6 +6,8 @@ from fastapi import Response
 
 from app.logging_config import logger
 from app.scoring import AssessmentRequest, AssessmentResponse, score_assessment
+from app.scoring.models import Simulation
+from app.scoring.safeguards import simulate
 
 
 def score_and_log(payload: AssessmentRequest, response: Response, *, demo: bool, api_version: str) -> AssessmentResponse:
@@ -25,6 +27,25 @@ def score_and_log(payload: AssessmentRequest, response: Response, *, demo: bool,
                 "score": result.score,
                 "riskLevel": result.level,
                 "ruleIds": [factor.ruleId for factor in result.factors],
+            }
+        },
+    )
+    return result
+
+
+def simulate_and_log(payload: AssessmentRequest, response: Response, *, demo: bool) -> Simulation:
+    # Simulations derive from the same sensitive answers, so they stay out of caches too.
+    response.headers["Cache-Control"] = "no-store"
+    result = simulate(payload)
+    logger.info(
+        "assessment_simulated",
+        extra={
+            "fields": {
+                "requestId": str(uuid.uuid4()),
+                "demo": demo,
+                "rulesVersion": result.rulesVersion,
+                "score": result.assessed.score,
+                "safeguards": [item.recommendationId for item in result.safeguards],
             }
         },
     )
