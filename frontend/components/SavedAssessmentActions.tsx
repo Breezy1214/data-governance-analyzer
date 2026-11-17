@@ -4,12 +4,10 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ASSESSMENT_TIMEOUT_MS, type AssessmentInput, type AssessmentResult } from "@/lib/assessment";
+import type { AssessmentInput, AssessmentResult } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
-import { DESCRIPTION_NOT_SAVED, REGISTER_PATH } from "@/lib/register";
+import { DESCRIPTION_NOT_SAVED, REGISTER_PATH, deleteAssessment, deleteWarning } from "@/lib/register";
 import { ConfirmPanel } from "@/components/ConfirmPanel";
-
-const DELETE_FAILED = "The assessment couldn't be deleted. Please try again.";
 
 export function SavedAssessmentActions({
   assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable,
@@ -44,16 +42,13 @@ export function SavedAssessmentActions({
   async function remove() {
     setDeleting(true);
     setError("");
-    const response = await fetch(`/api/assessments/${assessmentId}`, {
-      method: "DELETE", cache: "no-store", signal: AbortSignal.timeout(ASSESSMENT_TIMEOUT_MS),
-    }).catch(() => null);
-    if (response?.ok) {
+    const failure = await deleteAssessment(assessmentId);
+    if (failure === null) {
       router.replace(REGISTER_PATH);
       router.refresh();
       return;
     }
-    const body = await response?.json().catch(() => null);
-    setError(typeof body?.message === "string" ? body.message : DELETE_FAILED);
+    setError(failure);
     setDeleting(false);
     setConfirming(false);
   }
@@ -64,7 +59,6 @@ export function SavedAssessmentActions({
     deleteButton.current?.focus();
   };
 
-  const versions = versionCount === 1 ? "its only version" : `all ${versionCount} versions`;
   return <>
     {error && <p className="error" role="alert">{error}</p>}
     {confirming ? (
@@ -77,7 +71,7 @@ export function SavedAssessmentActions({
         onConfirm={remove}
         busy={deleting}
       >
-        This permanently deletes {versions}. It can’t be undone.
+        {deleteWarning(versionCount)}
       </ConfirmPanel>
     ) : (
       <div className="actions wrap">

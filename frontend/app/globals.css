@@ -49,6 +49,7 @@
   --on-danger: light-dark(#ffffff, #2a0a08);
 
   --shadow: 0 1px 2px light-dark(rgba(22, 49, 58, .04), rgba(0, 0, 0, .3)), 0 6px 20px light-dark(rgba(22, 49, 58, .06), rgba(0, 0, 0, .25));
+  --scrim: light-dark(rgba(22, 49, 58, .4), rgba(0, 0, 0, .6));
 }
 
 /* The scheme follows the device unless the theme switch sets data-theme on <html>. */
@@ -311,7 +312,17 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .register-table thead th { padding-top: 0; border-top: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
 .register-table tbody th { font-weight: 400; }
 .register-table small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
-.register-table td:last-child { white-space: nowrap; color: var(--muted); }
+.register-table .register-saved { white-space: nowrap; color: var(--muted); }
+.register-table .register-actions { padding-block: 6px; text-align: right; }
+/* Sits above the row's stretched link so it stays its own click target. */
+.row-action { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: color .18s, border-color .18s, background .18s; }
+.row-action:hover:not(:disabled) { border-color: var(--danger); background: var(--surface); color: var(--danger); }
+.row-action:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.row-action:disabled { cursor: progress; }
+.confirm-dialog { width: min(460px, calc(100% - 32px)); margin: auto; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; white-space: normal; }
+.confirm-dialog::backdrop { background: var(--scrim); }
+.confirm-dialog .confirm-panel { margin: 0; }
+.confirm-dialog .error { margin-top: 12px; }
 .version-list { list-style: none; margin: 0; padding: 0; }
 .version-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .version-list li:first-child { border-top: 0; }
@@ -392,6 +403,8 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   .register-table, .register-table tbody, .register-table tr, .register-table th, .register-table td { display: block; }
   .register-table tr { padding: 12px 0; border-top: 1px solid var(--line); }
   .register-table th, .register-table td { padding: 4px 12px; border-top: 0; }
+  .register-table .register-actions { text-align: left; }
+  .register-actions .row-action { margin-left: -12px; }
   .account-email { display: none; }
   .account-trigger { padding-right: 8px; }
   .version-list time { margin-left: 0; }

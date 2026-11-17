@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RISK_LABELS } from "@/components/AssessmentResultView";
+import { DeleteAssessmentButton } from "@/components/DeleteAssessmentButton";
 import { Icon } from "@/components/Icons";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
 import { loadRegister } from "@/lib/register-page";
-import { REGISTER_PATH, STATUS_LABELS, assessmentPath } from "@/lib/register";
+import { REGISTER_PATH, STATUS_LABELS, assessmentPath, isDeletable } from "@/lib/register";
 
 export const metadata: Metadata = { title: "My assessments · Data Governance Readiness Analyzer" };
 
@@ -31,7 +32,8 @@ export default async function MyAssessments() {
             <table className="register-table">
               <caption className="sr-only">Saved assessments, most recently saved first</caption>
               <thead>
-                <tr><th scope="col">Assessment</th><th scope="col">Risk</th><th scope="col">Status</th><th scope="col">Last saved</th></tr>
+                <tr><th scope="col">Assessment</th><th scope="col">Risk</th><th scope="col">Status</th><th scope="col">Last saved</th>
+                  <th scope="col"><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody>
                 {entries.map((entry) => (
@@ -44,7 +46,12 @@ export default async function MyAssessments() {
                       <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.level]} · {entry.score}</span>
                     </td>
                     <td><span className="badge badge-neutral">{STATUS_LABELS[entry.status]}</span></td>
-                    <td><LocalTime value={entry.savedAt} /></td>
+                    <td className="register-saved"><LocalTime value={entry.savedAt} /></td>
+                    <td className="register-actions">
+                      {isDeletable(entry.status) && (
+                        <DeleteAssessmentButton assessmentId={entry.assessmentId} title={entry.title} versionCount={entry.versionCount} />
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
