@@ -6,7 +6,7 @@ import { RegisterShell } from "@/components/RegisterShell";
 import { SavedAssessmentSimulation } from "@/components/SavedAssessmentSimulation";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
-  DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle,
+  DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle, isDeletable,
 } from "@/lib/register";
 
 export const metadata: Metadata = { title: "Saved assessment · Data Governance Readiness Analyzer" };
@@ -16,7 +16,7 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
   const { input, result } = selected;
   const title = assessmentTitle(input);
   // Deleting removes every version, so it is offered only while no decision is pending or made.
-  const deletable = versions.every((entry) => entry.status === "draft" || entry.status === "rejected");
+  const deletable = versions.every((entry) => isDeletable(entry.status));
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
   return (

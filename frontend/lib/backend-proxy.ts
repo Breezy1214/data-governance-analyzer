@@ -3,7 +3,8 @@ import { AuthenticationError, NO_STORE } from "./auth-server";
 
 /** FastAPI scores and owns the register; these helpers pass requests to it and never touch the database. */
 
-const TIMEOUT_MS = 12000;
+// The hosted API sleeps when idle and can take about a minute to wake, so a first request waits that long.
+const TIMEOUT_MS = 60_000;
 
 function backendUrl(path: string) {
   const base = process.env.API_BASE_URL;
