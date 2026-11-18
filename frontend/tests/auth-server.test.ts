@@ -11,6 +11,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], set: mocks.setCookie }) }));
 import { currentSession, sameOrigin } from "../lib/auth-server";
+import { AUTH_ATTEMPTS_PER_WINDOW, AUTH_WINDOW_MS, limitAuthAttempts, resetAuthAttempts } from "../lib/rate-limit";
+import securityConfig, { securityHeaders } from "../next.config";
 import { POST as login } from "../app/api/login/route";
 import { POST as logout } from "../app/api/logout/route";
 import { POST as signup } from "../app/api/signup/route";
@@ -26,6 +28,7 @@ import { assessmentResult } from "./assessment-fixture";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetAuthAttempts();
   vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("SUPABASE_PUBLISHABLE_KEY", "publishable-test-key");
   vi.stubEnv("API_BASE_URL", "http://localhost:8000");
@@ -335,5 +338,52 @@ describe("account creation and recovery", () => {
       expect(response.status).toBe(401);
     }
     expect(mocks.updateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("auth attempt throttling", () => {
+  const visitor = (address: string) => ({ "X-Forwarded-For": `${address}, 10.0.0.1` });
+
+  it("throttles rapid repeated sign-ins from one visitor with a clear message", async () => {
+    for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_WINDOW; attempt++) {
+      expect((await login(request("login", undefined, undefined, visitor("203.0.113.5")))).status).toBe(200);
+    }
+    const throttled = await login(request("login", undefined, undefined, visitor("203.0.113.5")));
+    expect(throttled.status).toBe(429);
+    expect((await throttled.json()).message).toMatch(/Too many attempts/);
+    expect(throttled.headers.get("Retry-After")).toBe("60");
+    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(AUTH_ATTEMPTS_PER_WINDOW);
+
+    expect((await login(request("login", undefined, undefined, visitor("198.51.100.7")))).status).toBe(200);
+  });
+
+  it("throttles password reset requests before contacting Supabase", async () => {
+    mocks.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_WINDOW; attempt++) {
+      await forgotPassword(request("forgot-password", undefined, { email: "client@example.test" }, visitor("203.0.113.9")));
+    }
+    const throttled = await forgotPassword(request("forgot-password", undefined, { email: "client@example.test" }, visitor("203.0.113.9")));
+    expect(throttled.status).toBe(429);
+    expect(mocks.resetPasswordForEmail).toHaveBeenCalledTimes(AUTH_ATTEMPTS_PER_WINDOW);
+  });
+
+  it("allows attempts again once the window has passed", () => {
+    const attempt = (now: number) => limitAuthAttempts(request("login", undefined, undefined, visitor("192.0.2.1")), "login", now);
+    for (let count = 0; count < AUTH_ATTEMPTS_PER_WINDOW; count++) attempt(0);
+    expect(() => attempt(1)).toThrow();
+    expect(() => attempt(AUTH_WINDOW_MS)).not.toThrow();
+  });
+});
+
+describe("security headers", () => {
+  it("applies the CSP, framing, and referrer policies to every route", async () => {
+    const rules = await securityConfig.headers!();
+    expect(rules).toEqual([{ source: "/:path*", headers: securityHeaders }]);
+    const byKey = Object.fromEntries(securityHeaders.map(({ key, value }) => [key, value]));
+    expect(byKey["Content-Security-Policy"]).toMatch(/default-src 'self'/);
+    expect(byKey["Content-Security-Policy"]).toMatch(/frame-ancestors 'none'/);
+    expect(byKey["Content-Security-Policy"]).toMatch(/object-src 'none'/);
+    expect(byKey["X-Frame-Options"]).toBe("DENY");
+    expect(byKey["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
   });
 });

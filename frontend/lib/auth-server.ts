@@ -91,9 +91,11 @@ export function json(body: unknown, status = 200) {
 }
 
 export function errorResponse(error: unknown) {
-  return error instanceof AuthenticationError
-    ? json({ message: error.message }, error.status)
-    : json({ message: AUTH_MESSAGES.unavailable }, 503);
+  if (!(error instanceof AuthenticationError)) return json({ message: AUTH_MESSAGES.unavailable }, 503);
+  const response = json({ message: error.message }, error.status);
+  // Throttled callers can retry once the one-minute window has passed.
+  if (error.status === 429) response.headers.set("Retry-After", "60");
+  return response;
 }
 
 function hostOrigin(request: Request, origin: URL) {

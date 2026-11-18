@@ -4,7 +4,7 @@ this API produced, owned by the user whose token it verified."""
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -13,6 +13,7 @@ from psycopg_pool import PoolTimeout
 
 from app.auth import require_session
 from app.logging_config import logger
+from app.rate_limit import require_scoring_quota
 from app.register.models import (
     AssessmentRecord,
     AssessmentVersion,
@@ -40,7 +41,7 @@ def register_store(request: Request) -> RegisterStore | None:
 
 
 Claims = Annotated[dict, Depends(require_session)]
-Store = Annotated[Optional[RegisterStore], Depends(register_store)]
+Store = Annotated[RegisterStore | None, Depends(register_store)]
 
 
 def _assessment_id(value: str) -> UUID:
@@ -72,13 +73,14 @@ def _score_and_save(request: Request, payload: AssessmentRequest, response: Resp
     return SignedInAssessmentResponse(**result.model_dump(), saved=saved)
 
 
-@router.post("/assessments", response_model=SignedInAssessmentResponse)
+@router.post("/assessments", response_model=SignedInAssessmentResponse, dependencies=[Depends(require_scoring_quota)])
 def create_assessment(request: Request, payload: AssessmentRequest, response: Response,
                       claims: Claims, store: Store):
     return _score_and_save(request, payload, response, claims, store, None)
 
 
-@router.post("/assessments/{assessment_id}/versions", response_model=SignedInAssessmentResponse)
+@router.post("/assessments/{assessment_id}/versions", response_model=SignedInAssessmentResponse,
+             dependencies=[Depends(require_scoring_quota)])
 def reassess(assessment_id: str, request: Request, payload: AssessmentRequest, response: Response,
              claims: Claims, store: Store):
     return _score_and_save(request, payload, response, claims, store, _assessment_id(assessment_id))

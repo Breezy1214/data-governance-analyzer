@@ -9,9 +9,8 @@ for a new rubric version), define a new ``RuleSet`` below and register it in
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Callable
 
 from app.scoring.models import AssessmentRequest, RiskLevel
 

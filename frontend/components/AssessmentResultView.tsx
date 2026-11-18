@@ -56,7 +56,7 @@ function ReferenceList({ items }: { items: Reference[] }) {
 }
 
 export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
-  // Bars share one scale, the heaviest rule in this result's rules version, so their lengths compare (SCRUM-28).
+  // Bars share one scale, the heaviest rule in this result's rules version, so their lengths compare.
   // Results saved before the API sent that scale fall back to their own heaviest factor.
   const factorScale = result.maxFactorPoints ?? Math.max(1, ...result.factors.map((factor) => factor.points));
   return (
