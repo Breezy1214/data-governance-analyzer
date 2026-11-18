@@ -230,7 +230,7 @@ export function AssessmentWizard({
     // Deferred: sessionStorage is client-only, and react-hooks/set-state-in-effect bans sync setState here.
     const restoreDraft = window.setTimeout(() => {
       if (restored) {
-        // A refresh returns to the same screen, including results (SCRUM-28).
+        // A refresh returns to the same screen, including results.
         setInput(restored.input);
         setResult(restored.result);
         setSaved(restored.saved);
