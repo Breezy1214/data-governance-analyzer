@@ -194,7 +194,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasUniqueValues(values: string[]): boolean {
+export function hasUniqueValues(values: string[]): boolean {
   return new Set(values).size === values.length;
 }
 
@@ -260,7 +260,7 @@ const SCHEMA_VERSION = "3.0";
 /** Longer than the server's own wait for the API (backend-proxy.ts), so its error reaches the browser first. */
 export const ASSESSMENT_TIMEOUT_MS = 65_000;
 
-function isStringArray(value: unknown): value is string[] {
+export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
@@ -358,10 +358,16 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, purpose, regulations, ...answers } as Omit<AssessmentInput, "description">;
 }
 
+/** The JSON body every scoring endpoint accepts. */
+export function scoringBody(input: AssessmentInput): string {
+  return JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) });
+}
+
 export const ASSESSMENTS_ENDPOINT = "/api/assessments";
 
-export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
-  endpoint = ASSESSMENTS_ENDPOINT): Promise<AssessmentOutcome> {
+/** POSTs the scored answers to a scoring endpoint and returns its JSON once `isValid` accepts it. */
+export async function postScoring<T>(input: AssessmentInput, endpoint: string,
+  isValid: (value: unknown) => value is T, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -371,23 +377,22 @@ export async function requestAssessment(input: AssessmentInput, signal?: AbortSi
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
+      body: scoringBody(input),
       cache: "no-store",
       signal: controller.signal,
     });
     if (!response.ok) throw new AssessmentServiceError(response.status);
-
-    let result: unknown;
-    try {
-      result = await response.json();
-    } catch {
-      throw new Error("Assessment service returned an invalid response");
-    }
-    if (!isAssessmentResult(result)) throw new Error("Assessment service returned an invalid response");
-    const { saved, ...scored } = result as AssessmentResult & { saved?: unknown };
-    return { result: scored, saved: saved === undefined ? undefined : isSavedVersion(saved) ? saved : null };
+    const body: unknown = await response.json().catch(() => undefined);
+    if (!isValid(body)) throw new Error("Assessment service returned an invalid response");
+    return body;
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abort);
   }
+}
+
+export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
+  endpoint = ASSESSMENTS_ENDPOINT): Promise<AssessmentOutcome> {
+  const { saved, ...scored } = await postScoring(input, endpoint, isAssessmentResult, signal) as AssessmentResult & { saved?: unknown };
+  return { result: scored, saved: saved === undefined ? undefined : isSavedVersion(saved) ? saved : null };
 }

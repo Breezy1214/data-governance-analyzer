@@ -8,10 +8,9 @@ import type { AssessmentInput, AssessmentResult } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
 import { DESCRIPTION_NOT_SAVED, REGISTER_PATH, deleteAssessment, deleteWarning } from "@/lib/register";
 import { ConfirmPanel } from "@/components/ConfirmPanel";
+import type { SimulatedPlan } from "@/lib/simulation";
 
-export function SavedAssessmentActions({
-  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable,
-}: {
+export type SavedAssessmentActionsProps = {
   assessmentId: string;
   input: AssessmentInput;
   result: AssessmentResult;
@@ -19,7 +18,13 @@ export function SavedAssessmentActions({
   duplicateHref: string;
   versionCount: number;
   deletable: boolean;
-}) {
+  /** The what-if plan to add to the report, kept apart from the saved result. */
+  simulated?: SimulatedPlan | null;
+};
+
+export function SavedAssessmentActions({
+  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, simulated = null,
+}: SavedAssessmentActionsProps) {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -31,7 +36,7 @@ export function SavedAssessmentActions({
     setDownloading(true);
     setError("");
     try {
-      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result);
+      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, simulated);
     } catch {
       setError("The report could not be generated. Please try again.");
     } finally {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DEMO_ASSESSMENT_ENDPOINT, DEMO_SCENARIOS } from "@/lib/demo-scenarios";
+import { DEMO_ASSESSMENT_ENDPOINT, DEMO_SCENARIOS, DEMO_SIMULATION_ENDPOINT } from "@/lib/demo-scenarios";
 import { AssessmentWizard, type Prefill, type Stat } from "./AssessmentWizard";
 
 const DEMO_STATS: Stat[] = [
@@ -33,6 +33,7 @@ function ScenarioPicker({ prefill }: { prefill: Prefill }) {
 export function DemoAssessment() {
   return <AssessmentWizard
     endpointFor={() => DEMO_ASSESSMENT_ENDPOINT}
+    simulationEndpoint={DEMO_SIMULATION_ENDPOINT}
     keepDrafts={false}
     privacyStats={DEMO_STATS}
     intro={ScenarioPicker}

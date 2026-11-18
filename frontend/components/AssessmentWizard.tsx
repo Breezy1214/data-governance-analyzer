@@ -42,7 +42,9 @@ import { bindDraft } from "@/lib/auth-client";
 import { Brand, Icon, IconName } from "@/components/Icons";
 import { ConfirmPanel } from "@/components/ConfirmPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { AssessmentRecord, RISK_BANDS, RecommendationsView, ScoreBreakdown } from "@/components/AssessmentResultView";
+import { AssessmentRecord, RISK_BANDS, ScoreBreakdown } from "@/components/AssessmentResultView";
+import { SafeguardSimulator } from "@/components/SafeguardSimulator";
+import { SIMULATIONS_ENDPOINT, type SimulatedPlan } from "@/lib/simulation";
 
 const STEPS: { label: string; icon: IconName }[] = [
   { label: "Describe", icon: "describe" },
@@ -154,14 +156,16 @@ function statsFor(step: number, input: DraftInput, result: AssessmentResult | nu
 export type Prefill = (input: AssessmentInput, label: string) => void;
 
 export function AssessmentWizard({
-  account, draftOwner, onUnauthorized, endpointFor, keepDrafts = true, privacyStats = PRIVACY_STATS, intro: Intro,
-  initialInput = EMPTY_INPUT, notice,
+  account, draftOwner, onUnauthorized, endpointFor, simulationEndpoint = SIMULATIONS_ENDPOINT, keepDrafts = true,
+  privacyStats = PRIVACY_STATS, intro: Intro, initialInput = EMPTY_INPUT, notice,
 }: {
   account?: React.ReactNode;
   draftOwner?: string;
   onUnauthorized?: () => void;
   /** Where answers are scored, given the assessment this session last saved to; defaults to the signed-in endpoint. */
   endpointFor?: (savedTo: string | undefined) => string;
+  /** Where the what-if simulator re-scores answers. It never saves anything. */
+  simulationEndpoint?: string;
   /** When false, nothing is read from or written to this tab's draft storage. */
   keepDrafts?: boolean;
   privacyStats?: Stat[];
@@ -183,6 +187,7 @@ export function AssessmentWizard({
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [simulated, setSimulated] = useState<SimulatedPlan | null>(null);
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ kind: "notice" | "error"; message: string } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -360,7 +365,7 @@ export function AssessmentWizard({
     setDownloading(true);
     setReportError(null);
     try {
-      await downloadAssessmentReport(answers, result, controller.signal);
+      await downloadAssessmentReport(answers, result, simulated, controller.signal);
     } catch {
       if (controller.signal.aborted || pendingReport.current !== controller) return;
       setReportError("The report could not be generated. Your assessment is still here—please try again.");
@@ -649,7 +654,7 @@ export function AssessmentWizard({
             >
               <h2 ref={mainHeading} tabIndex={-1}>Controls before approval.</h2>
               <p className="lede">Use this record to begin privacy, security, and business-owner review.</p>
-              <RecommendationsView result={result} />
+              {scoredAnswers && <SafeguardSimulator input={scoredAnswers} result={result} endpoint={simulationEndpoint} onPlanChange={setSimulated} />}
 
               {scoredAnswers && <AssessmentRecord input={scoredAnswers} result={result} />}
               {saveStatus}

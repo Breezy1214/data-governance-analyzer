@@ -41,3 +41,9 @@ export async function readFromBackend(path: string, accessToken: string): Promis
   if (!response.ok) throw new Error(`Register request failed with ${response.status}`);
   return response.json();
 }
+
+/** Identifies a demo visitor to the backend's rate limiter. The hosting platform sets the first X-Forwarded-For entry. */
+export function demoClientHeaders(request: Request): Record<string, string> {
+  const client = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return client ? { "X-Demo-Client": client } : {};
+}

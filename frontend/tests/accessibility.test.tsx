@@ -5,6 +5,7 @@ import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } f
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_COUNT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
+import { SIMULATIONS_ENDPOINT } from "../lib/simulation";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 import { expectNoViolations } from "./axe";
 
@@ -335,8 +336,10 @@ describe("demo UX traps (SCRUM-28)", () => {
 
     const { container } = render(<AssessmentWizard />);
     await screen.findByText(heading);
-    expect(screen.getByRole("status").textContent).not.toContain("Step 1 of 4");
-    expect(fetch).toHaveBeenCalledTimes(1);
+    const stepStatus = screen.getAllByRole("status").find((item) => item.textContent?.startsWith("Step "));
+    expect(stepStatus?.textContent).not.toContain("Step 1 of 4");
+    // The restored result isn't scored again; only the what-if simulator asks for its outcomes.
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url !== SIMULATIONS_ENDPOINT)).toHaveLength(1);
     expect(screen.getByRole("button", { name: /answer questions/i }).hasAttribute("disabled")).toBe(false);
     await expectNoViolations(container);
   });

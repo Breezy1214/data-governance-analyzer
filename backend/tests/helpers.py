@@ -1,4 +1,18 @@
+import json
+from pathlib import Path
+
+from app.config import Settings
 from app.scoring import AssessmentRequest
+
+DEMO_SCENARIOS = json.loads(
+    (Path(__file__).resolve().parents[2] / "frontend" / "lib" / "demo-scenarios.json").read_text()
+)
+UNLIMITED_DEMO = Settings(supabase_url="https://example.supabase.co", demo_rate_per_client=1000, demo_rate_total=1000)
+
+
+def scoring_payload(scenario):
+    """A sample scenario's answers without the description, which never reaches the API."""
+    return {key: value for key, value in scenario["input"].items() if key != "description"}
 
 
 def sample_payload(**overrides):
