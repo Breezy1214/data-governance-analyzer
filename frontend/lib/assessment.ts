@@ -119,7 +119,7 @@ export type AssessmentInput = {
   regulations: Regulation[];
 } & { [Field in ChoiceField]: keyof (typeof CHOICE_QUESTIONS)[Field]["options"] | "" };
 
-/** Answers still being filled in. The intended use stays empty until picked: a default would silently add points. */
+/** Answers still being filled in. The intended use stays empty until picked: a default would silently add points (SCRUM-28). */
 export type DraftInput = Omit<AssessmentInput, "purpose"> & { purpose: Purpose | "" };
 
 export type RiskFactor = {

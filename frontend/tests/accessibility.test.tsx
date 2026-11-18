@@ -10,7 +10,7 @@ import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-
 import { expectNoViolations } from "./axe";
 
 /**
- * Accessibility checks for the assessment flow.
+ * Accessibility checks for the assessment flow (SCRUM-17).
  *
  * axe-core catches the machine-checkable WCAG failures. Colour contrast
  * cannot be judged in jsdom, so it is excluded here.
@@ -258,7 +258,7 @@ describe("account pages", () => {
   });
 });
 
-describe("demo UX traps", () => {
+describe("demo UX traps (SCRUM-28)", () => {
   it("leaves purpose unselected and requires it before scoring", async () => {
     render(<AssessmentWizard />);
     describeUseCase();

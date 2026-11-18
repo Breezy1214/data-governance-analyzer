@@ -1,4 +1,4 @@
--- Register access tests. Runs in one transaction and rolls back, so nothing persists.
+-- Register access tests (SCRUM-30). Runs in one transaction and rolls back, so nothing persists.
 -- Run with `supabase test db`, or paste into the SQL editor.
 begin;
 create extension if not exists pgtap with schema extensions;

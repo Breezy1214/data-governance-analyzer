@@ -10,7 +10,7 @@ import {
 import { isUuid } from "./register";
 import { redactSensitiveData } from "./sensitive-data";
 
-/** The draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over. Saved assessments are separate (docs/data-handling.md). */
+/** The draft lives in this tab's sessionStorage and is cleared on tab close, idle timeout or start-over (SCRUM-16). Saved assessments are separate (docs/data-handling.md). */
 
 export const DRAFT_KEY = "governance-assessment-draft-v2";
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -27,7 +27,7 @@ export function reachableStep(requested: Step, input: DraftInput, result: Assess
 }
 
 /**
- * What a refresh restores: the answers, the screen, the last result for those answers and where it was saved.
+ * What a refresh restores: the answers, the screen, the last result for those answers and where it was saved (SCRUM-28).
  * `saved` follows the wizard: undefined when this endpoint never saves, null when saving the result failed.
  */
 export type SessionState = {

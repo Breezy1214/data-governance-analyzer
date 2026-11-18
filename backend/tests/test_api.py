@@ -8,7 +8,6 @@ from app.auth import require_session
 from app.config import Settings
 from app.logging_config import JsonFormatter
 from app.main import app
-from app.rate_limit import SlidingWindowLimiter
 
 client = TestClient(app)
 
@@ -17,8 +16,6 @@ client = TestClient(app)
 def authenticated_scoring_contract():
     # These existing tests exercise scoring. Authentication uses separate, non-overridden apps in test_auth.py.
     app.dependency_overrides[require_session] = lambda: {"sub": "scoring-test"}
-    # Throttling has its own tests in test_hardening.py; the latency test here makes many requests on purpose.
-    app.state.scoring_limiter = SlidingWindowLimiter(1000, 1000)
     yield
     app.dependency_overrides.clear()
 

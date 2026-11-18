@@ -6,9 +6,8 @@ that would change the use case itself (its data, partners, or purpose) or that c
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Optional
 
 from app.scoring.engine import rate, score_assessment
 from app.scoring.models import (
@@ -21,7 +20,7 @@ from app.scoring.models import (
 from app.scoring.recommendations import get_mapping
 from app.scoring.rules import HIGH_SENSITIVITY_TYPES, RuleSet, duplicates, get_ruleset
 
-AnswerChange = Callable[[AssessmentRequest], Any | None]
+AnswerChange = Callable[[AssessmentRequest], Optional[Any]]
 
 
 @dataclass(frozen=True)
@@ -127,7 +126,7 @@ def simulate(request: AssessmentRequest, ruleset: RuleSet | None = None) -> Simu
 def _best_plan(ids: list[str], outcomes: list[RiskOutcome]) -> SafeguardPlan:
     """The fewest safeguards that reach LOW; failing that, the fewest that reach the lowest possible score."""
     def size(mask: int) -> int:
-        return mask.bit_count()
+        return bin(mask).count("1")  # int.bit_count() needs Python 3.10
 
     masks = range(len(outcomes))
     reaching_low = [mask for mask in masks if outcomes[mask].level == "LOW"]

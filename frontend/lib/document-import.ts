@@ -2,7 +2,7 @@ import { DESCRIPTION_MAX_LENGTH } from "./assessment";
 import { scanSensitiveData } from "./sensitive-data";
 
 /**
- * Document import for the describe step.
+ * Document import for the describe step (SCRUM-23).
  *
  * Files are read and parsed entirely in the browser: nothing is uploaded,
  * which keeps the promise made in docs/data-handling.md. The parsers are

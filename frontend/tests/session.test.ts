@@ -86,7 +86,7 @@ describe("session-scoped draft storage", () => {
     expect(loadSession()).toBeNull();
   });
 
-  describe("restoring the screen after a refresh", () => {
+  describe("restoring the screen after a refresh (SCRUM-28)", () => {
     it("restores the step and result alongside the answers", () => {
       saveDraft({ input: completeInput, step: 3, result: assessmentResult }, session, 100);
       expect(loadSession(session, 100)).toEqual({ input: completeInput, step: 3, result: assessmentResult });

@@ -22,18 +22,15 @@ Press `Ctrl+C` to stop the frontend and backend.
 
 ### Backend
 
-The backend requires Python 3.12, the version CI tests against.
-
 ```bash
 cd backend
-python3.12 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
 
-Check `http://localhost:8000/health` or `http://localhost:8000/version`. With `APP_ENV=development`,
-interactive API docs are at `http://localhost:8000/docs`.
+Check `http://localhost:8000/health` or `http://localhost:8000/version`.
 
 ### Frontend
 
@@ -77,16 +74,6 @@ cd backend
 
 Deploy `frontend/` and `backend/` separately over HTTPS, set the variables from each `.env.example`,
 and point `API_BASE_URL` at the backend. Do not commit credentials or production-sensitive data.
-
-### Hardening
-
-- Set `APP_ENV` to `staging` or `production` on deployed backends. Outside `development`, `local` and `test`,
-  `/docs`, `/redoc` and `/openapi.json` are not served and return 404.
-- The frontend sends a Content-Security-Policy, `X-Frame-Options: DENY`, `Referrer-Policy`,
-  `X-Content-Type-Options` and `Permissions-Policy` on every response (`frontend/next.config.ts`).
-- Signed-in scoring (`POST /assessments`, re-assessing, `POST /simulations`) is limited per user and overall
-  (`SCORING_RATE_PER_USER`, `SCORING_RATE_TOTAL`, per minute). Sign-in, sign-up, password reset and email-link
-  routes allow 10 attempts per minute per visitor. Throttled requests get a 429 with a `Retry-After` header.
 
 Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
 FastAPI verifies access-token signatures through the project's JWKS endpoint.

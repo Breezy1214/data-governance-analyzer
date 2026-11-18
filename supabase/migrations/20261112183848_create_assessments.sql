@@ -1,4 +1,4 @@
--- Governance register of saved assessments.
+-- SCRUM-30: governance register of saved assessments.
 -- An assessment is a register entry; each scoring of it is a version. Re-assessing adds the next version and never
 -- edits an earlier one. The free-text use-case description is never stored (docs/data-handling.md).
 

@@ -1,6 +1,6 @@
 # Data handling and retention (v1.1)
 
-Covers the anonymous assessment flow and saved assessments. The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
+Implements SCRUM-16, updated for SCRUM-30 (saved assessments). The analyzer assesses potentially sensitive use cases, so it applies the same data-minimization principle it recommends.
 
 ## Decision
 
@@ -77,7 +77,7 @@ A capitalized phrase is left alone when it names an organization ("Grant Thornto
 
 ## Governance register
 
-Signed-in people get a register of their completed assessments at `/assessments`. Schema and access
+Signed-in people get a register of their completed assessments at `/assessments` (SCRUM-30). Schema and access
 rules: `supabase/migrations/`; isolation tests: `supabase/tests/database/assessments_rls.test.sql`.
 
 **What is saved** (Supabase Postgres, project region us-west-2):

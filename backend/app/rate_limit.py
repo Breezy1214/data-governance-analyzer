@@ -1,4 +1,4 @@
-"""In-memory rate limiting for the scoring endpoints: per visitor for the public demo, per user once signed in.
+"""In-memory rate limiting for the unauthenticated demo endpoint.
 
 A single process holds the counters, which matches the single-instance deployment.
 """
@@ -8,16 +8,13 @@ from __future__ import annotations
 import time
 from collections import OrderedDict, deque
 from collections.abc import Callable
-from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
-
-from app.auth import require_session
+from fastapi import HTTPException, Request
 
 RATE_LIMITED = "Too many requests. Please wait a minute and try again."
 CLIENT_HEADER = "x-demo-client"
 MAX_CLIENT_KEY_LENGTH = 64
-RATE_LIMIT_WINDOW_SECONDS = 60.0
+WINDOW_SECONDS = 60.0
 
 
 class SlidingWindowLimiter:
@@ -38,7 +35,7 @@ class SlidingWindowLimiter:
 
     def allow(self, client: str) -> bool:
         now = self.clock()
-        cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+        cutoff = now - WINDOW_SECONDS
         _expire(self._all, cutoff)
         hits = self._clients.get(client)
         if hits is not None:
@@ -74,10 +71,4 @@ def client_key(request: Request) -> str:
 
 async def require_demo_quota(request: Request) -> None:
     if not request.app.state.demo_limiter.allow(client_key(request)):
-        raise HTTPException(429, RATE_LIMITED)
-
-
-async def require_scoring_quota(request: Request, claims: Annotated[dict, Depends(require_session)]) -> None:
-    # Keyed by the verified user, so one account can't exhaust scoring for everyone else.
-    if not request.app.state.scoring_limiter.allow(claims["sub"]):
         raise HTTPException(429, RATE_LIMITED)
