@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { deleteAssessment, deleteWarning } from "@/lib/register";
 import { ConfirmPanel } from "./ConfirmPanel";
@@ -38,8 +39,12 @@ export function DeleteAssessmentButton({ assessmentId, title, versionCount }: {
       router.refresh();
       return;
     }
-    setError(failure);
-    setBusy(false);
+    // Some browsers drop focus from a button while it is disabled, so put it back on the safe choice.
+    flushSync(() => {
+      setError(failure);
+      setBusy(false);
+    });
+    dialog.current?.querySelector<HTMLButtonElement>(".confirm-panel button")?.focus();
   }
 
   return <>

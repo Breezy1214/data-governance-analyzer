@@ -55,7 +55,7 @@ export function SavedAssessmentActions({
     }
     setError(failure);
     setDeleting(false);
-    setConfirming(false);
+    cancelDelete();
   }
 
   // The Delete button is hidden while the prompt is open, so render it before returning focus.
