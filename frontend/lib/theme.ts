@@ -2,7 +2,7 @@ import type { RiskLevel } from "./assessment";
 
 /**
  * Colour tokens for code that cannot read CSS variables, such as the PDF
- * report. Values mirror the :root tokens in app/globals.css (SCRUM-24);
+ * report. Values mirror the :root tokens in app/globals.css;
  * change both together. All text colours meet WCAG AA (4.5:1) on white.
  */
 export const PALETTE = {

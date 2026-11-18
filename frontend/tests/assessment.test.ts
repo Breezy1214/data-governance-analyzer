@@ -156,7 +156,7 @@ describe("assessment client", () => {
   });
 });
 
-describe("questionnaire defaults and scale (SCRUM-28)", () => {
+describe("questionnaire defaults and scale", () => {
   it("starts with no purpose selected so it cannot silently add points", () => {
     const unpicked = { ...baseline, purpose: EMPTY_INPUT.purpose };
     expect(EMPTY_INPUT.purpose).toBe("");

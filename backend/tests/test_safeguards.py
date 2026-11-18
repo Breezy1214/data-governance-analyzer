@@ -147,8 +147,9 @@ def test_simulations_never_touch_the_register(client):
 
 def test_demo_simulations_share_the_demo_quota():
     limited = TestClient(create_app(Settings(supabase_url="https://example.supabase.co",
-                                             demo_rate_per_client=2, demo_rate_total=10)))
-    headers = {"X-Demo-Client": "203.0.113.9"}
+                                             demo_rate_per_client=2, demo_rate_total=10,
+                                             demo_proxy_secret="proxy-secret")))
+    headers = {"X-Demo-Client": "203.0.113.9", "X-Demo-Proxy-Secret": "proxy-secret"}
     assert limited.post("/demo/assessments", json=sample_payload(), headers=headers).status_code == 200
     assert limited.post("/demo/simulations", json=sample_payload(), headers=headers).status_code == 200
     assert limited.post("/demo/simulations", json=sample_payload(), headers=headers).status_code == 429

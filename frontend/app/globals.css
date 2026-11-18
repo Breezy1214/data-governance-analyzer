@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Design tokens (SCRUM-24). Every colour in the app comes from this block;
+ * Design tokens. Every colour in the app comes from this block;
  * components reference the semantic tokens, never raw values. lib/theme.ts
  * mirrors the light values the PDF report needs. Each light-dark() pair is
  * (light, dark): the dark scheme keeps the teal identity on deep ink surfaces,
@@ -159,7 +159,7 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: inset 0
 textarea::placeholder { color: var(--muted); }
 .field-meta { display: flex; justify-content: space-between; gap: 16px; margin-top: 8px; color: var(--muted); font-size: 12px; }
 
-/* Document import on the describe step (SCRUM-23). */
+/* Document import on the describe step. */
 .dropzone { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 18px; padding: 18px 20px; border: 1px dashed var(--control-line); border-radius: 12px; background: var(--paper); transition: border-color .18s, background .18s; }
 .dropzone > div { flex: 1; min-width: 200px; }
 .dropzone.dragging { border-color: var(--brand); border-style: solid; background: var(--brand-soft); }
@@ -291,7 +291,7 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-references a:hover { color: var(--brand-hover); }
 .recommendation-why { margin-top: 10px; }
 /* What-if simulator: the assessed score stays fixed beside the simulated one. Nothing here is saved. */
-.simulator { margin: 0 0 18px; padding: 16px 18px; border: 1px solid var(--line); }
+.simulator { margin: 0 0 18px; padding: 16px 18px; }
 /* Pinned only where it leaves most of the screen for the list, and focused items scroll clear of it. */
 @media (min-width: 821px) and (min-height: 760px) {
   .simulator { position: sticky; top: 12px; z-index: 2; }
@@ -300,7 +300,7 @@ textarea::placeholder { color: var(--muted); }
 .simulator-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .simulator-head h4 { margin: 0; font-size: 15px; font-weight: 600; }
 .simulator-scores { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: center; margin-top: 12px; }
-.simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border-radius: 10px; background: var(--paper); }
 .simulator-assessed b { font-family: var(--font-mono), monospace; font-size: 15px; }
 .simulator-assessed .method-note { margin: 0; }
 .simulator-simulated { display: flex; align-items: center; gap: 16px; }
@@ -320,8 +320,8 @@ textarea::placeholder { color: var(--muted); }
 @keyframes level-change { from { transform: scale(.85); opacity: .4; } to { transform: none; opacity: 1; } }
 .sort-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
 .sort-control .choice { min-height: 36px; padding: 4px 12px; font-size: 13px; }
-.safeguard-control { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; transition: border-color .18s, background .18s; }
-.safeguard-control[data-applied] { border-color: var(--brand); background: var(--brand-soft); }
+.safeguard-control { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; padding: 10px 14px; border: 1px solid transparent; background: var(--paper); border-radius: 10px; transition: background .18s; }
+.safeguard-control[data-applied] { background: var(--brand-soft); }
 .safeguard-toggle { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .safeguard-toggle input { appearance: none; position: relative; flex: 0 0 auto; width: 38px; height: 22px; min-height: 0; padding: 0; border-radius: 99px; background: var(--control-line); cursor: pointer; transition: background .18s; }
 .safeguard-toggle input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--white); transition: transform .18s; }

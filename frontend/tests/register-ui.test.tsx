@@ -202,6 +202,7 @@ describe("My assessments", () => {
 
       expect((await within(dialog).findByRole("alert")).textContent).toMatch(/in review or approved/);
       expect(dialog.hasAttribute("open")).toBe(true);
+      expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Keep it" }));
       expect(router.refresh).not.toHaveBeenCalled();
     });
   });
@@ -270,6 +271,7 @@ describe("a saved assessment", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete permanently/i }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/in review or approved/);
     expect(router.replace).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
 
     rerender(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
       reassessHref="/r" duplicateHref="/d" versionCount={1} deletable={false} />);
