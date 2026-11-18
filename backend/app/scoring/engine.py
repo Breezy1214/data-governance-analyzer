@@ -8,7 +8,7 @@ The only non-deterministic input (the current time) is injected via
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.scoring.models import (
     SCHEMA_VERSION,
@@ -58,5 +58,5 @@ def score_assessment(
         factors=factors,
         maxFactorPoints=max(rule.points for rule in ruleset.rules),
         limitations=limitations,
-        assessedAt=assessed_at or datetime.now(timezone.utc).isoformat(),
+        assessedAt=assessed_at or datetime.now(UTC).isoformat(),
     )

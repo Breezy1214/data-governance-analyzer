@@ -11,6 +11,14 @@ if [[ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]]; then
   exit 1
 fi
 
+# The backend needs Python 3.12 (datetime.UTC and newer typing); an older venv would crash on import.
+if ! "$BACKEND_DIR/.venv/bin/python" -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
+  found="$("$BACKEND_DIR/.venv/bin/python" --version 2>&1)"
+  echo "The backend virtual environment uses $found, but Python 3.12 or newer is required." >&2
+  echo "Delete backend/.venv and recreate it with python3.12 as described in the README's backend setup." >&2
+  exit 1
+fi
+
 if [[ ! -x "$FRONTEND_DIR/node_modules/.bin/next" ]]; then
   echo "Frontend dependencies not found. Run npm install in frontend first." >&2
   exit 1

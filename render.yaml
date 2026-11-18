@@ -19,3 +19,5 @@ services:
         sync: false
       - key: SUPABASE_JWT_AUDIENCE
         value: authenticated
+      - key: DEMO_PROXY_SECRET
+        sync: false

@@ -8,7 +8,13 @@ from app.main import create_app
 from app.rate_limit import SlidingWindowLimiter
 
 SUPABASE_URL = "https://example.supabase.co"
-TEST_SETTINGS = Settings(supabase_url=SUPABASE_URL, demo_rate_per_client=3, demo_rate_total=5)
+PROXY_SECRET = "test-proxy-secret"
+TEST_SETTINGS = Settings(supabase_url=SUPABASE_URL, demo_rate_per_client=3, demo_rate_total=5,
+                         demo_proxy_secret=PROXY_SECRET)
+
+
+def from_proxy(client: str) -> dict[str, str]:
+    return {"X-Demo-Client": client, "X-Demo-Proxy-Secret": PROXY_SECRET}
 
 
 @pytest.fixture
@@ -41,22 +47,45 @@ def test_sample_scenarios_score_as_described(client):
 
 def test_each_visitor_is_limited():
     limited = TestClient(create_app(TEST_SETTINGS))
-    headers = {"X-Demo-Client": "203.0.113.7"}
+    headers = from_proxy("203.0.113.7")
     statuses = [limited.post("/demo/assessments", json=sample_payload(), headers=headers).status_code for _ in range(4)]
     assert statuses == [200, 200, 200, 429]
-    body = limited.post("/demo/assessments", json=sample_payload(), headers=headers).json()
-    assert body["error"] == "rate_limited"
-    other = limited.post("/demo/assessments", json=sample_payload(), headers={"X-Demo-Client": "198.51.100.2"})
+    throttled = limited.post("/demo/assessments", json=sample_payload(), headers=headers)
+    assert throttled.json()["error"] == "rate_limited"
+    assert throttled.headers["Retry-After"] == "60"
+    other = limited.post("/demo/assessments", json=sample_payload(), headers=from_proxy("198.51.100.2"))
     assert other.status_code == 200
 
 
 def test_rotating_client_headers_cannot_pass_the_global_cap():
     limited = TestClient(create_app(TEST_SETTINGS))
     statuses = [
-        limited.post("/demo/assessments", json=sample_payload(), headers={"X-Demo-Client": f"client-{index}"}).status_code
+        limited.post("/demo/assessments", json=sample_payload(), headers=from_proxy(f"client-{index}")).status_code
         for index in range(6)
     ]
     assert statuses == [200] * 5 + [429]
+
+
+@pytest.mark.parametrize("secret", [None, "wrong-secret"])
+def test_direct_callers_cannot_choose_their_own_visitor_key(secret):
+    """Without the proxy's secret, X-Demo-Client is ignored and the caller is keyed by its socket address."""
+    limited = TestClient(create_app(TEST_SETTINGS))
+    statuses = []
+    for index in range(4):
+        headers = {"X-Demo-Client": f"client-{index}"}
+        if secret:
+            headers["X-Demo-Proxy-Secret"] = secret
+        statuses.append(limited.post("/demo/assessments", json=sample_payload(), headers=headers).status_code)
+    assert statuses == [200, 200, 200, 429]
+
+
+def test_visitor_header_is_ignored_when_no_proxy_secret_is_configured():
+    settings = Settings(supabase_url=SUPABASE_URL, demo_rate_per_client=1, demo_rate_total=10)
+    limited = TestClient(create_app(settings))
+    headers = {"X-Demo-Client": "203.0.113.7", "X-Demo-Proxy-Secret": ""}
+    assert limited.post("/demo/assessments", json=sample_payload(), headers=headers).status_code == 200
+    headers["X-Demo-Client"] = "198.51.100.2"
+    assert limited.post("/demo/assessments", json=sample_payload(), headers=headers).status_code == 429
 
 
 def test_limiter_window_slides():
