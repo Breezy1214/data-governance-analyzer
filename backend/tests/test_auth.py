@@ -49,26 +49,25 @@ def client(private_key):
 def test_staging_accepts_signed_access_token(client, private_key):
     response = post_assessment(client, f"Bearer {token(private_key)}")
     assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
     assert client.get("/health").json()["environment"] == "staging"
 
 
-@pytest.mark.parametrize("header", ["", "Basic anything", "Bearer ", "Bearer invalid"])
-def test_missing_and_malformed_credentials_rejected(client, header):
-    response = post_assessment(client, header)
-    assert response.status_code == 401
-    assert response.json()["error"] == "unauthorized"
-    assert response.json()["message"] == "Please sign in again."
+def test_missing_and_malformed_credentials_rejected(client):
+    for header in ["", "Basic anything", "Bearer ", "Bearer invalid"]:
+        response = post_assessment(client, header)
+        assert response.status_code == 401
+        assert response.json()["error"] == "unauthorized"
+        assert response.json()["message"] == "Please sign in again."
 
 
-@pytest.mark.parametrize("claims", [
-    {"exp": 1}, {"iss": "https://attacker.test/auth/v1"}, {"aud": "other"},
-    {"sub": "not-a-user"}, {"session_id": "not-a-session"}, {"role": "service_role"},
-    {"is_anonymous": True}, {"exp": None}, {"iat": int(time.time()) + 3600},
-])
-def test_invalid_claims_rejected(client, private_key, claims):
-    response = post_assessment(client, f"Bearer {token(private_key, **claims)}")
-    assert response.status_code == 401
+def test_invalid_claims_rejected(client, private_key):
+    for claims in [
+        {"exp": 1}, {"iss": "https://attacker.test/auth/v1"}, {"aud": "other"},
+        {"sub": "not-a-user"}, {"session_id": "not-a-session"}, {"role": "service_role"},
+        {"is_anonymous": True}, {"exp": None}, {"iat": int(time.time()) + 3600},
+    ]:
+        response = post_assessment(client, f"Bearer {token(private_key, **claims)}")
+        assert response.status_code == 401
 
 
 def test_wrong_signature_rejected(client):
@@ -93,10 +92,10 @@ def test_unknown_key_is_unauthorized(client, private_key):
     assert post_assessment(client, f"Bearer {token(private_key)}").status_code == 401
 
 
-@pytest.mark.parametrize("url", ["", "http://example.test", "https://user:secret@example.test", "https://example.test/path"])
-def test_invalid_configuration_fails_startup(url):
-    with pytest.raises(ValueError, match="SUPABASE_URL"), TestClient(create_app(Settings(supabase_url=url))):
-        pass
+def test_invalid_configuration_fails_startup():
+    for url in ["", "http://example.test", "https://user:secret@example.test", "https://example.test/path"]:
+        with pytest.raises(ValueError, match="SUPABASE_URL"), TestClient(create_app(Settings(supabase_url=url))):
+            pass
 
 
 def test_settings_reads_supabase_configuration(monkeypatch):

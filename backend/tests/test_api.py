@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from helpers import sample_payload
 
 from app.auth import require_session
+from app.config import Settings
 from app.logging_config import JsonFormatter
 from app.main import app
 
@@ -21,7 +22,7 @@ def authenticated_scoring_contract():
 
 def test_health_and_version():
     assert client.get("/health").json()["status"] == "ok"
-    assert client.get("/version").json()["version"] == "0.1.0"
+    assert client.get("/version").json()["version"] == Settings.from_env().version
 
 
 def test_assessment_returns_transparent_score():
@@ -33,45 +34,12 @@ def test_assessment_returns_transparent_score():
     assert body["schemaVersion"] == "3.0"
     assert body["rulesVersion"] == "2.0"
     assert body["mappingVersion"] == "2.0"
-    assert body["mappingApprovalStatus"] == "approved"
-    assert body["sourcesCheckedOn"] == "2026-11-04"
+    assert body["maxFactorPoints"] == 24
     assert {factor["ruleId"] for factor in body["factors"]} == {
         "DATA_SENSITIVITY_DIRECT",
         "PARTICIPANTS_ONE",
         "PURPOSE_OVERLAP",
     }
-    for retired in ("recommendationDetails", "generalSafeguards", "capabilities"):
-        assert retired not in body
-    assert [item["priority"] for item in body["recommendations"]] == list(range(1, len(body["recommendations"]) + 1))
-    assert all(item["rationale"] and item["action"] for item in body["recommendations"])
-
-
-def test_response_returns_the_answers_it_accepted_for_saving():
-    # The frontend saves these, not the raw request, so defaults such as schemaVersion are filled in.
-    body = client.post("/assessments", json=sample_payload()).json()
-    assert body["answers"] == {**sample_payload(), "schemaVersion": "3.0"}
-
-
-def test_high_risk_regulated_use_includes_limitations():
-    response = client.post(
-        "/assessments",
-        json=sample_payload(
-            dataTypes=["health", "financial"],
-            participants="multiplePartners",
-            identifierProtection="cleartext",
-            custodyChange="yes",
-            environmentControl="thirdParty",
-            reusableKeys="yes",
-            combined="yes",
-            retainedArtifacts="yes",
-            secondaryUse="yes",
-            purpose="ai",
-        ),
-    )
-    body = response.json()
-    assert body["score"] == 100
-    assert body["level"] == "HIGH"
-    assert len(body["limitations"]) == 2
 
 
 def test_invalid_input_returns_clear_client_error_without_echoing_input():

@@ -1,4 +1,4 @@
-import type { AssessmentInput, AssessmentResult, Reference, RiskLevel } from "@/lib/assessment";
+import type { AssessmentInput, AssessmentResult, Recommendation, Reference, RiskLevel } from "@/lib/assessment";
 import { DATA_TYPE_LABELS, PURPOSE_LABELS, RISK_THRESHOLDS } from "@/lib/assessment";
 import { BASED_ON_LABEL, EVERY_ASSESSMENT_LABEL, REFERENCE_HEADING, formatCheckedOn } from "@/lib/report";
 import { LocalTime } from "./LocalTime";
@@ -16,7 +16,8 @@ export const RISK_BANDS: { level: RiskLevel; label: string; range: string }[] = 
 const RING_RADIUS = 70;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
-function ScoreRing({ score }: { score: number }) {
+/** `display` replaces the printed number, so the simulator can count up to a new score. */
+export function ScoreRing({ score, display = score }: { score: number; display?: React.ReactNode }) {
   const filled = (score / 100) * RING_LENGTH;
   return (
     <div className="score-ring">
@@ -31,7 +32,7 @@ function ScoreRing({ score }: { score: number }) {
           transform="rotate(-90 90 90)"
         />
       </svg>
-      <div><span className="score-number">{score}</span><span className="score-total">out of 100</span></div>
+      <div><span className="score-number">{display}</span><span className="score-total">out of 100</span></div>
     </div>
   );
 }
@@ -55,6 +56,9 @@ function ReferenceList({ items }: { items: Reference[] }) {
 }
 
 export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
+  // Bars share one scale, the heaviest rule in this result's rules version, so their lengths compare (SCRUM-28).
+  // Results saved before the API sent that scale fall back to their own heaviest factor.
+  const factorScale = result.maxFactorPoints ?? Math.max(1, ...result.factors.map((factor) => factor.points));
   return (
     <div className="result-grid">
       <div className="card score-card">
@@ -77,7 +81,7 @@ export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
           {result.factors.map((factor) => (
             <li key={factor.label}>
               <div><span>{factor.label}</span><b>+{factor.points}</b></div>
-              <span className="factor-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, factor.points)}%` }} /></span>
+              <span className="factor-bar" aria-hidden="true"><i style={{ width: `${(factor.points / factorScale) * 100}%` }} /></span>
             </li>
           ))}
         </ul>
@@ -87,7 +91,14 @@ export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
   );
 }
 
-export function RecommendationsView({ result }: { result: AssessmentResult }) {
+export function RecommendationsView({ result, order = result.recommendations, toolbar, safeguard }: {
+  result: AssessmentResult;
+  /** The same recommendations, possibly re-sorted; numbering keeps each one's priority. */
+  order?: Recommendation[];
+  toolbar?: React.ReactNode;
+  /** The what-if control for a recommendation, if it has one. */
+  safeguard?: (item: Recommendation) => React.ReactNode;
+}) {
   return <>
     <div className="card">
       <div className="outcome-head">
@@ -102,13 +113,15 @@ export function RecommendationsView({ result }: { result: AssessmentResult }) {
 
     <div className="card safeguards">
       <h3 className="card-title">Recommended actions</h3>
+      {toolbar}
       <ol className="recommendation-list">
-        {result.recommendations.map((item) => (
+        {order.map((item) => (
           <li key={item.id}>
             <span className="recommendation-index">{String(item.priority).padStart(2, "0")}</span>
             <div>
               <h4>{item.title}</h4>
               <p className="recommendation-action">{item.action}</p>
+              {safeguard?.(item)}
               <ReferenceList items={item.references} />
               <details className="recommendation-why">
                 <summary>Why this applies</summary>

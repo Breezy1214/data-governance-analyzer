@@ -166,6 +166,9 @@ textarea::placeholder { color: var(--muted); }
 .actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 24px; }
 .actions.end { justify-content: flex-end; }
 .actions > div { display: flex; gap: 10px; }
+.confirm-panel { margin-top: 24px; border: 1px solid var(--danger); }
+.confirm-panel p { margin: 0; color: var(--muted); line-height: 1.5; }
+.confirm-panel .actions { margin-top: 16px; }
 .primary, .secondary, .destructive { min-height: 44px; padding: 0 20px; border: 1px solid; border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform .18s, background .18s, color .18s, border-color .18s; }
 .primary { border-color: var(--brand); background: var(--brand); color: var(--white); }
 .primary span { display: inline-block; margin-left: 12px; transition: transform .18s; }
@@ -262,6 +265,46 @@ textarea::placeholder { color: var(--muted); }
 .recommendation-references a { color: var(--brand); font-weight: 600; }
 .recommendation-references a:hover { color: var(--brand-hover); }
 .recommendation-why { margin-top: 10px; }
+/* What-if simulator: the assessed score stays fixed beside the simulated one. Nothing here is saved. */
+.simulator { margin: 0 0 18px; padding: 16px 18px; border: 1px solid var(--line); }
+/* Pinned only where it leaves most of the screen for the list, and focused items scroll clear of it. */
+@media (min-width: 821px) and (min-height: 760px) {
+  .simulator { position: sticky; top: 12px; z-index: 2; }
+  html:has(.simulator) { scroll-padding-top: calc(var(--simulator-height, 0px) + 24px); }
+}
+.simulator-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.simulator-head h4 { margin: 0; font-size: 15px; font-weight: 600; }
+.simulator-scores { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: center; margin-top: 12px; }
+.simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.simulator-assessed b { font-family: var(--font-mono), monospace; font-size: 15px; }
+.simulator-assessed .method-note { margin: 0; }
+.simulator-simulated { display: flex; align-items: center; gap: 16px; }
+.simulator-simulated > div:last-child { display: grid; justify-items: start; gap: 6px; }
+.simulator .score-ring { flex: 0 0 auto; width: 104px; margin: 0; }
+.simulator .score-ring circle { stroke-width: 16; }
+.simulator .score-number { font-size: 28px; }
+.simulator .score-total { font-size: 11px; }
+.simulator-label { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.simulator-delta { font-family: var(--font-mono), monospace; font-size: 13px; }
+.simulator-summary { margin: 12px 0 0; font-weight: 500; line-height: 1.5; }
+.simulator-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.simulator-actions button, .simulator-note button { min-height: 36px; padding: 0 14px; }
+.simulator-note { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.ring-value { transition: stroke-dasharray .6s cubic-bezier(.2, .7, .3, 1), stroke .3s; }
+.level-change { animation: level-change .45s ease-out; }
+@keyframes level-change { from { transform: scale(.85); opacity: .4; } to { transform: none; opacity: 1; } }
+.sort-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+.sort-control .choice { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+.safeguard-control { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; transition: border-color .18s, background .18s; }
+.safeguard-control[data-applied] { border-color: var(--brand); background: var(--brand-soft); }
+.safeguard-toggle { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.safeguard-toggle input { appearance: none; position: relative; flex: 0 0 auto; width: 38px; height: 22px; min-height: 0; padding: 0; border-radius: 99px; background: var(--control-line); cursor: pointer; transition: background .18s; }
+.safeguard-toggle input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--white); transition: transform .18s; }
+.safeguard-toggle input:checked { background: var(--brand); }
+.safeguard-toggle input:checked::after { transform: translateX(16px); }
+.safeguard-points { margin-left: auto; color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 13px; white-space: nowrap; }
+.safeguard-answer { flex-basis: 100%; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
 .recommendation-why summary { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
 .recommendation-why summary::-webkit-details-marker { display: none; }
 .recommendation-why summary::before { content: "▸" / ""; transition: transform .18s; }
@@ -300,7 +343,6 @@ a.primary, a.secondary, a.destructive { display: inline-flex; align-items: cente
 .version-list a { min-width: 84px; color: var(--brand); font-weight: 600; }
 .version-list a[aria-current="page"] { color: var(--ink); text-decoration: none; }
 .version-list time { margin-left: auto; color: var(--muted); }
-.confirm-delete { margin-top: 24px; border: 1px solid var(--danger); }
 
 footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 52px; padding: 12px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 
@@ -315,6 +357,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 }
 
 @media (max-width: 820px) {
+  .simulator-scores { grid-template-columns: minmax(0, 1fr); }
   .app { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { padding-bottom: 14px; }
@@ -350,6 +393,9 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   .choice[aria-pressed="true"] { border-width: 3px; }
   .risk-icon, .progress-track i, .factor-bar i { forced-color-adjust: none; background: CanvasText; }
   .ring-value { stroke: CanvasText; }
+  .safeguard-toggle input { forced-color-adjust: none; border: 1px solid CanvasText; background: Canvas; }
+  .safeguard-toggle input::after { background: CanvasText; }
+  .safeguard-toggle input:checked { background: Highlight; }
 }
 
 @media (prefers-reduced-motion: reduce) {

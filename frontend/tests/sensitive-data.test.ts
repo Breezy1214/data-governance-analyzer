@@ -95,21 +95,25 @@ const UNSAFE: [string, SensitiveKind][] = [
 ];
 
 describe("sensitive data detection", () => {
-  it.each(SAFE)("allows a description of data: %s", (text) => {
-    expect(findSensitiveData(text, NOW)).toEqual([]);
+  // Each check lists every sentence it gets wrong, so one failure still shows all the misses.
+  it("allows descriptions of data", () => {
+    expect(SAFE.filter((text) => findSensitiveData(text, NOW).length > 0)).toEqual([]);
   });
 
-  it.each(UNSAFE)("blocks actual values: %s", (text, kind) => {
-    expect(kinds(text)).toContain(kind);
+  it("blocks actual values", () => {
+    expect(UNSAFE.filter(([text, kind]) => !kinds(text).includes(kind))).toEqual([]);
   });
 
-  it.each(nameDetection.names)("redacts every name in: $text", ({ text, names }) => {
-    const redacted = redactSensitiveData(text, NOW);
-    names.forEach((name) => expect(redacted).not.toContain(name));
+  it("redacts every name in the fixture sentences", () => {
+    const missed = nameDetection.names.flatMap(({ text, names }) => {
+      const redacted = redactSensitiveData(text, NOW);
+      return names.filter((name) => redacted.includes(name)).map((name) => `${name} in: ${text}`);
+    });
+    expect(missed).toEqual([]);
   });
 
-  it.each(nameDetection.safe)("allows vendors, places and teams: %s", (text) => {
-    expect(findSensitiveData(text, NOW)).toEqual([]);
+  it("allows vendors, places and teams", () => {
+    expect(nameDetection.safe.filter((text) => findSensitiveData(text, NOW).length > 0)).toEqual([]);
   });
 
   it("labels social handles as their own kind", () => {

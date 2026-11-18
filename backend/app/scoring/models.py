@@ -101,12 +101,42 @@ class ScoredAssessment(RecommendationResult):
     level: RiskLevel
     guidance: str
     factors: list[RiskFactor]
+    # The heaviest single rule in this rules version, so factor bars keep the scale they were scored on.
+    maxFactorPoints: int = Field(ge=1)
     limitations: list[str]
     assessedAt: str
 
 
 class AssessmentResponse(ScoredAssessment):
-    """What the API returns: the scoring plus the deployment that produced it and the answers it accepted."""
+    """What the API returns: the scoring plus the deployment that produced it."""
 
     apiVersion: str
-    answers: AssessmentRequest
+
+
+class RiskOutcome(BaseModel):
+    score: int = Field(ge=0, le=100)
+    level: RiskLevel
+
+
+class SafeguardPlan(RiskOutcome):
+    applied: list[str]
+
+
+class SimulatedSafeguard(BaseModel):
+    recommendationId: str
+    field: str
+    answer: str | list[str]
+    points: int = Field(ge=0, description="Points removed when this is the only safeguard applied")
+
+
+class Simulation(BaseModel):
+    """What-if results for the safeguards that apply. Nothing here is saved."""
+
+    rulesVersion: str
+    mappingVersion: str
+    assessed: RiskOutcome
+    safeguards: list[SimulatedSafeguard]
+    outcomes: list[RiskOutcome] = Field(
+        description="outcomes[i] applies every safeguard whose bit is set in i; bit k is safeguards[k]"
+    )
+    plan: SafeguardPlan

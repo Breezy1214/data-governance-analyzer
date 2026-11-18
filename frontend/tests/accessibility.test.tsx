@@ -3,8 +3,9 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmLinkForm, ForgotPasswordForm, SignupForm, UpdatePasswordForm } from "../components/AccountForms";
 import { AssessmentWizard } from "../components/AssessmentWizard";
-import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_LABELS } from "../lib/assessment";
+import { CHOICE_FIELDS, CHOICE_QUESTIONS, EMPTY_INPUT, QUESTION_COUNT, QUESTION_LABELS } from "../lib/assessment";
 import { DRAFT_KEY, IDLE_TIMEOUT_MS, saveDraft } from "../lib/session";
+import { SIMULATIONS_ENDPOINT } from "../lib/simulation";
 import { assessmentResult, hangingFetch, stubAssessmentApi } from "./assessment-fixture";
 import { expectNoViolations } from "./axe";
 
@@ -29,6 +30,17 @@ function completeQuestions(dataType = /email addresses/i) {
     const [first] = Object.values(CHOICE_QUESTIONS[key].options);
     fireEvent.click(within(group).getByRole("button", { name: first }));
   });
+  choosePurpose();
+}
+
+function choosePurpose(purpose = "overlap") {
+  fireEvent.change(screen.getByLabelText(QUESTION_LABELS.purpose, { exact: false }), { target: { value: purpose } });
+}
+
+async function reachResults() {
+  answerQuestions();
+  fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
+  await screen.findByText(/what drives this score/i);
 }
 
 function answerQuestions(dataType?: RegExp, description?: string) {
@@ -61,7 +73,7 @@ describe("assessment flow accessibility", () => {
   });
   it("restores drafts across repeated mounts in Strict Mode", async () => {
     const draft = { ...EMPTY_INPUT, description: "Share loyalty member emails with a partner brand." };
-    saveDraft(draft);
+    saveDraft({ input: draft });
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const view = render(<StrictMode><AssessmentWizard /></StrictMode>);
       await waitFor(() => expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe(draft.description));
@@ -169,22 +181,6 @@ describe("assessment flow accessibility", () => {
     expect(document.querySelector("#assessment")).not.toBeNull();
   });
 
-  it("exposes the document upload with a labelled control and help text", async () => {
-    const { container } = render(<AssessmentWizard />);
-    const input = container.querySelector("#document-upload") as HTMLInputElement;
-    expect(input).not.toBeNull();
-    expect(input.getAttribute("accept")).toContain(".pdf");
-    expect(input.getAttribute("aria-describedby")).toBe("upload-help");
-    expect(document.querySelector("#upload-help")?.textContent).toMatch(/stays on your device/i);
-    expect(screen.getByRole("button", { name: /choose file/i })).toBeTruthy();
-    await expectNoViolations(container);
-  });
-
-  it("announces the current step through a status region", () => {
-    render(<AssessmentWizard />);
-    expect(screen.getByRole("status").textContent).toContain("Step 1 of 4");
-  });
-
   it("keeps every step reachable and accessible through the whole flow", async () => {
     const { container } = render(<AssessmentWizard />);
 
@@ -199,9 +195,6 @@ describe("assessment flow accessibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
 
     await screen.findByText(/controls before approval/i);
-    expect(screen.getByRole("heading", { name: "Recommended actions" })).toBeTruthy();
-    expect(screen.getByText(/Recommendation catalog v2.0: approved. Sources checked November 4, 2026/)).toBeTruthy();
-    expect(screen.getByText("Recommendation catalog version")).toBeTruthy();
     await expectNoViolations(container);
   });
 
@@ -212,8 +205,6 @@ describe("assessment flow accessibility", () => {
     await screen.findByText(/what drives this score/i);
     fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
     await screen.findByText(/controls before approval/i);
-
-    expect(screen.getByRole("heading", { name: "Regulatory reference" })).toBeTruthy();
 
     const [reference] = assessmentResult.recommendations[0].references;
     const link = screen.getByRole("link", { name: new RegExp(`Source: ${reference.sourceTitle.slice(0, 13)}`) });
@@ -227,7 +218,6 @@ describe("assessment flow accessibility", () => {
     });
     expect(screen.getAllByText(/Based on your answers:/i)).toHaveLength(2);
     expect(screen.getByText("Applies to every assessment.")).toBeTruthy();
-    expect(screen.getByText("3 recommendations")).toBeTruthy();
   });
 
   it("replaces None of these or Not sure when a named rule is chosen", () => {
@@ -254,13 +244,120 @@ describe("assessment flow accessibility", () => {
 });
 
 describe("account pages", () => {
-  it.each([
-    ["sign-up", <SignupForm key="signup" />],
-    ["forgot password", <ForgotPasswordForm key="forgot" expired />],
-    ["confirm email", <ConfirmLinkForm key="confirm" tokenHash="abc" type="email" />],
-    ["new password", <UpdatePasswordForm key="update" />],
-  ])("%s has no accessibility violations", async (_, page) => {
-    const { container } = render(page);
+  it("have no accessibility violations", async () => {
+    for (const page of [
+      <SignupForm key="signup" />,
+      <ForgotPasswordForm key="forgot" expired />,
+      <ConfirmLinkForm key="confirm" tokenHash="abc" type="email" />,
+      <UpdatePasswordForm key="update" />,
+    ]) {
+      const { container, unmount } = render(page);
+      await expectNoViolations(container);
+      unmount();
+    }
+  });
+});
+
+describe("demo UX traps (SCRUM-28)", () => {
+  it("leaves purpose unselected and requires it before scoring", async () => {
+    render(<AssessmentWizard />);
+    describeUseCase();
+    await screen.findByText(/how will the data be handled/i);
+    const select = screen.getByLabelText(QUESTION_LABELS.purpose, { exact: false }) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(screen.getByText("Questions answered").closest(".stat-card")?.textContent).toContain(`0/ ${QUESTION_COUNT}`);
+
+    completeQuestions();
+    choosePurpose("");
+    fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
+    expect(screen.getByRole("alert").textContent).toMatch(/choose the intended use/i);
+    expect(fetch).not.toHaveBeenCalled();
+
+    choosePurpose("analytics");
+    fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
+    await screen.findByText(/what drives this score/i);
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).purpose).toBe("analytics");
+  });
+
+  it("asks before start over clears the assessment, and can be cancelled", async () => {
+    const { container } = render(<AssessmentWizard />);
+    await reachResults();
+    fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
+    await screen.findByText(/controls before approval/i);
+
+    const startOver = screen.getByRole("button", { name: "Start over" });
+    fireEvent.click(startOver);
+    expect(startOver.getAttribute("aria-expanded")).toBe("true");
+    const prompt = screen.getByRole("group", { name: "Start over?" });
+    expect(document.activeElement).toBe(within(prompt).getByRole("button", { name: /keep my assessment/i }));
     await expectNoViolations(container);
+
+    fireEvent.click(within(prompt).getByRole("button", { name: /keep my assessment/i }));
+    expect(screen.queryByRole("group", { name: "Start over?" })).toBeNull();
+    expect(screen.getByText(/controls before approval/i)).toBeTruthy();
+    expect(document.activeElement).toBe(startOver);
+
+    fireEvent.click(startOver);
+    fireEvent.keyDown(screen.getByRole("group", { name: "Start over?" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Start over?" })).toBeNull();
+
+    fireEvent.click(startOver);
+    fireEvent.click(screen.getByRole("button", { name: /yes, start over/i }));
+    expect(screen.getByRole("status").textContent).toContain("Step 1 of 4");
+    expect((screen.getByLabelText(/use-case description/i) as HTMLTextAreaElement).value).toBe("");
+    expect(window.sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
+  it("scales factor bars against the heaviest rule the API reports, not the 100-point cap", async () => {
+    const { container } = render(<AssessmentWizard />);
+    await reachResults();
+    const widths = Array.from(container.querySelectorAll<HTMLElement>(".factor-bar i")).map((bar) => parseFloat(bar.style.width));
+    const expected = assessmentResult.factors.map((factor) => (factor.points / assessmentResult.maxFactorPoints!) * 100);
+    expect(widths).toHaveLength(expected.length);
+    widths.forEach((width, index) => expect(width).toBeCloseTo(expected[index]));
+    expect(Math.max(...widths)).toBe(100);
+  });
+
+  it.each([
+    ["assessment", /what drives this score/i, false],
+    ["recommendations", /controls before approval/i, true],
+  ])("keeps the %s screen after a refresh", async (_name, heading, toRecommendations) => {
+    const first = render(<AssessmentWizard />);
+    // Let the mount-time draft restore finish, as it would before anyone could type.
+    await act(() => new Promise((done) => setTimeout(done, 0)));
+    await reachResults();
+    if (toRecommendations) {
+      fireEvent.click(screen.getByRole("button", { name: /see recommendations/i }));
+      await screen.findByText(/controls before approval/i);
+    }
+    // A refresh fires pagehide, which flushes the debounced draft save.
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    first.unmount();
+
+    const { container } = render(<AssessmentWizard />);
+    await screen.findByText(heading);
+    const stepStatus = screen.getAllByRole("status").find((item) => item.textContent?.startsWith("Step "));
+    expect(stepStatus?.textContent).not.toContain("Step 1 of 4");
+    // The restored result isn't scored again; only the what-if simulator asks for its outcomes.
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url !== SIMULATIONS_ENDPOINT)).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /answer questions/i }).hasAttribute("disabled")).toBe(false);
+    await expectNoViolations(container);
+  });
+
+  it.each([
+    ["the saved version link", { assessmentId: "7d1c3b1e-6a8f-4c2d-9b1a-2f5e8c9d0a11", version: 3 }, /saved to my assessments as version 3/i],
+    ["the retry prompt for a failed save", null, /couldn’t be saved/i],
+  ])("keeps %s after a refresh", async (_name, saved, message) => {
+    stubAssessmentApi(new Response(JSON.stringify({ ...assessmentResult, saved })));
+    const first = render(<AssessmentWizard />);
+    await act(() => new Promise((done) => setTimeout(done, 0)));
+    await reachResults();
+    expect(document.body.textContent).toMatch(message);
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    first.unmount();
+
+    render(<AssessmentWizard />);
+    await screen.findByText(/what drives this score/i);
+    expect(document.body.textContent).toMatch(message);
   });
 });

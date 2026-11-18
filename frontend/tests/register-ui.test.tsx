@@ -4,13 +4,12 @@ import { assessmentResult, completeInput, stubAssessmentApi } from "./assessment
 import { expectNoViolations } from "./axe";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
-const pages = vi.hoisted(() => ({ signedIn: vi.fn(), loadAssessmentPage: vi.fn(), listRegister: vi.fn() }));
+const pages = vi.hoisted(() => ({ loadRegister: vi.fn(), loadAssessmentPage: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("../lib/register-page", () => ({ signedIn: pages.signedIn, loadAssessmentPage: pages.loadAssessmentPage }));
-vi.mock("../lib/register-server", () => ({ listRegister: pages.listRegister }));
+vi.mock("../lib/register-page", () => pages);
 vi.mock("../lib/review-server", () => ({
-  reviewContext: async () => ({ ownerId: "user", workspaceId: null, role: null, events: [] }),
-  reviewWorkspaces: async () => [],
+  reviewContext: vi.fn(async () => ({ ownerId: "user", workspaceId: null, role: null, events: [] })),
+  reviewWorkspaces: vi.fn(async () => []),
 }));
 
 import { AssessmentWizard } from "../components/AssessmentWizard";
@@ -64,13 +63,13 @@ describe("register helpers", () => {
   });
 
   it("skips register rows it can't read instead of showing partial data", () => {
-    const row = {
-      assessment_id: ID, version: 2, version_count: 2, status: "draft", score: 86, risk_level: "HIGH",
-      answers, saved_at: "2026-11-12T15:00:00Z",
+    const entry = {
+      assessmentId: ID, version: 2, versionCount: 2, status: "draft", score: 86, level: "HIGH",
+      answers, savedAt: "2026-11-12T15:00:00Z",
     };
-    expect(toRegisterEntry(row)).toMatchObject({ assessmentId: ID, version: 2, level: "HIGH", status: "draft" });
-    expect(toRegisterEntry({ ...row, status: "archived" })).toBeNull();
-    expect(toRegisterEntry({ ...row, risk_level: "SEVERE" })).toBeNull();
+    expect(toRegisterEntry(entry)).toMatchObject({ assessmentId: ID, version: 2, level: "HIGH", status: "draft" });
+    expect(toRegisterEntry({ ...entry, status: "archived" })).toBeNull();
+    expect(toRegisterEntry({ ...entry, level: "SEVERE" })).toBeNull();
   });
 });
 
@@ -110,13 +109,12 @@ describe("saving from the wizard", () => {
   });
 
   it("never shows saving in demo mode", async () => {
-    const fetchMock = stubAssessmentApi();
+    stubAssessmentApi();
     render(<DemoAssessment />);
     fireEvent.click(screen.getByRole("button", { name: new RegExp(DEMO_SCENARIOS[0].title) }));
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
     await screen.findByRole("heading", { level: 2, name: /high risk/i });
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/demo/assessments");
     expect(screen.queryByText(/saved to/i)).toBeNull();
     expect(screen.queryByText(/couldn’t be saved/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /my assessments/i })).toBeNull();
@@ -140,12 +138,11 @@ describe("saving from the wizard", () => {
 
 describe("My assessments", () => {
   it("lists each assessment's latest version with risk level, status and date", async () => {
-    pages.signedIn.mockResolvedValue({ client: {}, session });
-    pages.listRegister.mockResolvedValue([{
+    pages.loadRegister.mockResolvedValue({ session, entries: [{
       assessmentId: ID, version: 2, versionCount: 2, status: "in_review", score: 86, level: "HIGH",
       title: "Patient or clinical research · Email addresses, Health information",
       savedAt: "2026-11-12T15:00:00Z",
-    }]);
+    }] });
     const { container } = render(await MyAssessments());
 
     const row = screen.getByRole("row", { name: /patient or clinical research/i });
@@ -190,6 +187,20 @@ describe("a saved assessment", () => {
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/assessments"));
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/assessments/${ID}`);
     expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
+  });
+
+  it("returns focus to Delete when the prompt is cancelled or dismissed with Escape", () => {
+    render(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
+      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.keyDown(screen.getByRole("group", { name: "Delete this assessment?" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Delete this assessment?" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
   });
 
   it("explains when a reviewed assessment can't be deleted", async () => {

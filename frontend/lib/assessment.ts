@@ -119,6 +119,9 @@ export type AssessmentInput = {
   regulations: Regulation[];
 } & { [Field in ChoiceField]: keyof (typeof CHOICE_QUESTIONS)[Field]["options"] | "" };
 
+/** Answers still being filled in. The intended use stays empty until picked: a default would silently add points (SCRUM-28). */
+export type DraftInput = Omit<AssessmentInput, "purpose"> & { purpose: Purpose | "" };
+
 export type RiskFactor = {
   ruleId: string;
   category: string;
@@ -154,15 +157,17 @@ export type AssessmentResult = {
   level: RiskLevel;
   guidance: string;
   factors: RiskFactor[];
+  /** The heaviest single rule in `rulesVersion`; factor bars are drawn against it. Absent on results saved before the API sent it. */
+  maxFactorPoints?: number;
   recommendations: Recommendation[];
   limitations: string[];
   assessedAt: string;
 };
 
-export const EMPTY_INPUT: AssessmentInput = {
+export const EMPTY_INPUT: DraftInput = {
   description: "",
   dataTypes: [],
-  purpose: "overlap",
+  purpose: "",
   regulations: [],
   ...(Object.fromEntries(CHOICE_FIELDS.map((field) => [field, ""])) as Record<ChoiceField, "">),
 };
@@ -189,7 +194,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasUniqueValues(values: string[]): boolean {
+export function hasUniqueValues(values: string[]): boolean {
   return new Set(values).size === values.length;
 }
 
@@ -199,14 +204,22 @@ function isSelectionOf(value: unknown, labels: object): boolean {
     && hasUniqueValues(value);
 }
 
-export function isAssessmentInput(value: unknown): value is AssessmentInput {
+export function isDraftInput(value: unknown): value is DraftInput {
   if (!isRecord(value)) return false;
   return typeof value.description === "string" && value.description.length <= DESCRIPTION_MAX_LENGTH
     && isSelectionOf(value.dataTypes, DATA_TYPE_LABELS)
     && isSelectionOf(value.regulations, REGULATION_LABELS)
     && CHOICE_FIELDS.every((field) => value[field] === ""
       || (typeof value[field] === "string" && Object.hasOwn(CHOICE_QUESTIONS[field].options, value[field])))
-    && typeof value.purpose === "string" && Object.hasOwn(PURPOSE_LABELS, value.purpose);
+    && (value.purpose === "" || isPurpose(value.purpose));
+}
+
+function isPurpose(value: unknown): value is Purpose {
+  return typeof value === "string" && Object.hasOwn(PURPOSE_LABELS, value);
+}
+
+export function isAssessmentInput(value: unknown): value is AssessmentInput {
+  return isDraftInput(value) && isPurpose(value.purpose);
 }
 
 export function validateDescription(value: string): string | null {
@@ -228,8 +241,9 @@ function sensitiveDataMessage(value: string): string | null {
   return `Remove personal or confidential details before continuing. This description contains ${describeSensitiveFindings(findings)}. Describe the kinds of data instead, such as “customer email addresses.”`;
 }
 
-export function validateQuestions(input: AssessmentInput): string | null {
+export function validateQuestions(input: DraftInput): string | null {
   if (input.dataTypes.length === 0) return "Select at least one type of information.";
+  if (!input.purpose) return "Choose the intended use before assessing the use case.";
   if (input.regulations.length === 0) return "Select the rules that may apply, or choose Not sure.";
   if (CHOICE_FIELDS.some((field) => !input[field])) {
     return "Answer every question before assessing the use case. Choose Not sure if you don't know yet.";
@@ -237,10 +251,15 @@ export function validateQuestions(input: AssessmentInput): string | null {
   return null;
 }
 
+/** The draft as scoreable answers, or null while any question is unanswered. */
+export function completeAnswers(draft: DraftInput): AssessmentInput | null {
+  return validateQuestions(draft) === null && isAssessmentInput(draft) ? draft : null;
+}
+
 const SCHEMA_VERSION = "3.0";
 export const ASSESSMENT_TIMEOUT_MS = 15_000;
 
-function isStringArray(value: unknown): value is string[] {
+export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
@@ -287,6 +306,8 @@ export function isAssessmentResult(value: unknown): value is AssessmentResult {
     && isRiskLevel(value.level)
     && typeof value.guidance === "string"
     && Array.isArray(value.factors) && value.factors.every(isRiskFactor)
+    && (value.maxFactorPoints === undefined
+      || (typeof value.maxFactorPoints === "number" && Number.isInteger(value.maxFactorPoints) && value.maxFactorPoints >= 1))
     && isStringArray(value.limitations)
     && Array.isArray(value.recommendations) && value.recommendations.every(isRecommendation)
     && typeof value.assessedAt === "string" && Number.isFinite(Date.parse(value.assessedAt));
@@ -297,7 +318,10 @@ export function isAssessmentResult(value: unknown): value is AssessmentResult {
   const score = value.score as number;
   const rawScore = factors.reduce((sum, factor) => sum + factor.points, 0);
 
+  const maxFactorPoints = value.maxFactorPoints as number | undefined;
+
   return hasUniqueValues(factors.map((factor) => factor.ruleId))
+    && factors.every((factor) => maxFactorPoints === undefined || factor.points <= maxFactorPoints)
     && score === Math.min(100, rawScore)
     && value.level === riskLevelFor(score)
     && hasUniqueValues(recommendations.map((item) => item.id))
@@ -311,7 +335,7 @@ export type SavedVersion = { assessmentId: string; version: number };
  */
 export type AssessmentOutcome = { result: AssessmentResult; saved?: SavedVersion | null };
 
-function isSavedVersion(value: unknown): value is SavedVersion {
+export function isSavedVersion(value: unknown): value is SavedVersion {
   return isRecord(value) && typeof value.assessmentId === "string"
     && typeof value.version === "number" && Number.isInteger(value.version) && value.version >= 1;
 }
@@ -333,10 +357,16 @@ export function toScoringPayload(input: AssessmentInput): Omit<AssessmentInput, 
   return { dataTypes, purpose, regulations, ...answers } as Omit<AssessmentInput, "description">;
 }
 
+/** The JSON body every scoring endpoint accepts. */
+export function scoringBody(input: AssessmentInput): string {
+  return JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) });
+}
+
 export const ASSESSMENTS_ENDPOINT = "/api/assessments";
 
-export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
-  endpoint = ASSESSMENTS_ENDPOINT): Promise<AssessmentOutcome> {
+/** POSTs the scored answers to a scoring endpoint and returns its JSON once `isValid` accepts it. */
+export async function postScoring<T>(input: AssessmentInput, endpoint: string,
+  isValid: (value: unknown) => value is T, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -346,23 +376,22 @@ export async function requestAssessment(input: AssessmentInput, signal?: AbortSi
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...toScoringPayload(input) }),
+      body: scoringBody(input),
       cache: "no-store",
       signal: controller.signal,
     });
     if (!response.ok) throw new AssessmentServiceError(response.status);
-
-    let result: unknown;
-    try {
-      result = await response.json();
-    } catch {
-      throw new Error("Assessment service returned an invalid response");
-    }
-    if (!isAssessmentResult(result)) throw new Error("Assessment service returned an invalid response");
-    const { saved, ...scored } = result as AssessmentResult & { saved?: unknown };
-    return { result: scored, saved: saved === undefined ? undefined : isSavedVersion(saved) ? saved : null };
+    const body: unknown = await response.json().catch(() => undefined);
+    if (!isValid(body)) throw new Error("Assessment service returned an invalid response");
+    return body;
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", abort);
   }
+}
+
+export async function requestAssessment(input: AssessmentInput, signal?: AbortSignal,
+  endpoint = ASSESSMENTS_ENDPOINT): Promise<AssessmentOutcome> {
+  const { saved, ...scored } = await postScoring(input, endpoint, isAssessmentResult, signal) as AssessmentResult & { saved?: unknown };
+  return { result: scored, saved: saved === undefined ? undefined : isSavedVersion(saved) ? saved : null };
 }

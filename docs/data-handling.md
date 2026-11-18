@@ -4,9 +4,10 @@ Implements SCRUM-16, updated for SCRUM-30 (saved assessments). The analyzer asse
 
 ## Decision
 
-**Scoring is stateless; signed-in results are saved to the person's own register.** FastAPI scores in memory and
-stores nothing. When a signed-in person completes an assessment, the Next.js server saves the scored answers and
-FastAPI's result to that person's governance register in Supabase Postgres (see [Governance register](#governance-register)).
+**Signed-in results are saved to the person's own register by the API that scored them.** When a signed-in person
+completes an assessment, FastAPI scores it in memory and, in the same request, saves the scored answers and its own
+result to that person's governance register in Supabase Postgres (see [Governance register](#governance-register)).
+Clients can't write to the register, so a saved score is always FastAPI's.
 The free-text **description is never saved**: it stays in the browser tab. Demo mode (`/demo`) saves nothing.
 Supabase manages authenticated accounts and session metadata. The application has no
 local session database. Next.js stores Supabase session tokens in HttpOnly, SameSite=Lax
@@ -62,17 +63,16 @@ A capitalized phrase is left alone when it names an organization ("Grant Thornto
 
 ## Data flow
 
-1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work.
+1. The person types into the wizard. Input is held in React state and mirrored to `sessionStorage` (`governance-assessment-draft-v2`) so a refresh does not lose work. Once scored, the current step, the returned result (score, factors, recommendations; no description text) and, when signed in, the saved assessment's random ID and version number are kept in the same entry, so a refresh reopens the results screen with its "Saved as version N" link (or its retry prompt, if saving failed) instead of step 1.
 2. On **Assess risk**, the browser sends only the scored fields to same-origin `POST /api/assessments`
    (or `POST /api/assessments/{id}/versions` when re-assessing). The Next.js server forwards them to FastAPI
    `POST /assessments` with the user's verified access token. Nothing goes in the URL or query string. FastAPI
    verifies the session and is the only scoring implementation; if it is unavailable, the browser displays an error
    and does not produce a score.
-3. FastAPI scores the request in memory, stores nothing, and returns the result, plus the answers it accepted,
-   with `Cache-Control: no-store`.
-4. The Next.js server saves those accepted answers and FastAPI's result to the register as the signed-in user, so
-   row-level security applies. The browser never supplies the score. If saving fails, the person still gets the
-   result and is told it wasn't saved. Demo scoring (`POST /api/demo/assessments`) skips this step entirely.
+3. FastAPI scores the request in memory and saves the accepted answers and its result to the register for the user
+   in the verified token. The browser never supplies the score, and FastAPI rejects any request that includes one.
+4. FastAPI returns the result and the saved version with `Cache-Control: no-store`. If saving fails, the person
+   still gets the result and is told it wasn't saved. Demo scoring (`POST /api/demo/assessments`) never saves.
 5. The PDF report is generated entirely in the browser (jsPDF) and downloaded with a generic filename (`data-governance-assessment.pdf`). It is never uploaded, and it carries no author or keyword metadata and no internal rule identifiers. See `frontend/lib/report.ts`.
 
 ## Governance register
@@ -90,9 +90,11 @@ rules: `supabase/migrations/`; isolation tests: `supabase/tests/database/assessm
 Never saved: the use-case description, imported documents, the PDF report, names, emails or any other free text.
 Assessments are titled from their answers (for example "Overlap analysis · Email addresses").
 
-**Who can see it.** Only the owner. Row-level security limits every read and write to rows whose `user_id` is the
-signed-in user; logged-out visitors and anonymous sign-ins have no access, and the app holds no service key that
-could bypass it. Answers and results can't be edited after saving. Owners can move a version between `draft` and
+**Who can see it.** Only the owner. The register lives in a `register` schema that the Supabase Data API doesn't
+expose, and browser tokens (`anon`, `authenticated`) have no grants on it. FastAPI is the only reader and writer: it
+connects as `register_api`, a role that can do nothing else and can't bypass row-level security, and it sets the
+verified user ID on each transaction so every read and write is limited to that user's rows. The Next.js server
+reads and changes the register only through FastAPI, and the app holds no service key. Answers and results can't be edited after saving. Owners can move a version between `draft` and
 `in_review`; approving and rejecting are reserved for the review workflow.
 
 **How long it is kept.** Until the owner deletes it or their account is deleted:
@@ -111,7 +113,7 @@ could bypass it. Answers and results can't be edited after saving. Owners can mo
 | Tab or window closed | Browser discards `sessionStorage`, so the draft is gone |
 | 30 minutes without interaction | Draft and result cleared; the person sees an expiry message |
 | Draft older than 30 minutes found on load | Discarded, not restored |
-| **Start over** | Draft and result cleared immediately |
+| **Start over** (after confirming) | Draft and result cleared immediately |
 | Earlier-build draft in `localStorage` (`-v1`) | Deleted on next visit |
 
 Constants live in `frontend/lib/session.ts` (`IDLE_TIMEOUT_MS`).
@@ -135,9 +137,9 @@ token revocation are set in Supabase. These rules cover the browser draft; saved
 
 - **Vercel (frontend):** dynamic server-rendered protected pages and same-origin API handlers.
   Free-text descriptions stay in the browser; responses containing identity or assessments are not cached.
-- **Supabase:** accounts, sessions and the governance register. Register access uses the signed-in user's token
-  through the Data API, with row-level security; only `authenticated` users have grants on the register tables.
-- **Render (FastAPI):** Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
+- **Supabase:** accounts, sessions and the governance register. Only FastAPI reaches the register, over the
+  connection pooler as `register_api`, with row-level security; the Data API doesn't expose it.
+- **Render (FastAPI):** holds the `register_api` connection string (`DATABASE_URL`) as a secret. Uvicorn access logs contain the client address, method, path (`/assessments`), and status, never request bodies. Do not enable request-body logging or debug middleware in staging or production.
 
 ## What we tell users
 

@@ -79,32 +79,30 @@ export function answersToInput(answers: unknown): AssessmentInput | null {
   return isAssessmentInput(input) ? input : null;
 }
 
-type VersionRow = {
-  id: string; assessment_id: string; version: number; status: string;
-  answers: unknown; result: unknown; created_at: string;
-};
-
-export function toSavedVersion(row: VersionRow): SavedAssessmentVersion | null {
-  const input = answersToInput(row.answers);
-  if (!input || !isAssessmentResult(row.result) || !isStatus(row.status)) return null;
+/** A version as FastAPI returns it in GET /assessments/{id}. */
+export function toSavedVersion(assessmentId: string, version: unknown): SavedAssessmentVersion | null {
+  if (!isRecord(version)) return null;
+  const input = answersToInput(version.answers);
+  if (!input || !isAssessmentResult(version.result) || !isStatus(version.status)
+    || typeof version.id !== "string" || typeof version.version !== "number" || typeof version.savedAt !== "string") {
+    return null;
+  }
   return {
-    id: row.id, assessmentId: row.assessment_id, version: row.version, status: row.status,
-    input, result: row.result, savedAt: row.created_at,
+    id: version.id, assessmentId, version: version.version, status: version.status,
+    input, result: version.result, savedAt: version.savedAt,
   };
 }
 
-type RegisterRow = {
-  assessment_id: string | null; version: number | null; version_count: number | null; status: string | null;
-  score: number | null; risk_level: string | null; answers: unknown; saved_at: string | null;
-};
-
-export function toRegisterEntry(row: RegisterRow): RegisterEntry | null {
-  const input = answersToInput(row.answers);
-  if (!input || !row.assessment_id || !row.version || !row.version_count || row.score === null
-    || !isStatus(row.status) || !isRiskLevel(row.risk_level) || !row.saved_at) return null;
+/** An entry as FastAPI returns it in GET /assessments. */
+export function toRegisterEntry(entry: unknown): RegisterEntry | null {
+  if (!isRecord(entry)) return null;
+  const input = answersToInput(entry.answers);
+  if (!input || typeof entry.assessmentId !== "string" || typeof entry.version !== "number"
+    || typeof entry.versionCount !== "number" || typeof entry.score !== "number" || !isStatus(entry.status)
+    || !isRiskLevel(entry.level) || typeof entry.savedAt !== "string") return null;
   return {
-    assessmentId: row.assessment_id, version: row.version, versionCount: row.version_count, status: row.status,
-    score: row.score, level: row.risk_level, title: assessmentTitle(input), savedAt: row.saved_at,
+    assessmentId: entry.assessmentId, version: entry.version, versionCount: entry.versionCount, status: entry.status,
+    score: entry.score, level: entry.level, title: assessmentTitle(input), savedAt: entry.savedAt,
   };
 }
 

@@ -6,8 +6,8 @@ import { notFound } from "next/navigation";
 
 /** Re-assessing adds versions to the same assessment; duplicating starts a new one from the same answers. */
 export async function ReopenedAssessment({ page, mode }: { page: AssessmentPageProps; mode: "reassess" | "duplicate" }) {
-  const { client, session, selected, latest } = await loadAssessmentPage(page);
-  const context = await reviewContext(client, selected.id, session.user.id);
+  const { accessToken, session, selected, latest } = await loadAssessmentPage(page);
+  const context = await reviewContext(accessToken, selected.id);
   if (context.ownerId !== session.user.id) notFound();
   const title = assessmentTitle(selected.input);
   const notice = mode === "reassess"

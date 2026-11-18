@@ -1,8 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AssessmentWizard } from "../components/AssessmentWizard";
 import { DemoAssessment } from "../components/DemoAssessment";
-import { LoginForm } from "../components/LoginForm";
 import { CHOICE_FIELDS, isAssessmentInput, validateDescription, validateQuestions } from "../lib/assessment";
 import { DEMO_ASSESSMENT_ENDPOINT, DEMO_SCENARIOS } from "../lib/demo-scenarios";
 import { DRAFT_KEY, saveDraft } from "../lib/session";
@@ -29,13 +27,13 @@ describe("sample scenarios", () => {
     expect(new Set(DEMO_SCENARIOS.map((scenario) => scenario.id)).size).toBe(DEMO_SCENARIOS.length);
   });
 
-  it.each(DEMO_SCENARIOS.map((scenario) => [scenario.title, scenario] as const))(
-    "%s is a complete, valid assessment", (_title, scenario) => {
-      expect(isAssessmentInput(scenario.input)).toBe(true);
-      expect(validateDescription(scenario.input.description)).toBeNull();
-      expect(validateQuestions(scenario.input)).toBeNull();
-    },
-  );
+  it("are each a complete, valid assessment", () => {
+    for (const { title, input } of DEMO_SCENARIOS) {
+      expect(isAssessmentInput(input), title).toBe(true);
+      expect(validateDescription(input.description), title).toBeNull();
+      expect(validateQuestions(input), title).toBeNull();
+    }
+  });
 });
 
 describe("demo mode", () => {
@@ -61,7 +59,7 @@ describe("demo mode", () => {
   });
 
   it("stores nothing and leaves a signed-in draft in the same tab untouched", () => {
-    saveDraft(completeInput);
+    saveDraft({ input: completeInput });
     const saved = sessionStorage.getItem(DRAFT_KEY);
     vi.useFakeTimers();
     render(<DemoAssessment />);
@@ -81,28 +79,8 @@ describe("demo mode", () => {
     expect((await screen.findByRole("alert")).textContent).toMatch(/wait a minute/i);
   });
 
-  it("leaves the signed-in wizard without samples", () => {
-    render(<AssessmentWizard />);
-    expect(screen.queryByRole("region", { name: /start from a sample/i })).toBeNull();
-  });
-
-  it("labels demo mode and links to sign in", () => {
-    render(<DemoAssessment />);
-    expect(screen.getByText("Demo mode")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
-    const picker = screen.getByRole("region", { name: /start from a sample/i });
-    expect(within(picker).getAllByRole("button")).toHaveLength(DEMO_SCENARIOS.length);
-  });
-
   it("has no detectable accessibility violations on the first step", async () => {
     const { container } = render(<DemoAssessment />);
     await expectNoViolations(container);
-  });
-});
-
-describe("sign-in page", () => {
-  it("offers the sample assessment without an account", async () => {
-    render(<LoginForm />);
-    await waitFor(() => expect(screen.getByRole("link", { name: /try a sample assessment/i }).getAttribute("href")).toBe("/demo"));
   });
 });

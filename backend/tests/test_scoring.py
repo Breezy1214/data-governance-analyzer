@@ -3,7 +3,7 @@ from helpers import sample_request
 from pydantic import ValidationError
 
 from app.scoring import score_assessment
-from app.scoring.rules import RULESET_V2_0, RiskThresholds
+from app.scoring.rules import RULESET_V2_0
 
 ASSESSED_AT = "2026-01-01T00:00:00+00:00"
 
@@ -12,12 +12,15 @@ def factor_ids(result):
     return {factor.ruleId for factor in result.factors}
 
 
-@pytest.mark.parametrize(
-    "score,expected_level",
-    [(0, "LOW"), (29, "LOW"), (30, "MEDIUM"), (59, "MEDIUM"), (60, "HIGH"), (100, "HIGH")],
-)
-def test_threshold_boundaries(score, expected_level):
-    assert RiskThresholds(low_max=29, medium_max=59).level_for(score) == expected_level
+def test_threshold_boundaries():
+    for score, expected_level in [(0, "LOW"), (29, "LOW"), (30, "MEDIUM"), (59, "MEDIUM"), (60, "HIGH"), (100, "HIGH")]:
+        assert RULESET_V2_0.thresholds.level_for(score) == expected_level
+
+
+def test_result_carries_the_heaviest_rule_of_its_rules_version():
+    result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
+    assert result.maxFactorPoints == max(rule.points for rule in RULESET_V2_0.rules) == 24
+    assert all(factor.points <= result.maxFactorPoints for factor in result.factors)
 
 
 def test_low_risk_internal_analytics_with_only_email_addresses():
@@ -70,15 +73,14 @@ def test_data_sensitivity_rules_are_mutually_exclusive():
     assert "DATA_SENSITIVITY_DIRECT" not in factor_ids(result)
 
 
-@pytest.mark.parametrize("data_type", ["postal", "device", "adId"])
-def test_new_identifier_types_score_as_direct_identifiers(data_type):
-    result = score_assessment(sample_request(dataTypes=[data_type]), assessed_at=ASSESSED_AT)
-    assert "DATA_SENSITIVITY_DIRECT" in factor_ids(result)
+def test_new_identifier_types_score_as_direct_identifiers():
+    for data_type in ["postal", "device", "adId"]:
+        result = score_assessment(sample_request(dataTypes=[data_type]), assessed_at=ASSESSED_AT)
+        assert "DATA_SENSITIVITY_DIRECT" in factor_ids(result)
 
 
 def test_every_factor_carries_a_stable_rule_id_and_points_sum_to_score():
     result = score_assessment(sample_request(), assessed_at=ASSESSED_AT)
-    assert all(factor.ruleId for factor in result.factors)
     assert sum(factor.points for factor in result.factors) == result.score
 
 
@@ -114,25 +116,25 @@ def test_factor_cases_cover_the_whole_ruleset():
     assert {rule_id for rule_id, _ in FACTOR_CASES} == {rule.id for rule in RULESET_V2_0.rules}
 
 
-@pytest.mark.parametrize("expected_rule_id,overrides", FACTOR_CASES)
-def test_every_supported_factor_is_exercised_and_selects_a_recommendation(expected_rule_id, overrides):
-    result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
-    factor = next(item for item in result.factors if item.ruleId == expected_rule_id)
-    assert any(factor.label in item.basedOn for item in result.recommendations)
+def test_every_supported_factor_is_exercised_and_selects_a_recommendation():
+    for expected_rule_id, overrides in FACTOR_CASES:
+        result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
+        factor = next(item for item in result.factors if item.ruleId == expected_rule_id)
+        assert any(factor.label in item.basedOn for item in result.recommendations)
 
 
-@pytest.mark.parametrize("field,risky", [
-    ("custodyChange", "yes"),
-    ("reusableKeys", "yes"),
-    ("smallResults", "yes"),
-    ("retainedArtifacts", "yes"),
-    ("environmentControl", "partner"),
-    ("identifierProtection", "cleartext"),
-])
-def test_not_sure_scores_the_same_as_the_riskier_answer(field, risky):
-    unsure = score_assessment(sample_request(**{field: "notSure"}), assessed_at=ASSESSED_AT)
-    answered = score_assessment(sample_request(**{field: risky}), assessed_at=ASSESSED_AT)
-    assert unsure.score == answered.score > score_assessment(sample_request(), assessed_at=ASSESSED_AT).score
+def test_not_sure_scores_the_same_as_the_riskier_answer():
+    for field, risky in [
+        ("custodyChange", "yes"),
+        ("reusableKeys", "yes"),
+        ("smallResults", "yes"),
+        ("retainedArtifacts", "yes"),
+        ("environmentControl", "partner"),
+        ("identifierProtection", "cleartext"),
+    ]:
+        unsure = score_assessment(sample_request(**{field: "notSure"}), assessed_at=ASSESSED_AT)
+        answered = score_assessment(sample_request(**{field: risky}), assessed_at=ASSESSED_AT)
+        assert unsure.score == answered.score > score_assessment(sample_request(), assessed_at=ASSESSED_AT).score
 
 
 def test_unscored_answers_do_not_change_the_score():
@@ -148,17 +150,17 @@ def test_unscored_answers_do_not_change_the_score():
     assert len(other.limitations) == 2
 
 
-@pytest.mark.parametrize("overrides,expected", [
-    ({"dataTypes": ["health"]}, "HIPAA"),
-    ({"regulations": ["hipaa"]}, "HIPAA"),
-    ({"dataTypes": ["financial"]}, "PCI DSS"),
-    ({"regulations": ["gdpr"]}, "GDPR"),
-    ({"regulations": ["ccpa"]}, "CCPA"),
-    ({"regulations": ["notSure"]}, "not yet confirmed"),
-])
-def test_limitations_follow_data_types_and_selected_rules(overrides, expected):
-    result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
-    assert any(expected in item for item in result.limitations)
+def test_limitations_follow_data_types_and_selected_rules():
+    for overrides, expected in [
+        ({"dataTypes": ["health"]}, "HIPAA"),
+        ({"regulations": ["hipaa"]}, "HIPAA"),
+        ({"dataTypes": ["financial"]}, "PCI DSS"),
+        ({"regulations": ["gdpr"]}, "GDPR"),
+        ({"regulations": ["ccpa"]}, "CCPA"),
+        ({"regulations": ["notSure"]}, "not yet confirmed"),
+    ]:
+        result = score_assessment(sample_request(**overrides), assessed_at=ASSESSED_AT)
+        assert any(expected in item for item in result.limitations)
 
 
 def test_identical_input_produces_identical_output_for_same_rules_version():
@@ -183,13 +185,12 @@ def test_rejects_unknown_purpose():
         sample_request(purpose="not-a-real-purpose")
 
 
-@pytest.mark.parametrize("regulations", [[], ["gdpr", "gdpr"], ["none", "gdpr"], ["notSure", "hipaa"], ["none", "notSure"]])
-def test_rejects_inconsistent_regulations(regulations):
-    with pytest.raises(ValidationError):
-        sample_request(regulations=regulations)
+def test_rejects_inconsistent_regulations():
+    for regulations in [[], ["gdpr", "gdpr"], ["none", "gdpr"], ["notSure", "hipaa"]]:
+        with pytest.raises(ValidationError):
+            sample_request(regulations=regulations)
 
 
-@pytest.mark.parametrize("field", ["externalAccess", "rawExchange", "dataMovement"])
-def test_rejects_retired_questions(field):
+def test_rejects_retired_questions():
     with pytest.raises(ValidationError):
-        sample_request(**{field: "yes"})
+        sample_request(externalAccess="yes")

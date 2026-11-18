@@ -16,10 +16,10 @@ it("prints the persisted sign-off and omits it for unapproved or mismatched reco
   const event: ReviewEvent = { id: 1, version_id: "v1", assessment_id: "a1", version: 3, actor_id: "r1",
     actor_label: "Reviewer", occurred_at: "2026-11-14T12:00:00Z", from_status: "in_review", to_status: "approved",
     comment: "Controls checked", rules_version: "2.0", mapping_version: "2.0" };
-  const model = buildReportModel(completeInput, assessmentResult, event);
+  const model = buildReportModel(completeInput, assessmentResult, null, event);
   expect(JSON.stringify(model)).toContain("Reviewer");
   expect(JSON.stringify(model)).toContain("2026-11-14T12:00:00Z");
   for (const invalid of [undefined, { ...event, to_status: "rejected" }, { ...event, mapping_version: "old" }]) {
-    expect(buildReportModel(completeInput, assessmentResult, invalid).sections.some((s) => s.heading === "Review sign-off")).toBe(false);
+    expect(buildReportModel(completeInput, assessmentResult, null, invalid).sections.some((s) => s.heading === "Review sign-off")).toBe(false);
   }
 });

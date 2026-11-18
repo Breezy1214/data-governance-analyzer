@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ASSESSMENT_TIMEOUT_MS, type AssessmentInput, type AssessmentResult } from "@/lib/assessment";
 import { downloadAssessmentReport } from "@/lib/report";
 import { DESCRIPTION_NOT_SAVED, REGISTER_PATH } from "@/lib/register";
+import { ConfirmPanel } from "@/components/ConfirmPanel";
+import type { SimulatedPlan } from "@/lib/simulation";
+
 import type { ReviewEvent } from "@/lib/review";
 
 const DELETE_FAILED = "The assessment couldn't be deleted. Please try again.";
 
-export function SavedAssessmentActions({
-  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, isOwner = true, review,
-}: {
+export type SavedAssessmentActionsProps = {
   assessmentId: string;
   input: AssessmentInput;
   result: AssessmentResult;
@@ -20,9 +22,15 @@ export function SavedAssessmentActions({
   duplicateHref: string;
   versionCount: number;
   deletable: boolean;
+  /** The what-if plan to add to the report, kept apart from the saved result. */
+  simulated?: SimulatedPlan | null;
   isOwner?: boolean;
   review?: ReviewEvent;
-}) {
+};
+
+export function SavedAssessmentActions({
+  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, simulated = null, isOwner = true, review,
+}: SavedAssessmentActionsProps) {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -34,7 +42,7 @@ export function SavedAssessmentActions({
     setDownloading(true);
     setError("");
     try {
-      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, undefined, review);
+      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, simulated, undefined, review);
     } catch {
       setError("The report could not be generated. Please try again.");
     } finally {
@@ -59,28 +67,34 @@ export function SavedAssessmentActions({
     setConfirming(false);
   }
 
+  // The Delete button is hidden while the prompt is open, so render it before returning focus.
+  const cancelDelete = () => {
+    flushSync(() => setConfirming(false));
+    deleteButton.current?.focus();
+  };
+
   const versions = versionCount === 1 ? "its only version" : `all ${versionCount} versions`;
   return <>
     {error && <p className="error" role="alert">{error}</p>}
     {confirming ? (
-      <div className="card confirm-delete" role="group" aria-labelledby="confirm-delete-heading">
-        <h3 className="card-title" id="confirm-delete-heading">Delete this assessment?</h3>
-        <p className="lede">This permanently deletes {versions}. It can’t be undone.</p>
-        <div className="actions">
-          <button className="secondary" type="button" disabled={deleting}
-            onClick={() => { setConfirming(false); deleteButton.current?.focus(); }}>Keep it</button>
-          <button className="destructive" type="button" disabled={deleting} onClick={remove}>
-            {deleting ? "Deleting…" : "Delete permanently"}
-          </button>
-        </div>
-      </div>
+      <ConfirmPanel
+        id="confirm-delete"
+        title="Delete this assessment?"
+        cancelLabel="Keep it"
+        confirmLabel={deleting ? "Deleting…" : "Delete permanently"}
+        onCancel={cancelDelete}
+        onConfirm={remove}
+        busy={deleting}
+      >
+        This permanently deletes {versions}. It can’t be undone.
+      </ConfirmPanel>
     ) : (
       <div className="actions wrap">
         <div>
           {isOwner && <Link className="secondary" href={duplicateHref}>Duplicate</Link>}
-          {deletable
+          {isOwner && (deletable
             ? <button ref={deleteButton} className="destructive" type="button" onClick={() => setConfirming(true)}>Delete</button>
-            : <span className="method-note">Submitted assessments can’t be deleted; their audit history is retained.</span>}
+            : <span className="method-note">Submitted assessments are retained and can’t be deleted.</span>)}
         </div>
         <div>
           <button className="secondary" type="button" disabled={downloading} onClick={download}>
