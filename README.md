@@ -22,7 +22,8 @@ Press `Ctrl+C` to stop the frontend and backend.
 
 ### Backend
 
-The backend requires Python 3.12, the version CI tests against.
+The backend requires Python 3.12, the version CI tests against. If an existing `backend/.venv` was made with an older
+Python, delete it and recreate it with the steps below; `scripts/start-dev.sh` refuses to start it otherwise.
 
 ```bash
 cd backend
@@ -80,13 +81,18 @@ and point `API_BASE_URL` at the backend. Do not commit credentials or production
 
 ### Hardening
 
-- Set `APP_ENV` to `staging` or `production` on deployed backends. Outside `development`, `local` and `test`,
-  `/docs`, `/redoc` and `/openapi.json` are not served and return 404.
+- `APP_ENV` defaults to `production`, so a deploy that leaves it unset fails closed. Outside `development`,
+  `local` and `test`, `/docs`, `/redoc` and `/openapi.json` are not served and return 404. `backend/.env.example`
+  sets `APP_ENV=development` for local runs.
 - The frontend sends a Content-Security-Policy, `X-Frame-Options: DENY`, `Referrer-Policy`,
   `X-Content-Type-Options` and `Permissions-Policy` on every response (`frontend/next.config.ts`).
 - Signed-in scoring (`POST /assessments`, re-assessing, `POST /simulations`) is limited per user and overall
   (`SCORING_RATE_PER_USER`, `SCORING_RATE_TOTAL`, per minute). Sign-in, sign-up, password reset and email-link
-  routes allow 10 attempts per minute per visitor. Throttled requests get a 429 with a `Retry-After` header.
+  routes are limited per visitor per minute (30 for sign-in, sign-up and email links; 10 for password reset
+  requests and password changes). Throttled requests get a 429 with a `Retry-After` header.
+- Set the same random `DEMO_PROXY_SECRET` on the frontend and backend (for example `openssl rand -hex 32`).
+  The backend only trusts the frontend's `X-Demo-Client` visitor header when it arrives with that secret;
+  anyone calling the API directly is limited by their own network address.
 
 Supabase manages login and refresh sessions. Next.js uses `@supabase/ssr` cookies and
 FastAPI verifies access-token signatures through the project's JWKS endpoint.

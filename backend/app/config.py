@@ -9,7 +9,8 @@ LOCAL_ENVIRONMENTS = frozenset({"development", "local", "test"})
 
 @dataclass(frozen=True)
 class Settings:
-    environment: str = "development"
+    # Fails closed: a deploy that forgets APP_ENV hides the API docs. .env.example sets development locally.
+    environment: str = "production"
     version: str = "0.1.0"
     max_request_bytes: int = 16 * 1024
     supabase_url: str = ""
@@ -21,6 +22,8 @@ class Settings:
     scoring_rate_total: int = 600
     # The register_api role's connection string; without it, signed-in results are scored but not saved.
     database_url: str = ""
+    # Shared with the Next.js server. X-Demo-Client is only trusted on requests that carry it.
+    demo_proxy_secret: str = ""
 
     @property
     def docs_enabled(self) -> bool:
@@ -48,4 +51,5 @@ class Settings:
             scoring_rate_per_user=int(os.getenv("SCORING_RATE_PER_USER", cls.scoring_rate_per_user)),
             scoring_rate_total=int(os.getenv("SCORING_RATE_TOTAL", cls.scoring_rate_total)),
             database_url=os.getenv("DATABASE_URL", ""),
+            demo_proxy_secret=os.getenv("DEMO_PROXY_SECRET", ""),
         )

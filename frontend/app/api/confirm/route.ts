@@ -1,9 +1,8 @@
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
-import { AuthenticationError, accountError, json, sameOriginRoute, serverAuth } from "@/lib/auth-server";
-import { limitAuthAttempts } from "@/lib/rate-limit";
+import { AuthenticationError, accountError, json, serverAuth } from "@/lib/auth-server";
+import { throttledRoute } from "@/lib/rate-limit";
 
-export const POST = sameOriginRoute(async (request) => {
-  limitAuthAttempts(request, "confirm");
+export const POST = throttledRoute("confirm", async (request) => {
   const input = await request.json().catch(() => null);
   const tokenHash = typeof input?.tokenHash === "string" ? input.tokenHash : "";
   const type = input?.type === "email" || input?.type === "recovery" ? (input.type as "email" | "recovery") : null;

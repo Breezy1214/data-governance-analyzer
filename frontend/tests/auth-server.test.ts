@@ -11,7 +11,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ getAll: () => [], set: mocks.setCookie }) }));
 import { currentSession, sameOrigin } from "../lib/auth-server";
-import { AUTH_ATTEMPTS_PER_WINDOW, AUTH_WINDOW_MS, limitAuthAttempts, resetAuthAttempts } from "../lib/rate-limit";
+import { AUTH_ATTEMPTS_PER_WINDOW, AUTH_WINDOW_MS, type AuthRoute, limitAuthAttempts, resetAuthAttempts } from "../lib/rate-limit";
 import securityConfig, { securityHeaders } from "../next.config";
 import { POST as login } from "../app/api/login/route";
 import { POST as logout } from "../app/api/logout/route";
@@ -132,6 +132,7 @@ describe("Supabase authentication routes", () => {
   });
 
   it("forwards public demo scoring without credentials", async () => {
+    vi.stubEnv("DEMO_PROXY_SECRET", "proxy-secret");
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 14 }));
     vi.stubGlobal("fetch", fetchMock);
     const response = await assessDemo(request("demo/assessments", undefined, { schemaVersion: "3.0" },
@@ -143,15 +144,28 @@ describe("Supabase authentication routes", () => {
     expect(options.headers.Authorization).toBeUndefined();
     expect(options.headers.Cookie).toBeUndefined();
     expect(options.headers["X-Demo-Client"]).toBe("203.0.113.7");
+    expect(options.headers["X-Demo-Proxy-Secret"]).toBe("proxy-secret");
     expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
+  it("does not name the demo visitor without the shared proxy secret", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ score: 14 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await assessDemo(request("demo/assessments", undefined, {}, { "X-Forwarded-For": "203.0.113.7" }));
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.headers["X-Demo-Client"]).toBeUndefined();
+    expect(options.headers["X-Demo-Proxy-Secret"]).toBeUndefined();
+  });
+
   it("rejects cross-site demo scoring and passes rate limits through", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "rate_limited" }, { status: 429 }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": "60" } }));
     vi.stubGlobal("fetch", fetchMock);
     expect((await assessDemo(request("demo/assessments", "https://attacker.test"))).status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect((await assessDemo(request("demo/assessments"))).status).toBe(429);
+    const limited = await assessDemo(request("demo/assessments"));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
   });
 
   it("does not trust an unverified cookie session", async () => {
@@ -286,7 +300,10 @@ describe("account creation and recovery", () => {
 
   it("reports rate limits and hides provider details", async () => {
     mocks.signUp.mockResolvedValue({ data: {}, error: { status: 429, code: "over_email_send_rate_limit", message: "provider detail" } });
-    expect((await signup(request("signup", undefined, credentials))).status).toBe(429);
+    const limited = await signup(request("signup", undefined, credentials));
+    expect(limited.status).toBe(429);
+    // Supabase's own limits run on their own windows, so this app doesn't guess a Retry-After for them.
+    expect(limited.headers.get("Retry-After")).toBeNull();
     mocks.signUp.mockResolvedValue({ data: {}, error: { status: 400, code: "email_address_not_authorized", message: "provider detail" } });
     const response = await signup(request("signup", undefined, credentials));
     expect(response.status).toBe(503);
@@ -344,32 +361,47 @@ describe("account creation and recovery", () => {
 describe("auth attempt throttling", () => {
   const visitor = (address: string) => ({ "X-Forwarded-For": `${address}, 10.0.0.1` });
 
-  it("throttles rapid repeated sign-ins from one visitor with a clear message", async () => {
-    for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_WINDOW; attempt++) {
-      expect((await login(request("login", undefined, undefined, visitor("203.0.113.5")))).status).toBe(200);
-    }
-    const throttled = await login(request("login", undefined, undefined, visitor("203.0.113.5")));
-    expect(throttled.status).toBe(429);
-    expect((await throttled.json()).message).toMatch(/Too many attempts/);
-    expect(throttled.headers.get("Retry-After")).toBe("60");
-    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(AUTH_ATTEMPTS_PER_WINDOW);
+  // Every throttled route, with a valid body and the provider call the throttle must stop.
+  const ROUTES: Record<AuthRoute, { handler: (request: Request) => Promise<Response>; body: unknown; provider: () => unknown[] }> = {
+    login: { handler: login, body: undefined, provider: () => mocks.signInWithPassword.mock.calls },
+    signup: { handler: signup, body: { email: "new@example.test", password: "plum kettle orbit lantern" },
+      provider: () => mocks.signUp.mock.calls },
+    confirm: { handler: confirm, body: { tokenHash: "abc", type: "email" }, provider: () => mocks.verifyOtp.mock.calls },
+    "forgot-password": { handler: forgotPassword, body: { email: "client@example.test" },
+      provider: () => mocks.resetPasswordForEmail.mock.calls },
+    "update-password": { handler: updatePassword, body: { password: "plum kettle orbit lantern" },
+      provider: () => mocks.updateUser.mock.calls },
+  };
 
-    expect((await login(request("login", undefined, undefined, visitor("198.51.100.7")))).status).toBe(200);
+  beforeEach(() => {
+    for (const mock of [mocks.signUp, mocks.verifyOtp, mocks.resetPasswordForEmail, mocks.updateUser]) {
+      mock.mockResolvedValue({ data: {}, error: null });
+    }
+    mocks.getClaims.mockResolvedValue({ data: { claims: {
+      sub: "user-id", email: "client@example.test", is_anonymous: false,
+      amr: [{ method: "otp", timestamp: Math.floor(Date.now() / 1000) }],
+    } }, error: null });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => new Response("")));
   });
 
-  it("throttles password reset requests before contacting Supabase", async () => {
-    mocks.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
-    for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_WINDOW; attempt++) {
-      await forgotPassword(request("forgot-password", undefined, { email: "client@example.test" }, visitor("203.0.113.9")));
+  it.each(Object.keys(ROUTES) as AuthRoute[])("throttles %s per visitor before contacting Supabase", async (route) => {
+    const { handler, body, provider } = ROUTES[route];
+    const limit = AUTH_ATTEMPTS_PER_WINDOW[route];
+    for (let attempt = 0; attempt < limit; attempt++) {
+      expect((await handler(request(route, undefined, body, visitor("203.0.113.5")))).status).toBe(200);
     }
-    const throttled = await forgotPassword(request("forgot-password", undefined, { email: "client@example.test" }, visitor("203.0.113.9")));
+    const throttled = await handler(request(route, undefined, body, visitor("203.0.113.5")));
     expect(throttled.status).toBe(429);
-    expect(mocks.resetPasswordForEmail).toHaveBeenCalledTimes(AUTH_ATTEMPTS_PER_WINDOW);
+    expect((await throttled.json()).message).toMatch(/Too many attempts/);
+    expect(throttled.headers.get("Retry-After")).toBe(String(AUTH_WINDOW_MS / 1000));
+    expect(provider()).toHaveLength(limit);
+
+    expect((await handler(request(route, undefined, body, visitor("198.51.100.7")))).status).toBe(200);
   });
 
   it("allows attempts again once the window has passed", () => {
     const attempt = (now: number) => limitAuthAttempts(request("login", undefined, undefined, visitor("192.0.2.1")), "login", now);
-    for (let count = 0; count < AUTH_ATTEMPTS_PER_WINDOW; count++) attempt(0);
+    for (let count = 0; count < AUTH_ATTEMPTS_PER_WINDOW.login; count++) attempt(0);
     expect(() => attempt(1)).toThrow();
     expect(() => attempt(AUTH_WINDOW_MS)).not.toThrow();
   });

@@ -17,6 +17,16 @@ def test_api_docs_are_hidden_outside_local_development(environment):
         assert client.get(path).status_code == 404, path
 
 
+def test_api_docs_are_hidden_when_app_env_is_unset(monkeypatch):
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", SUPABASE_URL)
+    settings = Settings.from_env()
+    assert settings.environment == "production"
+    client = TestClient(create_app(settings))
+    for path in DOC_ROUTES:
+        assert client.get(path).status_code == 404, path
+
+
 def test_api_docs_are_served_in_local_development():
     client = TestClient(create_app(Settings(supabase_url=SUPABASE_URL, environment="development")))
     for path in DOC_ROUTES:

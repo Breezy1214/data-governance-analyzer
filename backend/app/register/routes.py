@@ -13,7 +13,7 @@ from psycopg_pool import PoolTimeout
 
 from app.auth import require_session
 from app.logging_config import logger
-from app.rate_limit import require_scoring_quota
+from app.rate_limit import ScoredClaims
 from app.register.models import (
     AssessmentRecord,
     AssessmentVersion,
@@ -73,16 +73,15 @@ def _score_and_save(request: Request, payload: AssessmentRequest, response: Resp
     return SignedInAssessmentResponse(**result.model_dump(), saved=saved)
 
 
-@router.post("/assessments", response_model=SignedInAssessmentResponse, dependencies=[Depends(require_scoring_quota)])
+@router.post("/assessments", response_model=SignedInAssessmentResponse)
 def create_assessment(request: Request, payload: AssessmentRequest, response: Response,
-                      claims: Claims, store: Store):
+                      claims: ScoredClaims, store: Store):
     return _score_and_save(request, payload, response, claims, store, None)
 
 
-@router.post("/assessments/{assessment_id}/versions", response_model=SignedInAssessmentResponse,
-             dependencies=[Depends(require_scoring_quota)])
+@router.post("/assessments/{assessment_id}/versions", response_model=SignedInAssessmentResponse)
 def reassess(assessment_id: str, request: Request, payload: AssessmentRequest, response: Response,
-             claims: Claims, store: Store):
+             claims: ScoredClaims, store: Store):
     return _score_and_save(request, payload, response, claims, store, _assessment_id(assessment_id))
 
 

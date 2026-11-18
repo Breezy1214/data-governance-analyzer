@@ -1,11 +1,10 @@
-import { accountError, json, parseEmail, sameOriginRoute, serverAuth } from "@/lib/auth-server";
-import { limitAuthAttempts } from "@/lib/rate-limit";
+import { accountError, json, parseEmail, serverAuth } from "@/lib/auth-server";
+import { throttledRoute } from "@/lib/rate-limit";
 import { requireNewPassword } from "@/lib/new-password";
 
 const EXISTING_ACCOUNT_CODES = ["user_already_exists", "email_exists"];
 
-export const POST = sameOriginRoute(async (request) => {
-  limitAuthAttempts(request, "signup");
+export const POST = throttledRoute("signup", async (request) => {
   const input = await request.json().catch(() => null);
   const email = parseEmail(input?.email);
   const password = await requireNewPassword(input?.password);

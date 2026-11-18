@@ -1,9 +1,8 @@
-import { accountError, json, requireEmailLinkSession, sameOriginRoute } from "@/lib/auth-server";
-import { limitAuthAttempts } from "@/lib/rate-limit";
+import { accountError, json, requireEmailLinkSession } from "@/lib/auth-server";
+import { throttledRoute } from "@/lib/rate-limit";
 import { requireNewPassword } from "@/lib/new-password";
 
-export const POST = sameOriginRoute(async (request) => {
-  limitAuthAttempts(request, "update-password");
+export const POST = throttledRoute("update-password", async (request) => {
   const { client } = await requireEmailLinkSession();
   const input = await request.json().catch(() => null);
   const password = await requireNewPassword(input?.password);
