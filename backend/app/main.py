@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 from psycopg import Error as DatabaseError
 from psycopg_pool import PoolTimeout
 
-from app.auth import TokenVerifier, require_session
+from app.auth import TokenVerifier
 from app.config import Settings
 from app.logging_config import configure_logging, logger
-from app.rate_limit import SlidingWindowLimiter, require_demo_quota
+from app.rate_limit import ScoredClaims, SlidingWindowLimiter, require_demo_quota
 from app.register.reviews import router as review_router
 from app.register.routes import UNAVAILABLE, RegisterUnavailable
 from app.register.routes import router as register_router
@@ -47,26 +47,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Transparent rule-based privacy risk-scoring service.",
         version=settings.version,
         lifespan=lifespan,
+        # Outside local development the routes are not registered at all, so /docs, /redoc and
+        # /openapi.json return 404 instead of advertising the API's shape.
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
 
     app.state.settings = settings
     app.state.register_store = store
     app.state.demo_limiter = SlidingWindowLimiter(settings.demo_rate_per_client, settings.demo_rate_total)
+    app.state.scoring_limiter = SlidingWindowLimiter(settings.scoring_rate_per_user, settings.scoring_rate_total)
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_bytes)
 
-    def error_response(status: int, message: str, error: str | None = None) -> JSONResponse:
+    def error_response(status: int, message: str, error: str | None = None,
+                       headers: dict[str, str] | None = None) -> JSONResponse:
         request_id = str(uuid.uuid4())
         error = error or ERROR_CODES.get(status, "request_failed")
         logger.warning("request_rejected", extra={"fields": {"requestId": request_id, "error": error}})
         return JSONResponse(
             status_code=status,
             content={"error": error, "message": message, "requestId": request_id},
-            headers={"Cache-Control": "no-store"},
+            headers={**(headers or {}), "Cache-Control": "no-store"},
         )
 
     @app.exception_handler(HTTPException)
     async def handle_http_error(request: Request, exc: HTTPException) -> JSONResponse:
-        return error_response(exc.status_code, exc.detail)
+        return error_response(exc.status_code, exc.detail, headers=exc.headers)
 
     @app.exception_handler(RegisterUnavailable)
     @app.exception_handler(DatabaseError)
@@ -116,8 +123,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # What-if re-scoring for the result on screen. Neither route touches the register, so a simulation can
     # never change a saved assessment. One call returns every combination, so toggling needs no more requests.
-    @app.post("/simulations", response_model=Simulation, tags=["simulation"], dependencies=[Depends(require_session)])
-    def create_simulation(payload: AssessmentRequest, response: Response) -> Simulation:
+    @app.post("/simulations", response_model=Simulation, tags=["simulation"])
+    def create_simulation(payload: AssessmentRequest, response: Response, _claims: ScoredClaims) -> Simulation:
         return simulate_and_log(payload, response, demo=False)
 
     @app.post("/demo/simulations", response_model=Simulation, tags=["simulation"],

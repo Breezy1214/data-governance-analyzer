@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -32,7 +32,7 @@ class MemoryStore:
         version = len(self._mine(user_id, assessment_id)) + 1
         self.rows.append({"user": user_id, "assessment_id": assessment_id, "id": uuid4(), "version": version,
                           "status": "draft", "answers": answers, "result": result,
-                          "created_at": datetime.now(timezone.utc)})
+                          "created_at": datetime.now(UTC)})
         return assessment_id, version
 
     def entries(self, user_id):

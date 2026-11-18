@@ -1,7 +1,7 @@
 """Workspace reviews use the same verified identity and private database as saved assessments."""
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response
@@ -39,7 +39,7 @@ class Transition(ReviewRequest):
     note: str = Field(max_length=2000)
 
 
-Action = Annotated[Union[CreateWorkspace, SetMember, Transition], Field(discriminator="action")]
+Action = Annotated[CreateWorkspace | SetMember | Transition, Field(discriminator="action")]
 
 
 @router.post("")

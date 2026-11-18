@@ -8,7 +8,8 @@ import type { AuthSession } from "./auth-client";
 export const NO_STORE = { "Cache-Control": "no-store, private" };
 
 export class AuthenticationError extends Error {
-  constructor(public status: number, message: string) {
+  /** retryAfter is in seconds, and only set when this app knows when the caller may try again. */
+  constructor(public status: number, message: string, public retryAfter?: number) {
     super(message);
   }
 }
@@ -91,9 +92,10 @@ export function json(body: unknown, status = 200) {
 }
 
 export function errorResponse(error: unknown) {
-  return error instanceof AuthenticationError
-    ? json({ message: error.message }, error.status)
-    : json({ message: AUTH_MESSAGES.unavailable }, 503);
+  if (!(error instanceof AuthenticationError)) return json({ message: AUTH_MESSAGES.unavailable }, 503);
+  const response = json({ message: error.message }, error.status);
+  if (error.retryAfter) response.headers.set("Retry-After", String(error.retryAfter));
+  return response;
 }
 
 function hostOrigin(request: Request, origin: URL) {

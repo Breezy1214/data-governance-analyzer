@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PALETTE, RISK_COLORS } from "../lib/theme";
 
 /**
- * Colour system checks (SCRUM-24). jsdom cannot measure rendered contrast,
+ * Colour system checks. jsdom cannot measure rendered contrast,
  * so these read the tokens straight from the stylesheet and hold them to
  * WCAG AA: 4.5:1 for text, 3:1 for control boundaries, focus indicators
  * and meaningful graphics.

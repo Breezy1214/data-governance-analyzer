@@ -7,7 +7,8 @@ from app.scoring import AssessmentRequest
 DEMO_SCENARIOS = json.loads(
     (Path(__file__).resolve().parents[2] / "frontend" / "lib" / "demo-scenarios.json").read_text()
 )
-UNLIMITED_DEMO = Settings(supabase_url="https://example.supabase.co", demo_rate_per_client=1000, demo_rate_total=1000)
+UNLIMITED_DEMO = Settings(supabase_url="https://example.supabase.co", demo_rate_per_client=1000, demo_rate_total=1000,
+                          scoring_rate_per_user=1000, scoring_rate_total=1000)
 
 
 def scoring_payload(scenario):

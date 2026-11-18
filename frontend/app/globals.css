@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Design tokens (SCRUM-24). Every colour in the app comes from this block;
+ * Design tokens. Every colour in the app comes from this block;
  * components reference the semantic tokens, never raw values. lib/theme.ts
  * mirrors the values the PDF report needs.
  */
@@ -149,7 +149,7 @@ textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: inset 0
 textarea::placeholder { color: var(--muted); }
 .field-meta { display: flex; justify-content: space-between; gap: 16px; margin-top: 8px; color: var(--muted); font-size: 12px; }
 
-/* Document import on the describe step (SCRUM-23). */
+/* Document import on the describe step. */
 .dropzone { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 18px; padding: 18px 20px; border: 1px dashed var(--control-line); border-radius: 12px; background: var(--paper); transition: border-color .18s, background .18s; }
 .dropzone > div { flex: 1; min-width: 200px; }
 .dropzone.dragging { border-color: var(--brand); border-style: solid; background: var(--brand-soft); }
