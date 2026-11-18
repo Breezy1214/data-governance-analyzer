@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, type FormEvent } from "react";
 import { clearPrivateState, notifyAuthChange } from "@/lib/auth-client";
 import { AUTH_MESSAGES } from "@/lib/auth-messages";
-import { AuthShell, EmailField, clearPassword, useAuthRequest } from "./AccountForms";
+import { AuthShell, EmailField, PasswordField, clearPassword, useAuthRequest } from "./AccountForms";
 
 export function LoginForm({ expired = false }: { expired?: boolean }) {
   const { busy, error, send } = useAuthRequest("/api/login", expired ? AUTH_MESSAGES.expired : "");
@@ -26,12 +26,14 @@ export function LoginForm({ expired = false }: { expired?: boolean }) {
   return <AuthShell title="Client sign in">
     <form className="auth-form" onSubmit={submit} aria-busy={busy}>
       <EmailField disabled={busy} autoComplete="username" />
-      <label htmlFor="password">Password</label>
-      <input id="password" name="password" type="password" autoComplete="current-password" required maxLength={1024} disabled={busy} />
+      <PasswordField label="Password" disabled={busy} />
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+      <button className="primary" disabled={busy} aria-busy={busy}>{busy ? "Signing in..." : "Sign in"}</button>
       <p className="auth-note"><Link href="/signup">Create an account</Link> · <Link href="/forgot-password">Forgot your password?</Link></p>
     </form>
-    <p className="demo-entry"><Link href="/demo">Try a sample assessment</Link> — no account needed</p>
+    <Link className="demo-card" href="/demo">
+      <b>Try a sample assessment</b>
+      <span>No account needed. Pick one of three scenarios and see the full risk report.</span>
+    </Link>
   </AuthShell>;
 }

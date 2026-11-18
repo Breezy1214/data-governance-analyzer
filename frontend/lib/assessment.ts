@@ -257,7 +257,8 @@ export function completeAnswers(draft: DraftInput): AssessmentInput | null {
 }
 
 const SCHEMA_VERSION = "3.0";
-export const ASSESSMENT_TIMEOUT_MS = 15_000;
+/** Longer than the server's own wait for the API (backend-proxy.ts), so its error reaches the browser first. */
+export const ASSESSMENT_TIMEOUT_MS = 65_000;
 
 export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
