@@ -7,9 +7,9 @@ Apply the saved-assessment migrations and `20261115120000_register_service.sql` 
 1. Sign in and open **My assessments**, then **Workspace reviews**. Create a workspace; its creator becomes that workspace's admin.
 2. Members share their account ID from the Workspace reviews page. An admin assigns submitter, reviewer, or admin membership to an existing registered account. Admins cannot modify their own membership through this operation.
 3. Save an assessment, open its saved version, select a workspace, and submit for review. Private drafts are not exposed to workspace colleagues.
-4. Another reviewer or admin opens the submitted version and approves, rejects, or requests changes with a required comment. An admin cannot decide their own submission.
+4. Another reviewer or admin finds the submitted version under **Awaiting your decision** on Workspace reviews (the oldest 100 are listed), then approves, rejects, or requests changes with a required comment. An admin cannot decide their own submission.
 5. A submitter can respond to a changes-requested decision and resubmit the same immutable result with clarification, or re-assess to create a separate draft version. Changed scoring answers always require a new version and fresh approval.
-6. Download the report from the saved version. An approved version includes the reviewer, approval timestamp, decision comment, version identity, rubric, and recommendation catalog version. New/unapproved versions have no sign-off.
+6. Download the report from the saved version. An approved version includes the reviewer's account email and account ID, approval time, decision comment, version identity, rubric, and recommendation catalog version. A version approved before this workflow was installed says that no reviewer is on record. Unapproved versions have no sign-off.
 
 ## Authorization and audit
 
@@ -17,9 +17,9 @@ Next.js validates the authenticated session and request origin, then forwards to
 
 The transition RPC locks the version, checks its expected state, changes its status, and appends an audit event in one transaction. Direct status updates and audit inserts/updates/deletes are not granted to application users. Initial saved status is recorded by a trigger. Existing records receive an explicitly labeled migration snapshot rather than fabricated historical events.
 
-Submitted versions reference their review workspace and cannot be deleted, including after rejection. Private drafts may still be deleted; minimal audit metadata is retained without answers or free-text descriptions. Workspace membership and user-account removal must respect restrictive foreign keys. A database owner can administer or migrate the database; immutability is an application permission guarantee, not protection against a privileged database operator.
+Submitted versions cannot be deleted, including after rejection: the delete policy refuses any assessment with a version that has left draft, and the restrictive foreign key from the review link backs it up. Private drafts may still be deleted; minimal audit metadata is retained without answers or free-text descriptions. Workspace membership and user-account removal must respect restrictive foreign keys. A database owner can administer or migrate the database; immutability is an application permission guarantee, not protection against a privileged database operator.
 
-Review comments and stable actor account-ID labels are intentionally retained as approval evidence. The screen warns against placing personal or sensitive use-case details in comments. Agree audit retention and authorized administrative deletion procedures with the team before production use.
+Review comments and actor account IDs are intentionally retained as approval evidence. The audit record stores no email addresses; a version's owner and its workspace reviewers see the actors' account emails, resolved when the history is read. The screen warns against placing personal or sensitive use-case details in comments. Agree audit retention and authorized administrative deletion procedures with the team before production use.
 
 ## Verification
 
