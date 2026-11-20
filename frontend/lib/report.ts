@@ -61,11 +61,29 @@ function recommendationText(item: Recommendation): string {
   return [item.action, `Why this applies: ${item.rationale}`, basis, ...references].join(" ");
 }
 
+const SIGN_OFF_SCOPE = { label: "Scope", value: "Approval applies to this saved assessment, not to a what-if simulation." };
+
+function signOffSection(approval: ReviewEvent): ReportSection {
+  if (!approval.actor_id) {
+    return { heading: "Review sign-off", kind: "pairs", pairs: [SIGN_OFF_SCOPE,
+      { label: "Reviewer", value: "Not on record. This version was approved before sign-off records were kept." }] };
+  }
+  return { heading: "Review sign-off", kind: "pairs", pairs: [
+    SIGN_OFF_SCOPE,
+    { label: "Reviewer", value: approval.actor_name },
+    { label: "Reviewer account ID", value: approval.actor_id },
+    { label: "Approved at", value: formatAssessedAt(approval.occurred_at) },
+    { label: "Assessment version", value: `${approval.assessment_id} / ${approval.version}` },
+    { label: "Decision comment", value: redactSensitiveData(approval.comment).trim() },
+    { label: "Rubric and catalog", value: `${approval.rules_version} / ${approval.mapping_version}` },
+  ] };
+}
+
 export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
   simulated: SimulatedPlan | null = null,
-  review?: ReviewEvent,
+  signOff?: ReviewEvent,
 ): ReportModel {
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: redactSensitiveData(input.description).trim() },
@@ -117,17 +135,7 @@ export function buildReportModel(
     });
   }
 
-  if (review?.to_status === "approved" && review.actor_id && review.rules_version === result.rulesVersion && review.mapping_version === result.mappingVersion) {
-    sections.push({ heading: "Review sign-off", kind: "pairs", pairs: [
-      { label: "Scope", value: "Approval applies to this saved assessment, not to a what-if simulation." },
-      { label: "Reviewer", value: review.actor_label },
-      { label: "Reviewer account", value: review.actor_id },
-      { label: "Approved at", value: review.occurred_at },
-      { label: "Assessment version", value: `${review.assessment_id} / ${review.version}` },
-      { label: "Decision comment", value: review.comment },
-      { label: "Rubric and catalog", value: `${review.rules_version} / ${review.mapping_version}` },
-    ] });
-  }
+  if (signOff) sections.push(signOffSection(signOff));
   if (simulated) sections.push(...simulationSections(simulated));
 
   sections.push({ heading: "Disclaimer", kind: "paragraph", body: DISCLAIMER });
@@ -336,9 +344,9 @@ export async function downloadAssessmentReport(
   result: AssessmentResult,
   simulated: SimulatedPlan | null = null,
   signal?: AbortSignal,
-  review?: ReviewEvent,
+  signOff?: ReviewEvent,
 ): Promise<void> {
   if (signal?.aborted) return;
-  const doc = await renderAssessmentPdf(buildReportModel(input, result, simulated, review));
+  const doc = await renderAssessmentPdf(buildReportModel(input, result, simulated, signOff));
   if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }

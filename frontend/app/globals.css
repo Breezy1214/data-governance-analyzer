@@ -82,10 +82,6 @@
 html { background: var(--paper); scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-sans), sans-serif; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; }
-.review-panel { overflow-wrap: anywhere; }
-.review-panel .text-field { display: block; margin-block: 14px; }
-.review-panel input { min-height: 48px; padding: 10px 14px; }
-.review-panel li { margin-block: 12px; }
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 /* Programmatic focus targets (step headings) are not controls, so they get no ring. */
 [tabindex="-1"]:focus { outline: none; }
@@ -241,6 +237,11 @@ textarea::placeholder { color: var(--muted); }
 .demo-card b { color: var(--brand); font-size: 16px; }
 .demo-card span { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .select-field { display: block; padding-top: 22px; border-top: 1px solid var(--line); }
+.review-panel { overflow-wrap: anywhere; }
+.review-panel :is(.text-field, .select-field) { display: block; margin-block: 16px; padding-top: 0; border-top: 0; }
+.review-panel input { min-height: 48px; padding: 0 14px; }
+.review-panel textarea { min-height: 120px; }
+.review-history li { margin-block: 12px; }
 
 /* Panels set data-risk; colour is always paired with a label and a shape. */
 [data-risk="low"] { --risk-color: var(--risk-low); --risk-bg: var(--success-bg); --risk-shape: circle(50%); }

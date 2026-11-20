@@ -221,7 +221,7 @@ describe("where the simulator runs", () => {
     render(
       <SavedAssessmentSimulation input={input} result={result} actions={{
         assessmentId: "4a1b8c4e-0000-4000-8000-000000000001", reassessHref: "/r", duplicateHref: "/d",
-        versionCount: 1, deletable: true,
+        versionCount: 1, deletable: true, isOwner: true,
       }}><p>Record</p></SavedAssessmentSimulation>);
     fireEvent.click(await screen.findByRole("switch", { name: /Limit changes of custody/ }));
     fireEvent.click(screen.getByRole("button", { name: /download report/i }));

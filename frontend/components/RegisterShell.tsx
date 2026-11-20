@@ -7,7 +7,7 @@ import { ThemeToggle } from "./ThemeToggle";
 const NAV = [
   { href: "/", label: "New assessment", icon: "plus" },
   { href: REGISTER_PATH, label: "My assessments", icon: "register" },
-  { href: "/reviews", label: "Workspace reviews", icon: "register" },
+  { href: "/reviews", label: "Workspace reviews", icon: "recommendations" },
 ] as const;
 
 export function RegisterShell({ email, section, parent, current, title, intro, children }: {

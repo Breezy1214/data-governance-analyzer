@@ -37,5 +37,7 @@ export async function loadAssessmentPage({ params, searchParams }: AssessmentPag
   const requested = Number(version);
   const selected = version === undefined ? versions.at(-1) : versions.find((entry) => entry.version === requested);
   if (!selected) notFound();
-  return { accessToken, session, versions, selected, latest: versions.at(-1)! };
+  // A workspace reviewer can read a colleague's submitted version, so pages decide what to offer from this.
+  const isOwner = typeof data === "object" && data !== null && "owned" in data && data.owned === true;
+  return { accessToken, session, versions, selected, latest: versions.at(-1)!, isOwner };
 }

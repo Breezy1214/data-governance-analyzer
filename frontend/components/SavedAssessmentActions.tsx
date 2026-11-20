@@ -21,12 +21,12 @@ export type SavedAssessmentActionsProps = {
   deletable: boolean;
   /** The what-if plan to add to the report, kept apart from the saved result. */
   simulated?: SimulatedPlan | null;
-  isOwner?: boolean;
-  review?: ReviewEvent;
+  isOwner: boolean;
+  signOff?: ReviewEvent;
 };
 
 export function SavedAssessmentActions({
-  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, simulated = null, isOwner = true, review,
+  assessmentId, input, result, reassessHref, duplicateHref, versionCount, deletable, simulated = null, isOwner, signOff,
 }: SavedAssessmentActionsProps) {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
@@ -39,7 +39,7 @@ export function SavedAssessmentActions({
     setDownloading(true);
     setError("");
     try {
-      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, simulated, undefined, review);
+      await downloadAssessmentReport({ ...input, description: DESCRIPTION_NOT_SAVED }, result, simulated, undefined, signOff);
     } catch {
       setError("The report could not be generated. Please try again.");
     } finally {

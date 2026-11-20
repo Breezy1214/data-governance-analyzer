@@ -1,27 +1,29 @@
-import { ReviewControls } from "@/components/ReviewControls";
-import { reviewContext, reviewWorkspaces } from "@/lib/review-server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AssessmentRecord, ScoreBreakdown } from "@/components/AssessmentResultView";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
+import { ReviewControls } from "@/components/ReviewControls";
 import { SavedAssessmentSimulation } from "@/components/SavedAssessmentSimulation";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
   DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle, isDeletable,
 } from "@/lib/register";
+import { approvalSignOff } from "@/lib/review";
+import { reviewContext, reviewWorkspaces } from "@/lib/review-server";
 
 export const metadata: Metadata = { title: "Saved assessment · Data Governance Readiness Analyzer" };
 
 export default async function SavedAssessment(props: AssessmentPageProps) {
-  const { accessToken, session, versions, selected, latest } = await loadAssessmentPage(props);
+  const { accessToken, session, versions, selected, latest, isOwner } = await loadAssessmentPage(props);
   const { input, result } = selected;
-  const [context, workspaces] = await Promise.all([reviewContext(accessToken, selected.id), reviewWorkspaces(accessToken)]);
-  const isOwner = context.ownerId === session.user.id;
-  const review = selected.status === "approved" ? context.events.at(-1) : undefined;
+  const submittable = isOwner && selected.status !== "approved" && selected.status !== "rejected";
+  const [context, workspaces] = await Promise.all([
+    reviewContext(accessToken, selected.id), submittable ? reviewWorkspaces(accessToken) : [],
+  ]);
   const title = assessmentTitle(input);
-  // Deleting removes every version, so it is offered only while no decision is pending or made.
-  const deletable = isOwner && versions.every((entry) => isDeletable(entry.status));
+  // Deleting removes every version, so it is offered only while every version is still a private draft.
+  const deletable = versions.every((entry) => isDeletable(entry.status));
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
   return (
@@ -38,9 +40,9 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
         <ScoreBreakdown result={result} />
         <SavedAssessmentSimulation input={input} result={result} actions={{
           assessmentId: selected.assessmentId, reassessHref: reopen("reassess"), duplicateHref: reopen("duplicate"),
-          versionCount: versions.length, deletable, isOwner, review,
+          versionCount: versions.length, deletable, isOwner, signOff: approvalSignOff(selected.status, context.events),
         }}>
-          <ReviewControls versionId={selected.id} status={selected.status} context={context} userId={session.user.id} workspaces={workspaces} />
+          <ReviewControls versionId={selected.id} status={selected.status} context={context} isOwner={isOwner} workspaces={workspaces} />
           <AssessmentRecord input={input} result={result} description={DESCRIPTION_NOT_SAVED}
             status={STATUS_LABELS[selected.status]} open />
 
