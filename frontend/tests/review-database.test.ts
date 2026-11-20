@@ -12,12 +12,12 @@ const submitter = "00000000-0000-4000-8000-000000000004";
 let workspace: string, version: string, assessment: string;
 const RESULT = { score: 20, level: "LOW", factors: [], recommendations: [], schemaVersion: "3.0", rulesVersion: "2.0", mappingVersion: "2.0", apiVersion: "0.1.0" };
 const email = (id: string) => `user-${id.slice(-1)}@example.com`;
-async function asUser(id: string, anonymous = false) {
+async function asUser(id: string) {
   await db.exec("reset role; set role register_api;");
-  await db.query("select set_config('app.user_id',$1,false)", [anonymous ? "" : id]);
+  await db.query("select set_config('app.user_id',$1,false)", [id]);
 }
-async function transition(status: string, expected: string, note = "Reviewed the proposed use and safeguards") {
-  return db.query("select register.transition_review($1,$2,$3,$4,$5)", [version, workspace, status, note, expected]);
+async function transition(status: string, expected: string, note = "Reviewed the proposed use and safeguards", id = version) {
+  return db.query("select register.transition_review($1,$2,$3,$4,$5)", [id, workspace, status, note, expected]);
 }
 beforeAll(async () => {
   db = new PGlite();
@@ -34,7 +34,7 @@ beforeAll(async () => {
   workspace = (await db.query<{ id: string }>("select register.create_review_workspace('Privacy team') as id")).rows[0].id;
   await db.query("select register.set_review_member($1,$2,'reviewer')", [workspace, reviewer]);
   await db.query("select register.set_review_member($1,$2,'submitter')", [workspace, submitter]);
-  const saved = await saveVersion(RESULT);
+  const saved = await saveVersion();
   version = saved.rows[0].id; assessment = saved.rows[0].assessment_id;
 }, 30000);
 afterAll(async () => { await db?.close(); });
@@ -46,7 +46,7 @@ it("keeps private drafts private and denies membership escalation", async () => 
     await expect(db.query("select register.set_review_member($1,$2,'admin')", [workspace, user])).rejects.toThrow();
     await expect(transition("in_review", "draft")).rejects.toThrow();
   }
-  await asUser(owner, true);
+  await asUser("");
   await expect(transition("in_review", "draft")).rejects.toThrow();
 });
 
@@ -62,7 +62,7 @@ it("submits atomically and prevents direct updates, self-approval and cross-work
   }
   await asUser(reviewer);
   expect((await db.query("select * from register.assessment_versions")).rows).toHaveLength(1);
-  await expect(saveVersion(RESULT, assessment)).rejects.toThrow();
+  await expect(saveVersion(assessment)).rejects.toThrow();
   await expect(transition("approved", "in_review", "")).rejects.toThrow();
   await transition("changes_requested", "in_review");
   await expect(transition("approved", "in_review")).rejects.toThrow(/Status changed/);
@@ -99,19 +99,23 @@ it("records changes requested and approval without allowing audit mutation or de
 
 it("allows an independent admin to reject and retains that record while new versions start draft", async () => {
   await asUser(submitter);
-  const saved = (await saveVersion(RESULT)).rows[0];
-  await db.query("select register.transition_review($1,$2,'in_review','Ready','draft')", [saved.id, workspace]);
+  const saved = (await saveVersion()).rows[0];
+  await transition("in_review", "draft", "Ready", saved.id);
+  const queue = async () => (await db.query<{ id: string; workspace: string }>("select * from register.review_queue(100)")).rows;
+  expect(await queue()).toEqual([]);
   await asUser(owner);
-  await db.query("select register.transition_review($1,$2,'rejected','Missing controls','in_review')", [saved.id, workspace]);
+  expect(await queue()).toMatchObject([{ id: saved.id, workspace: "Privacy team" }]);
+  await transition("rejected", "in_review", "Missing controls", saved.id);
+  expect(await queue()).toEqual([]);
   await asUser(submitter);
   // Refused by policy, so the API reports that the record is retained rather than a constraint failure.
   expect((await db.query("delete from register.assessments where id=$1 returning id", [saved.assessment_id])).rows).toHaveLength(0);
-  const newer = await saveVersion(RESULT, saved.assessment_id);
+  const newer = await saveVersion(saved.assessment_id);
   expect(newer.rows[0].status).toBe("draft");
   await asUser(outsider);
   await db.query("select register.create_review_workspace('Other organization')");
   expect((await db.query("select * from register.assessment_versions")).rows).toHaveLength(0);
-  await expect(db.query("select register.transition_review($1,$2,'approved','Attempt','rejected')", [saved.id, workspace])).rejects.toThrow();
+  await expect(transition("approved", "rejected", "Attempt", saved.id)).rejects.toThrow();
 });
 
 it("refuses to save a version without a verified user, with a permission error", async () => {
@@ -123,11 +127,11 @@ it("refuses to save a version without a verified user, with a permission error",
     [id, owner, JSON.stringify(RESULT)])).rejects.toMatchObject({ code: "42501", message: "Sign in required" });
 });
 
-async function saveVersion(result: object, assessmentId?: string) {
+async function saveVersion(assessmentId?: string) {
   const id = assessmentId ?? (await db.query<{id:string}>("insert into register.assessments default values returning id")).rows[0].id;
   return db.query<{id:string;assessment_id:string;status:string}>(
     "insert into register.assessment_versions(assessment_id,version,answers,result) select $1,coalesce(max(version),0)+1,'{}',$2 from register.assessment_versions where assessment_id=$1 returning *",
-    [id, JSON.stringify(result)]);
+    [id, JSON.stringify(RESULT)]);
 }
 
 it("keeps all register and workflow access unavailable to browser roles", async () => {

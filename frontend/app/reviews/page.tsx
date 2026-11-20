@@ -5,7 +5,7 @@ import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
 import { WorkspaceControls } from "@/components/WorkspaceControls";
 import { signedInRead } from "@/lib/register-page";
-import { assessmentPath, assessmentTitle } from "@/lib/register";
+import { assessmentPath } from "@/lib/register";
 import { reviewQueue, reviewWorkspaces } from "@/lib/review-server";
 
 export const metadata: Metadata = { title: "Workspace reviews · Data Governance Readiness Analyzer" };
@@ -30,11 +30,11 @@ export default async function ReviewsPage() {
                 {queue.map((entry) => (
                   <tr key={entry.id}>
                     <th scope="row">
-                      <Link href={assessmentPath(entry.assessmentId, entry.version)}>{assessmentTitle(entry.input)}</Link>
+                      <Link href={assessmentPath(entry.assessmentId, entry.version)}>{entry.title}</Link>
                       <small>Version {entry.version}</small>
                     </th>
-                    <td data-risk={entry.result.level.toLowerCase()}>
-                      <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.result.level]} · {entry.result.score}</span>
+                    <td data-risk={entry.level.toLowerCase()}>
+                      <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.level]} · {entry.score}</span>
                     </td>
                     <td>{entry.workspace}</td>
                     <td className="register-saved"><LocalTime value={entry.savedAt} /></td>

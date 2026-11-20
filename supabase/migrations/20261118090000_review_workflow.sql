@@ -43,7 +43,7 @@ create function register.can_read_version(v uuid) returns boolean language sql s
   select register.can_review_version(v)
     or exists(select 1 from register.assessment_versions a where a.id=v and a.user_id=register.current_user_id())
 $$;
--- Every version the caller may review, computed once per query rather than once per row of assessment_versions.
+-- Every version the caller may review. Policies hash this once per query rather than checking each row.
 create function register.reviewable_version_ids() returns setof uuid language sql stable security definer set search_path = '' as $$
   select r.version_id from register.review_members m join register.version_reviews r on r.workspace_id=m.workspace_id
   where m.user_id=register.current_user_id() and m.role in ('reviewer','admin')
@@ -60,7 +60,7 @@ create policy reviews_read on register.version_reviews for select to register_ap
 create policy events_read on register.review_events for select to register_api using (register.can_read_version(version_id));
 -- Only the specifically submitted version is visible to colleagues. Private drafts stay private.
 create policy reviewers_read on register.assessment_versions for select to register_api
-  using (id = any(array(select register.reviewable_version_ids())));
+  using (id in (select register.reviewable_version_ids()));
 -- Parent rows stay owner-only, which also prevents the backend save operation from being used by a reviewer.
 
 alter table register.assessment_versions drop constraint assessment_versions_status_check;
@@ -104,6 +104,21 @@ language sql stable security definer set search_path='' as $$
   where u.id in (select e.actor_id from register.review_events e where e.version_id=v_id) and register.can_read_version(v_id)
 $$;
 
+-- Submissions awaiting the caller's decision, oldest first. Access follows reviewable_version_ids, so the queue
+-- reads only open submissions instead of evaluating row policies across every past review.
+create function register.review_queue(max_rows integer) returns table(
+  id uuid, assessment_id uuid, version integer, status text, answers jsonb, score smallint, risk_level text,
+  created_at timestamptz, workspace text
+) language sql stable security definer set search_path='' as $$
+  select v.id, v.assessment_id, v.version, v.status, v.answers, v.score, v.risk_level, v.created_at, w.name
+  from register.reviewable_version_ids() as ids(version_id)
+  join register.assessment_versions v on v.id=ids.version_id
+  join register.version_reviews r on r.version_id=v.id
+  join register.review_workspaces w on w.id=r.workspace_id
+  where v.status='in_review' and v.user_id<>register.current_user_id()
+  order by v.created_at limit max_rows
+$$;
+
 create function register.create_review_workspace(workspace_name text) returns uuid language plpgsql security definer set search_path='' as $$
 declare w uuid;
 begin
@@ -129,7 +144,7 @@ begin
   select * into v from register.assessment_versions where id=v_id for update;
   select workspace_id into w from register.version_reviews where version_id=v_id;
   -- Hide records from callers with no access, before disclosing their current status.
-  if v.id is null or (v.user_id<>register.current_user_id() and not register.can_review_version(v_id)) then raise exception 'Not permitted' using errcode='42501'; end if;
+  if v.id is null or not register.can_read_version(v_id) then raise exception 'Not permitted' using errcode='42501'; end if;
   if v.status is distinct from expected_status then raise exception 'Status changed; reload' using errcode='40001'; end if;
   if note is null or length(trim(note))>2000 then raise exception 'Invalid comment' using errcode='22023'; end if;
   if next_status='in_review' and (v.status in ('draft','changes_requested') or (v.status='in_review' and w is null)) and v.user_id=register.current_user_id() then
@@ -150,11 +165,10 @@ begin
 end;
 $$;
 
--- Every submitted record is retained, including rejected/changes-requested versions, through the delete policy and restrictive FK.
--- Existing private draft deletion is still allowed; its audit metadata is retained without storing answers.
+-- A deleted private draft's audit metadata is retained without its answers.
 revoke all on function register.review_role(uuid),register.can_review_version(uuid),register.can_read_version(uuid),
   register.reviewable_version_ids(),register.reject_audit_mutation(),register.record_initial_review_status(),
-  register.review_actor_names(uuid),register.create_review_workspace(text),register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) from public,anon,authenticated;
+  register.review_actor_names(uuid),register.review_queue(integer),register.create_review_workspace(text),register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) from public,anon,authenticated;
 grant execute on function register.review_role(uuid),register.can_review_version(uuid),register.can_read_version(uuid),
-  register.reviewable_version_ids(),register.review_actor_names(uuid),register.create_review_workspace(text),
+  register.reviewable_version_ids(),register.review_actor_names(uuid),register.review_queue(integer),register.create_review_workspace(text),
   register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) to register_api;

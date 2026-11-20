@@ -115,22 +115,13 @@ class PostgresRegisterStore:
     def review_queue(self, user_id: str) -> list[Row]:
         """Versions waiting on this caller's decision, oldest first. Decided versions stay on their own pages."""
         with self._as_user(user_id) as conn:
-            return conn.execute(
-                "select v.id, v.assessment_id, v.version, v.status, v.answers, v.result, v.created_at,"
-                " w.name as workspace from register.review_members m"
-                " join register.version_reviews r on r.workspace_id=m.workspace_id"
-                " join register.review_workspaces w on w.id=m.workspace_id"
-                " join register.assessment_versions v on v.id=r.version_id"
-                " where m.user_id=register.current_user_id() and m.role in ('reviewer','admin')"
-                " and v.status='in_review' and v.user_id<>register.current_user_id()"
-                " order by v.created_at limit %s", (REVIEW_QUEUE_LIMIT,)
-            ).fetchall()
+            return conn.execute("select * from register.review_queue(%s)", (REVIEW_QUEUE_LIMIT,)).fetchall()
 
     def review_context(self, user_id: str, version_id: UUID) -> Row:
         # RLS limits this lookup and audit rows to the owner/authorized workspace reviewer.
         with self._as_user(user_id) as conn:
             version = conn.execute(
-                "select v.user_id, r.workspace_id, register.review_role(r.workspace_id) as role"
+                "select r.workspace_id, register.review_role(r.workspace_id) as role"
                 " from register.assessment_versions v left join register.version_reviews r on r.version_id=v.id"
                 " where v.id=%s", (version_id,)
             ).fetchone()
@@ -141,8 +132,7 @@ class PostgresRegisterStore:
                 " left join register.review_actor_names(%s) n on n.actor_id=e.actor_id"
                 " where e.version_id=%s order by e.id", (version_id, version_id)
             ).fetchall()
-            return {"ownerId": version["user_id"], "workspaceId": version["workspace_id"],
-                    "role": version["role"], "events": events}
+            return {"workspaceId": version["workspace_id"], "role": version["role"], "events": events}
 
     def create_workspace(self, user_id: str, name: str) -> None:
         with self._as_user(user_id) as conn:

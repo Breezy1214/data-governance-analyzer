@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Response
 from psycopg import Error as DatabaseError
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.register.models import Status
+from app.register.models import ReviewQueueEntry, ReviewRole, Status
 from app.register.routes import Claims, Store, _require
 from app.register.store import AssessmentNotFound
 
@@ -38,7 +38,7 @@ class SetMember(ReviewRequest):
     action: Literal["member"]
     workspaceId: UUID
     userId: UUID
-    role: Literal["submitter", "reviewer", "admin"] | None
+    role: ReviewRole | None
 
 
 class Transition(ReviewRequest):
@@ -79,10 +79,13 @@ def workspaces(response: Response, claims: Claims, store: Store):
     return _require(store).review_workspaces(claims["sub"])
 
 
-@router.get("/queue")
+@router.get("/queue", response_model=list[ReviewQueueEntry])
 def queue(response: Response, claims: Claims, store: Store):
     response.headers["Cache-Control"] = "no-store"
-    return _require(store).review_queue(claims["sub"])
+    return [ReviewQueueEntry(id=row["id"], assessmentId=row["assessment_id"], version=row["version"], score=row["score"],
+                             level=row["risk_level"], answers=row["answers"], savedAt=row["created_at"],
+                             workspace=row["workspace"])
+            for row in _require(store).review_queue(claims["sub"])]
 
 
 @router.get("/versions/{version_id}")

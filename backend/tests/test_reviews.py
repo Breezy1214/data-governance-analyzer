@@ -61,20 +61,13 @@ def test_rejects_invalid_or_spoofed_requests(fixture, change):
 
 
 @pytest.mark.parametrize("error,status", [(InsufficientPrivilege, 403), (SerializationFailure, 409),
-                                         (InvalidParameterValue, 400), (ForeignKeyViolation, 400)])
+                                         (InvalidParameterValue, 400), (ForeignKeyViolation, 400),
+                                         (InternalError, 503)])
 def test_safe_database_permission_and_conflict_responses(fixture, error, status):
     client, store, _ = fixture
     store.transition.side_effect = error("PRIVATE database detail")
     response = client.post("/reviews", json=DECISION)
     assert response.status_code == status
-    assert "PRIVATE" not in response.text
-
-
-def test_unexpected_database_errors_are_not_mapped_to_user_errors(fixture):
-    client, store, _ = fixture
-    store.transition.side_effect = InternalError("PRIVATE database detail")
-    response = client.post("/reviews", json=DECISION)
-    assert response.status_code == 503
     assert "PRIVATE" not in response.text
 
 
@@ -85,6 +78,11 @@ def test_reads_are_scoped_and_missing_records_are_not_disclosed(fixture):
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
         getattr(store, f"review_{view}").assert_called_with(USER)
+    store.review_queue.return_value = [{"id": VERSION, "assessment_id": USER, "version": 2, "score": 40, "risk_level": "MEDIUM",
+                                        "answers": {"purpose": "x"}, "created_at": "2026-11-18T09:00:00Z",
+                                        "workspace": "Privacy team"}]
+    entry = client.get("/reviews/queue").json()[0]
+    assert (entry["assessmentId"], entry["level"], entry["workspace"]) == (USER, "MEDIUM", "Privacy team")
     store.review_context.side_effect = AssessmentNotFound
     assert client.get(f"/reviews/versions/{VERSION}").status_code == 404
 
@@ -95,8 +93,5 @@ def test_requires_authentication_for_every_review_route(fixture):
     assert client.post("/reviews", json=DECISION).status_code == 401
     for route in ("workspaces", "queue", f"versions/{VERSION}"):
         assert client.get(f"/reviews/{route}").status_code == 401
-    store.transition.assert_not_called()
-    store.review_workspaces.assert_not_called()
-    store.review_queue.assert_not_called()
-    store.review_context.assert_not_called()
+    assert store.method_calls == []
 

@@ -1,8 +1,8 @@
 import "server-only";
 import { notFound } from "next/navigation";
+import { isRecord, isRiskLevel } from "./assessment";
 import { readFromBackend } from "./backend-proxy";
-import { isRecord } from "./assessment";
-import { type SavedAssessmentVersion, toSavedVersion } from "./register";
+import { answersToInput, assessmentTitle } from "./register";
 import type { ReviewContext, ReviewWorkspace } from "./review";
 
 export async function reviewWorkspaces(token: string): Promise<ReviewWorkspace[]> {
@@ -15,13 +15,20 @@ export async function reviewContext(token: string, versionId: string): Promise<R
   return context as ReviewContext;
 }
 
-type ReviewQueueEntry = SavedAssessmentVersion & { workspace: string };
+/** A submission awaiting the viewer's decision, as FastAPI returns it in GET /reviews/queue. */
+function toQueueEntry(entry: unknown) {
+  if (!isRecord(entry)) return null;
+  const input = answersToInput(entry.answers);
+  if (!input || typeof entry.id !== "string" || typeof entry.assessmentId !== "string" || typeof entry.version !== "number"
+    || typeof entry.score !== "number" || !isRiskLevel(entry.level) || typeof entry.savedAt !== "string"
+    || typeof entry.workspace !== "string") return null;
+  return {
+    id: entry.id, assessmentId: entry.assessmentId, version: entry.version, title: assessmentTitle(input),
+    score: entry.score, level: entry.level, savedAt: entry.savedAt, workspace: entry.workspace,
+  };
+}
 
-export async function reviewQueue(token: string): Promise<ReviewQueueEntry[]> {
+export async function reviewQueue(token: string) {
   const rows = await readFromBackend("/reviews/queue", token);
-  return (Array.isArray(rows) ? rows : []).flatMap((row) => {
-    if (!isRecord(row) || typeof row.assessment_id !== "string" || typeof row.workspace !== "string") return [];
-    const version = toSavedVersion(row.assessment_id, { ...row, savedAt: row.created_at });
-    return version ? [{ ...version, workspace: row.workspace }] : [];
-  });
+  return (Array.isArray(rows) ? rows : []).map(toQueueEntry).filter((entry) => entry !== null);
 }
