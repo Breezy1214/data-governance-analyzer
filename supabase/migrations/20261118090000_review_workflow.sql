@@ -39,6 +39,15 @@ create function register.can_review_version(v uuid) returns boolean language sql
   select exists(select 1 from register.version_reviews r where r.version_id=v
     and register.review_role(r.workspace_id) in ('reviewer','admin'))
 $$;
+create function register.can_read_version(v uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select register.can_review_version(v)
+    or exists(select 1 from register.assessment_versions a where a.id=v and a.user_id=register.current_user_id())
+$$;
+-- Every version the caller may review, computed once per query rather than once per row of assessment_versions.
+create function register.reviewable_version_ids() returns setof uuid language sql stable security definer set search_path = '' as $$
+  select r.version_id from register.review_members m join register.version_reviews r on r.workspace_id=m.workspace_id
+  where m.user_id=register.current_user_id() and m.role in ('reviewer','admin')
+$$;
 alter table register.review_workspaces enable row level security;
 alter table register.review_members enable row level security;
 alter table register.version_reviews enable row level security;
@@ -47,14 +56,11 @@ revoke all on register.review_workspaces,register.review_members,register.versio
 grant select on register.review_workspaces,register.review_members,register.version_reviews,register.review_events to register_api;
 create policy members_read on register.review_workspaces for select to register_api using (register.review_role(id) is not null);
 create policy members_read on register.review_members for select to register_api using (register.review_role(workspace_id) is not null);
-create policy reviews_read on register.version_reviews for select to register_api using (
-  register.can_review_version(version_id) or exists(select 1 from register.assessment_versions v where v.id=version_id and v.user_id=register.current_user_id())
-);
-create policy events_read on register.review_events for select to register_api using (
-  register.can_review_version(version_id) or exists(select 1 from register.assessment_versions v where v.id=version_id and v.user_id=register.current_user_id())
-);
+create policy reviews_read on register.version_reviews for select to register_api using (register.can_read_version(version_id));
+create policy events_read on register.review_events for select to register_api using (register.can_read_version(version_id));
 -- Only the specifically submitted version is visible to colleagues. Private drafts stay private.
-create policy reviewers_read on register.assessment_versions for select to register_api using (register.can_review_version(id));
+create policy reviewers_read on register.assessment_versions for select to register_api
+  using (id = any(array(select register.reviewable_version_ids())));
 -- Parent rows stay owner-only, which also prevents the backend save operation from being used by a reviewer.
 
 alter table register.assessment_versions drop constraint assessment_versions_status_check;
@@ -62,6 +68,12 @@ alter table register.assessment_versions add constraint assessment_versions_stat
   check(status in ('draft','in_review','approved','rejected','changes_requested'));
 revoke update(status) on register.assessment_versions from register_api;
 drop policy "Users move drafts in and out of review" on register.assessment_versions;
+-- Submitted versions are retained, so deleting is refused once any version has left draft, whatever its decision.
+drop policy "Users delete undecided assessments" on register.assessments;
+create policy "Users delete unsubmitted assessments" on register.assessments for delete to register_api using (
+  (select register.current_user_id()) = user_id
+  and not exists (select 1 from register.assessment_versions v where v.assessment_id = assessments.id and v.status <> 'draft')
+);
 
 create function register.reject_audit_mutation() returns trigger language plpgsql set search_path='' as $$
 begin raise exception 'Audit records cannot be changed' using errcode='42501'; end;
@@ -72,6 +84,7 @@ create trigger immutable_review_events before update or delete on register.revie
 -- Capture initial status for every new saved version. A separate RPC captures status transitions atomically.
 create function register.record_initial_review_status() returns trigger language plpgsql security definer set search_path='' as $$
 begin
+  if register.current_user_id() is null then raise exception 'Sign in required' using errcode='42501'; end if;
   insert into register.review_events(version_id,assessment_id,version,actor_id,actor_label,to_status,rules_version,mapping_version)
   values(new.id,new.assessment_id,new.version,register.current_user_id(),register.current_user_id()::text,new.status,new.rules_version,new.mapping_version);
   return new;
@@ -82,6 +95,14 @@ create trigger initial_review_status after insert on register.assessment_version
 insert into register.review_events(version_id,assessment_id,version,actor_label,to_status,comment,rules_version,mapping_version)
 select id,assessment_id,version,'Migration',status,'Status at workflow installation; earlier transitions were not recorded.',rules_version,mapping_version
 from register.assessment_versions;
+
+-- Names are resolved when read, so the immutable audit record holds account IDs and no email addresses.
+-- A caller sees names only for the actors on a version they can already see.
+create function register.review_actor_names(v_id uuid) returns table(actor_id uuid, actor_name text)
+language sql stable security definer set search_path='' as $$
+  select u.id, u.email::text from auth.users u
+  where u.id in (select e.actor_id from register.review_events e where e.version_id=v_id) and register.can_read_version(v_id)
+$$;
 
 create function register.create_review_workspace(workspace_name text) returns uuid language plpgsql security definer set search_path='' as $$
 declare w uuid;
@@ -129,9 +150,11 @@ begin
 end;
 $$;
 
--- Every submitted record is retained, including rejected/changes-requested versions, through the restrictive FK.
+-- Every submitted record is retained, including rejected/changes-requested versions, through the delete policy and restrictive FK.
 -- Existing private draft deletion is still allowed; its audit metadata is retained without storing answers.
-revoke all on function register.review_role(uuid),register.can_review_version(uuid),register.reject_audit_mutation(),register.record_initial_review_status(),
-  register.create_review_workspace(text),register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) from public,anon,authenticated;
-grant execute on function register.review_role(uuid),register.can_review_version(uuid),register.create_review_workspace(text),
+revoke all on function register.review_role(uuid),register.can_review_version(uuid),register.can_read_version(uuid),
+  register.reviewable_version_ids(),register.reject_audit_mutation(),register.record_initial_review_status(),
+  register.review_actor_names(uuid),register.create_review_workspace(text),register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) from public,anon,authenticated;
+grant execute on function register.review_role(uuid),register.can_review_version(uuid),register.can_read_version(uuid),
+  register.reviewable_version_ids(),register.review_actor_names(uuid),register.create_review_workspace(text),
   register.set_review_member(uuid,uuid,text),register.transition_review(uuid,uuid,text,text,text) to register_api;
