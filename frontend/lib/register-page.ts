@@ -1,6 +1,7 @@
 import "server-only";
 import { notFound, redirect } from "next/navigation";
 import { AuthenticationError, authenticatedSession } from "./auth-server";
+import { isRecord } from "./assessment";
 import { readFromBackend } from "./backend-proxy";
 import { type RegisterEntry, type SavedAssessmentVersion, isUuid, toRegisterEntry, toSavedVersion } from "./register";
 
@@ -38,6 +39,6 @@ export async function loadAssessmentPage({ params, searchParams }: AssessmentPag
   const selected = version === undefined ? versions.at(-1) : versions.find((entry) => entry.version === requested);
   if (!selected) notFound();
   // A workspace reviewer can read a colleague's submitted version, so pages decide what to offer from this.
-  const isOwner = typeof data === "object" && data !== null && "owned" in data && data.owned === true;
+  const isOwner = isRecord(data) && data.owned === true;
   return { accessToken, session, versions, selected, latest: versions.at(-1)!, isOwner };
 }

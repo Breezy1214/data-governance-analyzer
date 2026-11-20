@@ -2,9 +2,7 @@
 
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type ReviewRole, type ReviewWorkspace, postReview } from "@/lib/review";
-
-const ROLE_LABELS: Record<ReviewRole, string> = { submitter: "Submitter", reviewer: "Reviewer", admin: "Admin" };
+import { ROLE_LABELS, type ReviewRole, type ReviewWorkspace, postReview } from "@/lib/review";
 
 export function WorkspaceControls({ workspaces, userId }: { workspaces: ReviewWorkspace[]; userId: string }) {
   const router = useRouter();

@@ -1,12 +1,12 @@
 import { ASSESSMENT_TIMEOUT_MS } from "./assessment";
 import type { AssessmentStatus } from "./register";
 
-export type ReviewRole = "submitter" | "reviewer" | "admin";
+export const ROLE_LABELS = { submitter: "Submitter", reviewer: "Reviewer", admin: "Admin" } as const;
+export type ReviewRole = keyof typeof ROLE_LABELS;
 export type ReviewEvent = {
-  id: number; version_id: string; assessment_id: string; version: number;
+  id: number; assessment_id: string; version: number;
   /** Null for the snapshot recorded when the workflow was installed. */
   actor_id: string | null;
-  actor_label: string;
   /** The actor's account email, resolved when read; falls back to the stored label. */
   actor_name: string;
   occurred_at: string;
@@ -15,9 +15,9 @@ export type ReviewEvent = {
 };
 export type ReviewWorkspace = { id: string; name: string; role: ReviewRole };
 export type ReviewContext = {
-  ownerId: string; workspaceId: string | null; role: ReviewRole | null; events: ReviewEvent[];
+  workspaceId: string | null; role: ReviewRole | null; events: ReviewEvent[];
 };
-export type ReviewDecision = "in_review" | "approved" | "rejected" | "changes_requested";
+export type ReviewDecision = Exclude<AssessmentStatus, "draft">;
 
 export const DECISION_LABELS: Record<ReviewDecision, string> = {
   in_review: "Submit for review", approved: "Approve", rejected: "Reject", changes_requested: "Request changes",

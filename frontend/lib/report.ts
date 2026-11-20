@@ -61,21 +61,17 @@ function recommendationText(item: Recommendation): string {
   return [item.action, `Why this applies: ${item.rationale}`, basis, ...references].join(" ");
 }
 
-const SIGN_OFF_SCOPE = { label: "Scope", value: "Approval applies to this saved assessment, not to a what-if simulation." };
-
 function signOffSection(approval: ReviewEvent): ReportSection {
-  if (!approval.actor_id) {
-    return { heading: "Review sign-off", kind: "pairs", pairs: [SIGN_OFF_SCOPE,
-      { label: "Reviewer", value: "Not on record. This version was approved before sign-off records were kept." }] };
-  }
-  return { heading: "Review sign-off", kind: "pairs", pairs: [
-    SIGN_OFF_SCOPE,
+  const recorded = approval.actor_id ? [
     { label: "Reviewer", value: approval.actor_name },
     { label: "Reviewer account ID", value: approval.actor_id },
     { label: "Approved at", value: formatAssessedAt(approval.occurred_at) },
     { label: "Assessment version", value: `${approval.assessment_id} / ${approval.version}` },
     { label: "Decision comment", value: redactSensitiveData(approval.comment).trim() },
     { label: "Rubric and catalog", value: `${approval.rules_version} / ${approval.mapping_version}` },
+  ] : [{ label: "Reviewer", value: "Not on record. This version was approved before sign-off records were kept." }];
+  return { heading: "Review sign-off", kind: "pairs", pairs: [
+    { label: "Scope", value: "Approval applies to this saved assessment, not to a what-if simulation." }, ...recorded,
   ] };
 }
 

@@ -2,13 +2,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { ReviewControls } from "../components/ReviewControls";
 import type { ReviewContext } from "../lib/review";
+import { approvalEvent } from "./assessment-fixture";
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 const context = (overrides: Partial<ReviewContext> = {}): ReviewContext =>
-  ({ ownerId: "owner", workspaceId: "w", role: null, events: [], ...overrides });
+  ({ workspaceId: "w", role: null, events: [], ...overrides });
 
 it("submits a selected workspace and refreshes the version", async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
@@ -37,8 +38,7 @@ it("requires a decision comment and shows a stale-state failure", async () => {
 it("gives the author no decision buttons even as admin, and shows a readable history", () => {
   render(<ReviewControls versionId="v" status="in_review" isOwner context={context({
     role: "admin",
-    events: [{ id: 1, version_id: "v", assessment_id: "a", version: 1, actor_id: "owner", actor_label: "owner", actor_name: "owner@example.test",
-      occurred_at: "2026-11-14T12:00:00Z", from_status: "draft", to_status: "in_review", comment: "Ready", rules_version: "2.0", mapping_version: "2.0" }],
+    events: [{ ...approvalEvent, actor_id: "owner", actor_name: "owner@example.test", from_status: "draft", to_status: "in_review" }],
   })} workspaces={[]} />);
   expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
   const history = screen.getByRole("list").textContent;

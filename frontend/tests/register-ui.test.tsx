@@ -8,7 +8,7 @@ const pages = vi.hoisted(() => ({ loadRegister: vi.fn(), loadAssessmentPage: vi.
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("../lib/register-page", () => pages);
 vi.mock("../lib/review-server", () => ({
-  reviewContext: vi.fn(async () => ({ ownerId: "user", workspaceId: null, role: null, events: [] })),
+  reviewContext: vi.fn(async () => ({ workspaceId: null, role: null, events: [] })),
   reviewWorkspaces: vi.fn(async () => []),
 }));
 

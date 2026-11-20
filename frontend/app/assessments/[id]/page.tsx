@@ -17,9 +17,8 @@ export const metadata: Metadata = { title: "Saved assessment · Data Governance 
 export default async function SavedAssessment(props: AssessmentPageProps) {
   const { accessToken, session, versions, selected, latest, isOwner } = await loadAssessmentPage(props);
   const { input, result } = selected;
-  const submittable = isOwner && selected.status !== "approved" && selected.status !== "rejected";
   const [context, workspaces] = await Promise.all([
-    reviewContext(accessToken, selected.id), submittable ? reviewWorkspaces(accessToken) : [],
+    reviewContext(accessToken, selected.id), isOwner ? reviewWorkspaces(accessToken) : [],
   ]);
   const title = assessmentTitle(input);
   // Deleting removes every version, so it is offered only while every version is still a private draft.
