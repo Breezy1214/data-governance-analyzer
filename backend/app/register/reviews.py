@@ -8,10 +8,21 @@ from fastapi import APIRouter, HTTPException, Response
 from psycopg import Error as DatabaseError
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.register.models import Status
 from app.register.routes import Claims, Store, _require
 from app.register.store import AssessmentNotFound
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
+
+INVALID = "Check the selected account, workspace, and comment."
+# Database messages, account existence and submitted comments are never passed through.
+REVIEW_ERRORS = {
+    "42501": (403, "You do not have permission to do this."),
+    "40001": (409, "This record changed. Reload before trying again."),
+    "22023": (400, INVALID),
+    "23514": (400, INVALID),
+    "23503": (400, INVALID),
+}
 
 
 class ReviewRequest(BaseModel):
@@ -35,7 +46,7 @@ class Transition(ReviewRequest):
     versionId: UUID
     workspaceId: UUID | None
     status: Literal["in_review", "approved", "rejected", "changes_requested"]
-    expectedStatus: Literal["draft", "in_review", "approved", "rejected", "changes_requested"]
+    expectedStatus: Status
     note: str = Field(max_length=2000)
 
 
@@ -45,36 +56,39 @@ Action = Annotated[CreateWorkspace | SetMember | Transition, Field(discriminator
 @router.post("")
 def change_review(payload: Action, response: Response, claims: Claims, store: Store):
     response.headers["Cache-Control"] = "no-store"
+    store, user = _require(store), claims["sub"]
     try:
-        _require(store).review_write(claims["sub"], payload.model_dump())
+        match payload:
+            case CreateWorkspace():
+                store.create_workspace(user, payload.name)
+            case SetMember():
+                store.set_member(user, payload.workspaceId, payload.userId, payload.role)
+            case Transition():
+                store.transition(user, payload.versionId, payload.workspaceId, payload.status, payload.note,
+                                 payload.expectedStatus)
     except DatabaseError as error:
-        # Do not expose database messages, account existence, or submitted comments.
-        status = {"42501": 403, "40001": 409, "22023": 400, "23514": 400, "23503": 400}.get(error.sqlstate)
-        if status is None:
+        if (mapped := REVIEW_ERRORS.get(error.sqlstate)) is None:
             raise
-        message = {403: "You do not have permission to do this.",
-                   409: "This record changed. Reload before trying again.",
-                   400: "Check the selected account, workspace, and comment."}[status]
-        raise HTTPException(status, message) from None
+        raise HTTPException(*mapped) from None
     return {"ok": True}
 
 
 @router.get("/workspaces")
 def workspaces(response: Response, claims: Claims, store: Store):
     response.headers["Cache-Control"] = "no-store"
-    return _require(store).review_read(claims["sub"], "workspaces")
+    return _require(store).review_workspaces(claims["sub"])
 
 
 @router.get("/queue")
 def queue(response: Response, claims: Claims, store: Store):
     response.headers["Cache-Control"] = "no-store"
-    return _require(store).review_read(claims["sub"], "queue")
+    return _require(store).review_queue(claims["sub"])
 
 
 @router.get("/versions/{version_id}")
 def context(version_id: UUID, response: Response, claims: Claims, store: Store):
     response.headers["Cache-Control"] = "no-store"
     try:
-        return _require(store).review_read(claims["sub"], "context", version_id)
+        return _require(store).review_context(claims["sub"], version_id)
     except AssessmentNotFound:
         raise HTTPException(404, "Assessment not found.") from None

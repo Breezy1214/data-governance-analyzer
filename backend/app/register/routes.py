@@ -9,7 +9,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from psycopg import Error as DatabaseError
-from psycopg.errors import ForeignKeyViolation
 from psycopg_pool import PoolTimeout
 
 from app.auth import require_session
@@ -106,7 +105,7 @@ def get_assessment(assessment_id: str, response: Response, claims: Claims,
     rows = _require(store).versions(claims["sub"], record_id)
     if not rows:
         raise HTTPException(404, NOT_FOUND)
-    return AssessmentRecord(assessmentId=record_id, versions=[
+    return AssessmentRecord(assessmentId=record_id, owned=rows[0]["owned"], versions=[
         AssessmentVersion(id=row["id"], version=row["version"], status=row["status"], answers=row["answers"],
                           result=row["result"], savedAt=row["created_at"])
         for row in rows
@@ -120,6 +119,6 @@ def delete_assessment(assessment_id: str, claims: Claims,
         _require(store).delete(claims["sub"], _assessment_id(assessment_id))
     except AssessmentNotFound:
         raise HTTPException(404, NOT_FOUND) from None
-    except (AssessmentLocked, ForeignKeyViolation):
+    except AssessmentLocked:
         raise HTTPException(409, LOCKED) from None
     return Response(status_code=204, headers={"Cache-Control": "no-store"})

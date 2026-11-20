@@ -19,10 +19,11 @@ class AssessmentNotFound(Exception):
 
 
 class AssessmentLocked(Exception):
-    """A version is in review or approved, so the assessment can't be deleted."""
+    """A version has been submitted for review, so the assessment is retained and can't be deleted."""
 
 
 Row = dict[str, Any]
+REVIEW_QUEUE_LIMIT = 100
 
 
 class RegisterStore(Protocol):
@@ -34,9 +35,18 @@ class RegisterStore(Protocol):
 
     def delete(self, user_id: str, assessment_id: UUID) -> None: ...
 
-    def review_read(self, user_id: str, view: str, version_id: UUID | None = None) -> Any: ...
+    def review_workspaces(self, user_id: str) -> list[Row]: ...
 
-    def review_write(self, user_id: str, payload: Row) -> None: ...
+    def review_queue(self, user_id: str) -> list[Row]: ...
+
+    def review_context(self, user_id: str, version_id: UUID) -> Row: ...
+
+    def create_workspace(self, user_id: str, name: str) -> None: ...
+
+    def set_member(self, user_id: str, workspace_id: UUID, member_id: UUID, role: str | None) -> None: ...
+
+    def transition(self, user_id: str, version_id: UUID, workspace_id: UUID | None, status: str, note: str,
+                   expected_status: str) -> None: ...
 
 
 class PostgresRegisterStore:
@@ -82,8 +92,8 @@ class PostgresRegisterStore:
     def versions(self, user_id: str, assessment_id: UUID) -> list[Row]:
         with self._as_user(user_id) as conn:
             return conn.execute(
-                "select id, version, status, answers, result, created_at from register.assessment_versions"
-                " where assessment_id = %s order by version",
+                "select id, version, status, answers, result, created_at, user_id = register.current_user_id() as owned"
+                " from register.assessment_versions where assessment_id = %s order by version",
                 (assessment_id,),
             ).fetchall()
 
@@ -94,43 +104,56 @@ class PostgresRegisterStore:
             exists = conn.execute("select 1 from register.assessments where id = %s", (assessment_id,)).fetchone()
             raise AssessmentLocked if exists else AssessmentNotFound
 
-    def review_read(self, user_id: str, view: str, version_id: UUID | None = None) -> Any:
+    def review_workspaces(self, user_id: str) -> list[Row]:
         with self._as_user(user_id) as conn:
-            if view == "workspaces":
-                return conn.execute(
-                    "select w.id, w.name, m.role from register.review_workspaces w"
-                    " join register.review_members m on m.workspace_id=w.id"
-                    " where m.user_id=register.current_user_id() order by w.name"
-                ).fetchall()
-            if view == "queue":
-                return conn.execute(
-                    "select id, assessment_id, version, status from register.assessment_versions"
-                    " where status <> 'draft' order by created_at desc"
-                ).fetchall()
-            # RLS limits this lookup and audit rows to the owner/authorized workspace reviewer.
+            return conn.execute(
+                "select w.id, w.name, m.role from register.review_workspaces w"
+                " join register.review_members m on m.workspace_id=w.id"
+                " where m.user_id=register.current_user_id() order by w.name"
+            ).fetchall()
+
+    def review_queue(self, user_id: str) -> list[Row]:
+        """Versions waiting on this caller's decision, oldest first. Decided versions stay on their own pages."""
+        with self._as_user(user_id) as conn:
+            return conn.execute(
+                "select v.id, v.assessment_id, v.version, v.status, v.answers, v.result, v.created_at,"
+                " w.name as workspace from register.review_members m"
+                " join register.version_reviews r on r.workspace_id=m.workspace_id"
+                " join register.review_workspaces w on w.id=m.workspace_id"
+                " join register.assessment_versions v on v.id=r.version_id"
+                " where m.user_id=register.current_user_id() and m.role in ('reviewer','admin')"
+                " and v.status='in_review' and v.user_id<>register.current_user_id()"
+                " order by v.created_at limit %s", (REVIEW_QUEUE_LIMIT,)
+            ).fetchall()
+
+    def review_context(self, user_id: str, version_id: UUID) -> Row:
+        # RLS limits this lookup and audit rows to the owner/authorized workspace reviewer.
+        with self._as_user(user_id) as conn:
             version = conn.execute(
-                "select user_id from register.assessment_versions where id=%s", (version_id,)
+                "select v.user_id, r.workspace_id, register.review_role(r.workspace_id) as role"
+                " from register.assessment_versions v left join register.version_reviews r on r.version_id=v.id"
+                " where v.id=%s", (version_id,)
             ).fetchone()
             if version is None:
                 raise AssessmentNotFound
-            link = conn.execute(
-                "select workspace_id, register.review_role(workspace_id) as role"
-                " from register.version_reviews where version_id=%s", (version_id,)
-            ).fetchone()
             events = conn.execute(
-                "select * from register.review_events where version_id=%s order by id", (version_id,)
+                "select e.*, coalesce(n.actor_name, e.actor_label) as actor_name from register.review_events e"
+                " left join register.review_actor_names(%s) n on n.actor_id=e.actor_id"
+                " where e.version_id=%s order by e.id", (version_id, version_id)
             ).fetchall()
-            return {"ownerId": version["user_id"], "workspaceId": link["workspace_id"] if link else None,
-                    "role": link["role"] if link else None, "events": events}
+            return {"ownerId": version["user_id"], "workspaceId": version["workspace_id"],
+                    "role": version["role"], "events": events}
 
-    def review_write(self, user_id: str, payload: Row) -> None:
+    def create_workspace(self, user_id: str, name: str) -> None:
         with self._as_user(user_id) as conn:
-            if payload["action"] == "create":
-                conn.execute("select register.create_review_workspace(%s)", (payload["name"],))
-            elif payload["action"] == "member":
-                conn.execute("select register.set_review_member(%s,%s,%s)",
-                             (payload["workspaceId"], payload["userId"], payload["role"]))
-            else:
-                conn.execute("select register.transition_review(%s,%s,%s,%s,%s)",
-                             (payload["versionId"], payload["workspaceId"], payload["status"],
-                              payload["note"], payload["expectedStatus"]))
+            conn.execute("select register.create_review_workspace(%s)", (name,))
+
+    def set_member(self, user_id: str, workspace_id: UUID, member_id: UUID, role: str | None) -> None:
+        with self._as_user(user_id) as conn:
+            conn.execute("select register.set_review_member(%s,%s,%s)", (workspace_id, member_id, role))
+
+    def transition(self, user_id: str, version_id: UUID, workspace_id: UUID | None, status: str, note: str,
+                   expected_status: str) -> None:
+        with self._as_user(user_id) as conn:
+            conn.execute("select register.transition_review(%s,%s,%s,%s,%s)",
+                         (version_id, workspace_id, status, note, expected_status))

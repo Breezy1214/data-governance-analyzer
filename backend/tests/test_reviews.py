@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from psycopg.errors import (
     ForeignKeyViolation,
     InsufficientPrivilege,
+    InternalError,
     InvalidParameterValue,
     SerializationFailure,
 )
@@ -25,7 +26,8 @@ DECISION = {"action": "transition", "versionId": VERSION, "workspaceId": USER,
 def fixture():
     app = create_app(Settings(supabase_url="https://example.supabase.co"))
     store = Mock()
-    store.review_read.return_value = []
+    store.review_workspaces.return_value = []
+    store.review_queue.return_value = []
     app.dependency_overrides[register_store] = lambda: store
     app.dependency_overrides[require_session] = lambda: {"sub": USER}
     return TestClient(app), store, app
@@ -36,10 +38,18 @@ def test_uses_verified_identity_and_passes_expected_state(fixture):
     response = client.post("/reviews", json=DECISION)
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    user, payload = store.review_write.call_args.args
-    assert user == USER
-    assert str(payload["versionId"]) == VERSION
-    assert payload["expectedStatus"] == "in_review"
+    user, version, _, status, note, expected = store.transition.call_args.args
+    assert (user, str(version), status, note, expected) == (USER, VERSION, "approved", "Controls reviewed", "in_review")
+
+
+def test_routes_each_action_to_its_own_operation(fixture):
+    client, store, _ = fixture
+    assert client.post("/reviews", json={"action": "create", "name": " Privacy team "}).status_code == 200
+    store.create_workspace.assert_called_once_with(USER, "Privacy team")
+    member = {"action": "member", "workspaceId": VERSION, "userId": USER, "role": None}
+    assert client.post("/reviews", json=member).status_code == 200
+    assert store.set_member.call_args.args[3] is None
+    store.transition.assert_not_called()
 
 
 @pytest.mark.parametrize("change", [{"actor_id": VERSION}, {"status": "draft"}, {"note": "x" * 2001},
@@ -47,16 +57,24 @@ def test_uses_verified_identity_and_passes_expected_state(fixture):
 def test_rejects_invalid_or_spoofed_requests(fixture, change):
     client, store, _ = fixture
     assert client.post("/reviews", json={**DECISION, **change}).status_code == 422
-    store.review_write.assert_not_called()
+    store.transition.assert_not_called()
 
 
 @pytest.mark.parametrize("error,status", [(InsufficientPrivilege, 403), (SerializationFailure, 409),
                                          (InvalidParameterValue, 400), (ForeignKeyViolation, 400)])
 def test_safe_database_permission_and_conflict_responses(fixture, error, status):
     client, store, _ = fixture
-    store.review_write.side_effect = error("PRIVATE database detail")
+    store.transition.side_effect = error("PRIVATE database detail")
     response = client.post("/reviews", json=DECISION)
     assert response.status_code == status
+    assert "PRIVATE" not in response.text
+
+
+def test_unexpected_database_errors_are_not_mapped_to_user_errors(fixture):
+    client, store, _ = fixture
+    store.transition.side_effect = InternalError("PRIVATE database detail")
+    response = client.post("/reviews", json=DECISION)
+    assert response.status_code == 503
     assert "PRIVATE" not in response.text
 
 
@@ -66,8 +84,8 @@ def test_reads_are_scoped_and_missing_records_are_not_disclosed(fixture):
         response = client.get(f"/reviews/{view}")
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
-        store.review_read.assert_called_with(USER, view)
-    store.review_read.side_effect = AssessmentNotFound
+        getattr(store, f"review_{view}").assert_called_with(USER)
+    store.review_context.side_effect = AssessmentNotFound
     assert client.get(f"/reviews/versions/{VERSION}").status_code == 404
 
 
@@ -77,14 +95,8 @@ def test_requires_authentication_for_every_review_route(fixture):
     assert client.post("/reviews", json=DECISION).status_code == 401
     for route in ("workspaces", "queue", f"versions/{VERSION}"):
         assert client.get(f"/reviews/{route}").status_code == 401
-    store.review_write.assert_not_called()
-    store.review_read.assert_not_called()
+    store.transition.assert_not_called()
+    store.review_workspaces.assert_not_called()
+    store.review_queue.assert_not_called()
+    store.review_context.assert_not_called()
 
-
-def test_submitted_record_retention_has_a_clear_error(fixture):
-    client, store, _ = fixture
-    store.delete.side_effect = ForeignKeyViolation("PRIVATE constraint detail")
-    response = client.delete(f"/assessments/{VERSION}")
-    assert response.status_code == 409
-    assert "retained" in response.json()["message"]
-    assert "PRIVATE" not in response.text

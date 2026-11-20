@@ -45,4 +45,5 @@ class AssessmentVersion(BaseModel):
 
 class AssessmentRecord(BaseModel):
     assessmentId: UUID
+    owned: bool
     versions: list[AssessmentVersion]
