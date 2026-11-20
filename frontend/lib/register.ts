@@ -1,5 +1,6 @@
 import {
   ASSESSMENTS_ENDPOINT,
+  ASSESSMENT_TIMEOUT_MS,
   type AssessmentInput,
   type AssessmentResult,
   DATA_TYPE_LABELS,
@@ -47,6 +48,28 @@ export type RegisterEntry = {
 
 export function assessmentPath(assessmentId: string, version?: number) {
   return `${REGISTER_PATH}/${assessmentId}${version ? `?version=${version}` : ""}`;
+}
+
+/** Drafts and rejected versions can be deleted. FastAPI enforces this across every version. */
+export function isDeletable(status: AssessmentStatus) {
+  return status === "draft" || status === "rejected";
+}
+
+export function deleteWarning(versionCount: number) {
+  const versions = versionCount === 1 ? "its only version" : `all ${versionCount} versions`;
+  return `This permanently deletes ${versions}. It can’t be undone.`;
+}
+
+const DELETE_FAILED = "The assessment couldn't be deleted. Please try again.";
+
+/** Deletes every version. Resolves to null once deleted, otherwise to the message to show. */
+export async function deleteAssessment(assessmentId: string): Promise<string | null> {
+  const response = await fetch(`${ASSESSMENTS_ENDPOINT}/${assessmentId}`, {
+    method: "DELETE", cache: "no-store", signal: AbortSignal.timeout(ASSESSMENT_TIMEOUT_MS),
+  }).catch(() => null);
+  if (response?.ok) return null;
+  const body = await response?.json().catch(() => null);
+  return typeof body?.message === "string" ? body.message : DELETE_FAILED;
 }
 
 export function versionsEndpoint(assessmentId: string) {

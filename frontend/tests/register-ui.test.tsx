@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { assessmentResult, completeInput, stubAssessmentApi } from "./assessment-fixture";
 import { expectNoViolations } from "./axe";
 
@@ -17,6 +17,7 @@ import { AuthenticatedAssessment } from "../components/AuthenticatedAssessment";
 import { DemoAssessment } from "../components/DemoAssessment";
 import { SavedAssessmentActions } from "../components/SavedAssessmentActions";
 import MyAssessments from "../app/assessments/page";
+import LoadingAssessments from "../app/assessments/loading";
 import SavedAssessment from "../app/assessments/[id]/page";
 import { toScoringPayload } from "../lib/assessment";
 import { DEMO_SCENARIOS } from "../lib/demo-scenarios";
@@ -151,6 +152,68 @@ describe("My assessments", () => {
     expect(row.textContent).toContain("High · 86");
     expect(row.textContent).toContain("In review");
     expect(within(row).getByText(/Nov 12, 2026/).getAttribute("datetime")).toBe("2026-11-12T15:00:00Z");
+    // A version in review locks the assessment, so its row offers no Delete.
+    expect(within(row).queryByRole("button", { name: /delete/i })).toBeNull();
+    await expectNoViolations(container);
+  });
+
+  describe("deleting from the list", () => {
+    const title = "Overlap analysis · Names";
+
+    beforeAll(() => {
+      // jsdom has no modal dialogs yet.
+      Object.assign(HTMLDialogElement.prototype, {
+        showModal(this: HTMLDialogElement) { this.setAttribute("open", ""); },
+        close(this: HTMLDialogElement) { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); },
+      });
+    });
+
+    beforeEach(() => {
+      pages.loadRegister.mockResolvedValue({ session, entries: [{
+        assessmentId: ID, version: 3, versionCount: 3, status: "draft", score: 70, level: "HIGH", title,
+        savedAt: "2026-11-12T15:00:00Z",
+      }] });
+    });
+
+    async function confirmDelete() {
+      const { container } = render(await MyAssessments());
+      fireEvent.click(screen.getByRole("button", { name: `Delete ${title}` }));
+      const dialog = screen.getByRole("dialog", { name: "Delete this assessment?" });
+      expect(dialog.textContent).toContain(title);
+      expect(dialog.textContent).toMatch(/permanently deletes all 3 versions/i);
+      expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Keep it" }));
+      await expectNoViolations(container);
+      fireEvent.click(within(dialog).getByRole("button", { name: /delete permanently/i }));
+      return dialog;
+    }
+
+    it("deletes a row after confirmation without opening the assessment", async () => {
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const dialog = await confirmDelete();
+
+      await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+      expect(fetchMock.mock.calls[0][0]).toBe(`/api/assessments/${ID}`);
+      expect(fetchMock.mock.calls[0][1]?.method).toBe("DELETE");
+      expect(dialog.hasAttribute("open")).toBe(false);
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it("keeps the prompt open with the reason when the delete is refused", async () => {
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({ message: "This assessment has a version in review or approved, so it can't be deleted." }, { status: 409 })));
+      const dialog = await confirmDelete();
+
+      expect((await within(dialog).findByRole("alert")).textContent).toMatch(/in review or approved/);
+      expect(dialog.hasAttribute("open")).toBe(true);
+      expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Keep it" }));
+      expect(router.refresh).not.toHaveBeenCalled();
+    });
+  });
+  it("shows a busy skeleton while the register loads", async () => {
+    const { container } = render(<LoadingAssessments />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Loading…");
+    expect(container.querySelector("[aria-busy='true']")).toBeTruthy();
     await expectNoViolations(container);
   });
 });
@@ -212,6 +275,7 @@ describe("a saved assessment", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete permanently/i }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/in review or approved/);
     expect(router.replace).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
 
     rerender(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
       reassessHref="/r" duplicateHref="/d" versionCount={1} deletable={false} />);

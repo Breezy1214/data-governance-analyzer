@@ -12,16 +12,20 @@ import { PALETTE, RISK_COLORS } from "../lib/theme";
 
 const css = readFileSync(join(__dirname, "../app/globals.css"), "utf8");
 const rootBlock = css.match(/:root\s*{([^}]*)}/)![1];
-
 const declared = new Map(
   [...rootBlock.matchAll(/--([\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]),
 );
 
-function token(name: string): string {
+type Scheme = "light" | "dark";
+
+/** Resolves a token for a scheme, following var() aliases and picking from light-dark() pairs. */
+function token(name: string, scheme: Scheme = "light"): string {
   const value = declared.get(name);
   if (!value) throw new Error(`--${name} is not defined in :root`);
   const alias = value.match(/^var\(--([\w-]+)\)$/);
-  return alias ? token(alias[1]) : value;
+  if (alias) return token(alias[1], scheme);
+  const pair = value.match(/^light-dark\((#[0-9a-f]+),\s*(#[0-9a-f]+)\)$/i);
+  return pair ? pair[scheme === "light" ? 1 : 2] : value;
 }
 
 function luminance(hex: string): number {
@@ -32,8 +36,8 @@ function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function contrast(a: string, b: string): number {
-  const [light, dark] = [luminance(token(a)), luminance(token(b))].sort((x, y) => y - x);
+function contrast(a: string, b: string, scheme: Scheme): number {
+  const [light, dark] = [luminance(token(a, scheme)), luminance(token(b, scheme))].sort((x, y) => y - x);
   return (light + 0.05) / (dark + 0.05);
 }
 
@@ -46,15 +50,19 @@ const PAIRS: [string, string, number][] = [
   ["muted", "surface", 4.5],
   ["muted", "paper", 4.5],
   ["muted", "surface-hover", 4.5],
+  ["ink", "fill", 4.5],
+  ["ink", "fill-hover", 4.5],
+  ["muted", "fill", 4.5],
+  ["ink", "button", 4.5],
+  ["ink", "button-hover", 4.5],
+  ["danger", "button", 4.5],
   ["accent-strong", "surface", 4.5],
   ["accent-strong", "paper", 4.5],
   // Buttons, the current step and selected choices
-  ["white", "brand", 4.5],
-  ["white", "brand-hover", 4.5],
+  ["on-brand", "brand", 4.5],
+  ["on-brand", "brand-hover", 4.5],
   ["brand", "brand-soft", 4.5],
   ["ink", "brand-soft", 4.5],
-  ["white", "ink", 4.5],
-  ["white", "danger-hover", 4.5],
   ["danger", "surface", 4.5],
   ["disabled-fg", "disabled-bg", 4.5],
   // Feedback states
@@ -65,23 +73,22 @@ const PAIRS: [string, string, number][] = [
   ["risk-low", "surface", 4.5],
   ["risk-medium", "surface", 4.5],
   ["risk-high", "surface", 4.5],
-  // Text on the dark panels
-  ["on-ink", "ink", 4.5],
-  ["on-ink-strong", "ink", 4.5],
-  ["accent", "ink", 4.5],
   // Non-text: control boundaries, focus rings, progress
   ["control-line", "surface", 3],
   ["focus-ring", "surface", 3],
   ["focus-ring", "paper", 3],
-  ["focus-ring-on-dark", "ink", 3],
-  ["accent", "ink-line", 3],
 ];
 
 describe("colour tokens", () => {
-  it("meets the WCAG contrast minimum for every token pair", () => {
-    const failing = PAIRS.filter(([foreground, background, minimum]) => contrast(foreground, background) < minimum)
+  it.each<Scheme>(["light", "dark"])("meets the WCAG contrast minimum for every %s token pair", (scheme) => {
+    const failing = PAIRS.filter(([foreground, background, minimum]) => contrast(foreground, background, scheme) < minimum)
       .map(([foreground, background, minimum]) => `--${foreground} on --${background} needs ${minimum}:1`);
     expect(failing).toEqual([]);
+  });
+
+  it("shows the busy spinner only on aria-busy buttons, not on every disabled one", () => {
+    expect(css).not.toMatch(/:disabled::before/);
+    expect(css).toMatch(/\[aria-busy="true"\]::before/);
   });
 
   it("keeps raw colour values inside the :root token block", () => {

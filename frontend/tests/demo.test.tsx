@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DemoAssessment } from "../components/DemoAssessment";
-import { CHOICE_FIELDS, isAssessmentInput, validateDescription, validateQuestions } from "../lib/assessment";
+import { CHOICE_FIELDS, CHOICE_QUESTIONS, isAssessmentInput, validateDescription, validateQuestions } from "../lib/assessment";
 import { DEMO_ASSESSMENT_ENDPOINT, DEMO_SCENARIOS } from "../lib/demo-scenarios";
 import { DRAFT_KEY, saveDraft } from "../lib/session";
 import { completeInput, stubAssessmentApi } from "./assessment-fixture";
@@ -44,7 +44,10 @@ describe("demo mode", () => {
 
     expect(screen.getByRole("heading", { level: 2, name: /how will the data be handled/i })).toBeTruthy();
     expect(screen.getByText(new RegExp(`Started from the sample “${DEMO_SCENARIOS[0].title}”`))).toBeTruthy();
-    expect(screen.getAllByRole("button", { pressed: true }).length).toBeGreaterThanOrEqual(CHOICE_FIELDS.length);
+    CHOICE_FIELDS.forEach((field) => {
+      const group = screen.getByRole("group", { name: CHOICE_QUESTIONS[field].legend });
+      expect(within(group).getAllByRole("radio", { checked: true })).toHaveLength(1);
+    });
   });
 
   it("scores through the public endpoint without sending the description", async () => {

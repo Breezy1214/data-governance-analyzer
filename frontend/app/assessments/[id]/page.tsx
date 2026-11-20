@@ -8,7 +8,7 @@ import { RegisterShell } from "@/components/RegisterShell";
 import { SavedAssessmentSimulation } from "@/components/SavedAssessmentSimulation";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
-  DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle,
+  DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle, isDeletable,
 } from "@/lib/register";
 
 export const metadata: Metadata = { title: "Saved assessment · Data Governance Readiness Analyzer" };
@@ -21,11 +21,12 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
   const review = selected.status === "approved" ? context.events.at(-1) : undefined;
   const title = assessmentTitle(input);
   // Deleting removes every version, so it is offered only while no decision is pending or made.
-  const deletable = isOwner && versions.every((entry) => entry.status === "draft");
+  const deletable = isOwner && versions.every((entry) => isDeletable(entry.status));
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
   return (
-    <RegisterShell email={session.user.email} section="Saved assessment" current={REGISTER_PATH} title={title}
+    <RegisterShell email={session.user.email} section="Saved assessment" parent={{ href: REGISTER_PATH, label: "My assessments" }}
+      current={REGISTER_PATH} title={title}
       intro={<>Version {selected.version} of {versions.length} · {STATUS_LABELS[selected.status]} · Saved <LocalTime value={selected.savedAt} /></>}>
       <div className="step-panel risk-result" data-risk={result.level.toLowerCase()}>
         {selected.version !== latest.version && (
