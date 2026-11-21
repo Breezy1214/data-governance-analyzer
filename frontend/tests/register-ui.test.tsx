@@ -7,6 +7,10 @@ const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 const pages = vi.hoisted(() => ({ loadRegister: vi.fn(), loadAssessmentPage: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("../lib/register-page", () => pages);
+vi.mock("../lib/review-server", () => ({
+  reviewContext: vi.fn(async () => ({ workspaceId: null, role: null, events: [] })),
+  reviewWorkspaces: vi.fn(async () => []),
+}));
 
 import { AssessmentWizard } from "../components/AssessmentWizard";
 import { AuthenticatedAssessment } from "../components/AuthenticatedAssessment";
@@ -219,7 +223,7 @@ describe("a saved assessment", () => {
 
   it("shows the saved result, its versions and what was not saved", async () => {
     const versions = [version(1), version(2)];
-    pages.loadAssessmentPage.mockResolvedValue({ session, versions, selected: versions[0], latest: versions[1] });
+    pages.loadAssessmentPage.mockResolvedValue({ session, versions, selected: versions[0], latest: versions[1], isOwner: true });
     const { container } = render(await SavedAssessment(props));
 
     expect(screen.getByRole("heading", { level: 2, name: /high risk/i })).toBeTruthy();
@@ -233,11 +237,20 @@ describe("a saved assessment", () => {
     await expectNoViolations(container);
   });
 
+  it("lets a workspace reviewer read and download a colleague's version but not change it", async () => {
+    const submitted = [version(1, "in_review")];
+    pages.loadAssessmentPage.mockResolvedValue({ session, versions: submitted, selected: submitted[0], latest: submitted[0], isOwner: false });
+    render(await SavedAssessment(props));
+    expect(screen.getByRole("button", { name: /download report/i })).toBeTruthy();
+    for (const name of [/re-assess/i, /duplicate/i, /^delete$/i]) expect(screen.queryByRole("link", { name }) ?? screen.queryByRole("button", { name })).toBeNull();
+    expect(screen.queryByText(/can’t be deleted/)).toBeNull();
+  });
+
   it("deletes after confirmation and returns to the register", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     render(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
-      reassessHref="/r" duplicateHref="/d" versionCount={2} deletable />);
+      reassessHref="/r" duplicateHref="/d" versionCount={2} deletable isOwner />);
 
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText(/permanently deletes all 2 versions/i)).toBeTruthy();
@@ -250,7 +263,7 @@ describe("a saved assessment", () => {
 
   it("returns focus to Delete when the prompt is cancelled or dismissed with Escape", () => {
     render(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
-      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable />);
+      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable isOwner />);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep it" }));
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
@@ -266,7 +279,7 @@ describe("a saved assessment", () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({ message: "A version is in review or approved, so it can't be deleted." }, { status: 409 })));
     const { rerender } = render(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
-      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable />);
+      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable isOwner />);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: /delete permanently/i }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/in review or approved/);
@@ -274,7 +287,7 @@ describe("a saved assessment", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Delete" }));
 
     rerender(<SavedAssessmentActions assessmentId={ID} input={completeInput} result={assessmentResult}
-      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable={false} />);
+      reassessHref="/r" duplicateHref="/d" versionCount={1} deletable={false} isOwner />);
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(screen.getByText(/can’t be deleted/)).toBeTruthy();
   });

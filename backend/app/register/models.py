@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from app.scoring.models import AssessmentResponse, RiskLevel
 
-Status = Literal["draft", "in_review", "approved", "rejected"]
+Status = Literal["draft", "in_review", "approved", "rejected", "changes_requested"]
+ReviewRole = Literal["submitter", "reviewer", "admin"]
 
 
 class SavedVersion(BaseModel):
@@ -43,6 +44,18 @@ class AssessmentVersion(BaseModel):
     savedAt: datetime
 
 
+class ReviewQueueEntry(BaseModel):
+    id: UUID
+    assessmentId: UUID
+    version: int
+    score: int
+    level: RiskLevel
+    answers: dict[str, Any]
+    savedAt: datetime
+    workspace: str
+
+
 class AssessmentRecord(BaseModel):
     assessmentId: UUID
+    owned: bool
     versions: list[AssessmentVersion]

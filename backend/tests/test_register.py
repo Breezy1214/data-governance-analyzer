@@ -43,13 +43,13 @@ class MemoryStore:
                  "risk_level": row["result"]["level"], "saved_at": row["created_at"]} for row in latest.values()]
 
     def versions(self, user_id, assessment_id):
-        return self._mine(user_id, assessment_id)
+        return [{**row, "owned": True} for row in self._mine(user_id, assessment_id)]
 
     def delete(self, user_id, assessment_id):
         mine = self._mine(user_id, assessment_id)
         if not mine:
             raise AssessmentNotFound
-        if any(row["status"] in ("in_review", "approved") for row in mine):
+        if any(row["status"] != "draft" for row in mine):
             raise AssessmentLocked
         self.rows = [row for row in self.rows if row not in mine]
 
@@ -101,8 +101,9 @@ def test_reassessing_adds_a_version_and_keeps_the_earlier_one(as_user, store):
                          json=sample_payload(combined="yes")).json()["saved"]
 
     assert second == {"assessmentId": first["assessmentId"], "version": 2}
-    versions = client.get(f"/assessments/{first['assessmentId']}").json()["versions"]
-    assert [(item["version"], item["answers"]["combined"]) for item in versions] == [(1, "no"), (2, "yes")]
+    record = client.get(f"/assessments/{first['assessmentId']}").json()
+    assert record["owned"] is True
+    assert [(item["version"], item["answers"]["combined"]) for item in record["versions"]] == [(1, "no"), (2, "yes")]
 
 
 def test_another_users_assessment_is_not_found(as_user, store):
@@ -134,17 +135,18 @@ def test_register_lists_the_latest_version(as_user):
     assert (entry["assessmentId"], entry["version"], entry["status"]) == (saved["assessmentId"], 2, "draft")
 
 
-def test_delete_removes_the_assessment_unless_a_decision_is_pending(as_user, store):
+def test_delete_removes_a_draft_but_retains_a_submitted_assessment(as_user, store):
     client = as_user(OWNER)
     first = client.post("/assessments", json=sample_payload()).json()["saved"]["assessmentId"]
     second = client.post("/assessments", json=sample_payload()).json()["saved"]["assessmentId"]
-    next(row for row in store.rows if row["assessment_id"] == UUID(second))["status"] = "in_review"
+    next(row for row in store.rows if row["assessment_id"] == UUID(second))["status"] = "rejected"
 
     assert client.delete(f"/assessments/{first}").status_code == 204
     assert client.get(f"/assessments/{first}").status_code == 404
     locked = client.delete(f"/assessments/{second}")
     assert locked.status_code == 409
     assert locked.json()["error"] == "conflict"
+    assert "retained" in locked.json()["message"]
 
 
 def test_a_failed_save_still_returns_the_result(as_user, store):

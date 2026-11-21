@@ -13,6 +13,7 @@ from app.auth import TokenVerifier
 from app.config import Settings
 from app.logging_config import configure_logging, logger
 from app.rate_limit import ScoredClaims, SlidingWindowLimiter, require_demo_quota
+from app.register.reviews import router as review_router
 from app.register.routes import UNAVAILABLE, RegisterUnavailable
 from app.register.routes import router as register_router
 from app.register.store import PostgresRegisterStore
@@ -132,6 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return simulate_and_log(payload, response, demo=True)
 
     app.include_router(register_router)
+    app.include_router(review_router)
     return app
 
 

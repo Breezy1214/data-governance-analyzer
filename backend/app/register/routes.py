@@ -26,7 +26,7 @@ from app.scoring import AssessmentRequest
 from app.service import score_and_log
 
 NOT_FOUND = "That assessment could not be found."
-LOCKED = "This assessment has a version in review or approved, so it can't be deleted."
+LOCKED = "Submitted assessments are retained and can't be deleted."
 UNAVAILABLE = "The register is temporarily unavailable."
 
 router = APIRouter(tags=["register"])
@@ -105,7 +105,7 @@ def get_assessment(assessment_id: str, response: Response, claims: Claims,
     rows = _require(store).versions(claims["sub"], record_id)
     if not rows:
         raise HTTPException(404, NOT_FOUND)
-    return AssessmentRecord(assessmentId=record_id, versions=[
+    return AssessmentRecord(assessmentId=record_id, owned=rows[0]["owned"], versions=[
         AssessmentVersion(id=row["id"], version=row["version"], status=row["status"], answers=row["answers"],
                           result=row["result"], savedAt=row["created_at"])
         for row in rows

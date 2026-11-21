@@ -233,13 +233,12 @@ describe("assessment flow accessibility", () => {
   });
 
   it("does not rely on colour alone to convey the risk level", async () => {
-    const { container } = render(<AssessmentWizard />);
+    render(<AssessmentWizard />);
     answerQuestions(/health information/i, "Share patient records with an external analytics vendor for modelling.");
     fireEvent.click(screen.getByRole("button", { name: /assess risk/i }));
 
     await screen.findByText(/what drives this score/i);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/high risk/);
-    expect(container.querySelector('[data-risk="high"] h2 .risk-icon')).not.toBeNull();
   });
 });
 

@@ -67,7 +67,6 @@ export function ScoreBreakdown({ result }: { result: AssessmentResult }) {
         <ul className="band-list">
           {RISK_BANDS.map((band) => (
             <li key={band.level} data-risk={band.level.toLowerCase()} aria-current={band.level === result.level ? "true" : undefined}>
-              <span className="risk-icon" aria-hidden="true" />
               <span>{band.label}</span>
               <b>{band.range}</b>
             </li>
@@ -102,7 +101,7 @@ export function RecommendationsView({ result, order = result.recommendations, to
   return <>
     <div className="card">
       <div className="outcome-head">
-        <b className="risk-label risk-pill"><span className="risk-icon" aria-hidden="true" />{result.level} RISK · {result.score}/100</b>
+        <b className="risk-label risk-pill">{result.level} RISK · {result.score}/100</b>
         <span className="outcome-counts">
           {result.recommendations.length} recommendations
         </span>
