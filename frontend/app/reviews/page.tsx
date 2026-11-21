@@ -15,12 +15,11 @@ export default async function ReviewsPage() {
     Promise.all([reviewWorkspaces(token), reviewQueue(token)]));
   return (
     <RegisterShell email={session.user.email} section="Workspace reviews" current="/reviews" title="Workspace reviews"
-      intro="Submit saved assessments to a workspace for an independent decision, and review your colleagues’ submissions.">
+      intro="Decide on your team’s submissions and choose who reviews yours.">
       <div className="step-panel">
-        <WorkspaceControls userId={session.user.id} workspaces={workspaces} />
         <div className="card">
           <h2 className="card-title">Awaiting your decision</h2>
-          {queue.length === 0 ? <p>Nothing is waiting for your review.</p> : (
+          {queue.length === 0 ? <p className="method-note">Nothing to review.</p> : (
             <table className="register-table">
               <caption className="sr-only">Submitted versions awaiting your decision, oldest first</caption>
               <thead>
@@ -44,6 +43,7 @@ export default async function ReviewsPage() {
             </table>
           )}
         </div>
+        <WorkspaceControls userId={session.user.id} workspaces={workspaces} />
       </div>
     </RegisterShell>
   );

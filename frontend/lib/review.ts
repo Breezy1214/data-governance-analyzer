@@ -28,6 +28,12 @@ export const DECISION_LABELS: Record<ReviewDecision, string> = {
   in_review: "Submit for review", approved: "Approve", rejected: "Reject", changes_requested: "Request changes",
 };
 
+/** How each status change reads in a version's history. */
+export const EVENT_LABELS: Record<AssessmentStatus, string> = {
+  draft: "Saved as draft", in_review: "Submitted for review", approved: "Approved", rejected: "Rejected",
+  changes_requested: "Changes requested",
+};
+
 /**
  * What the viewer may do next. A version put in review before workspaces existed has no workspace yet,
  * so its owner submits it to one as if it were a draft.

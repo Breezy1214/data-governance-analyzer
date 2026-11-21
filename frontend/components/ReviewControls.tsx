@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { LocalTime } from "./LocalTime";
 import { type AssessmentStatus, STATUS_LABELS } from "@/lib/register";
 import {
-  DECISION_LABELS, type ReviewContext, type ReviewDecision, type ReviewWorkspace, postReview, reviewActions,
+  DECISION_LABELS, EVENT_LABELS, type ReviewContext, type ReviewDecision, type ReviewEvent, type ReviewWorkspace,
+  postReview, reviewActions,
 } from "@/lib/review";
 
 export function ReviewControls({ versionId, status, context, isOwner, workspaces }: {
@@ -18,12 +19,13 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
 }) {
   const router = useRouter();
   const id = useId();
-  const [workspace, setWorkspace] = useState(context.workspaceId ?? "");
+  const [workspace, setWorkspace] = useState(context.workspaceId ?? (workspaces.length === 1 ? workspaces[0].id : ""));
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState<ReviewDecision | null>(null);
   const actions = reviewActions(status, isOwner, context.role, context.workspaceId);
   const needsWorkspace = isOwner && actions.length > 0 && workspaces.length === 0 && !context.workspaceId;
+  const latest = context.events.at(-1);
 
   async function decide(next: ReviewDecision) {
     setPending(next);
@@ -42,49 +44,70 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
 
   return (
     <section className="card review-panel" aria-labelledby={`${id}-heading`}>
-      <h3 className="card-title" id={`${id}-heading`}>Review and approval</h3>
-      <p className="method-note">Decisions apply only to this saved version. You can’t review your own submission.</p>
+      <div className="review-head">
+        <h3 className="card-title" id={`${id}-heading`}>Review</h3>
+        <span className="badge badge-neutral">{STATUS_LABELS[status]}</span>
+      </div>
+      <StatusLine status={status} isOwner={isOwner} latest={latest}
+        workspace={workspaces.find((entry) => entry.id === context.workspaceId)?.name} />
       {needsWorkspace ? (
-        <p>To submit this assessment for review, create or join a workspace on <Link href="/reviews">Workspace reviews</Link>.</p>
+        <p>Join a workspace to submit this for review. <Link href="/reviews">Workspace reviews</Link></p>
       ) : actions.length > 0 && <>
-        {isOwner && (
+        {isOwner && !context.workspaceId && workspaces.length > 1 && (
           <label className="select-field" htmlFor={`${id}-workspace`}>
             <span>Workspace</span>
-            <select id={`${id}-workspace`} value={workspace} disabled={pending !== null || Boolean(context.workspaceId)}
-              onChange={(event) => setWorkspace(event.target.value)}>
+            <select id={`${id}-workspace`} value={workspace} disabled={pending !== null} onChange={(event) => setWorkspace(event.target.value)}>
               <option value="">Choose a workspace</option>
               {workspaces.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
             </select>
           </label>
         )}
         <label className="text-field" htmlFor={`${id}-note`}>
-          <span>Comment {!isOwner && <b className="badge">Required</b>}</span>
+          <span>{isOwner ? "Note for the reviewer" : "Comment"} {!isOwner && <b className="badge">Required</b>}</span>
           <textarea id={`${id}-note`} value={note} maxLength={2000} disabled={pending !== null}
-            onChange={(event) => setNote(event.target.value)} />
+            placeholder="Kept in the history. Leave out personal data." onChange={(event) => setNote(event.target.value)} />
         </label>
-        <p className="method-note">Avoid personal or sensitive information. Submitted comments become part of the permanent audit record.</p>
         <div className="actions wrap">
           {actions.map((action) => (
-            <button type="button" className="secondary" key={action} aria-busy={pending === action}
+            <button type="button" className={action === "in_review" || action === "approved" ? "primary" : "secondary"} key={action} aria-busy={pending === action}
               disabled={pending !== null || (action === "in_review" ? !workspace : !note.trim())} onClick={() => decide(action)}>
-              {pending === action ? "Saving…" : DECISION_LABELS[action]}
+              {pending === action ? "Saving…" : action === "in_review" && workspaces.length === 1 && !context.workspaceId
+                ? `Submit to ${workspaces[0].name}` : DECISION_LABELS[action]}
             </button>
           ))}
         </div>
       </>}
       {error && <p role="alert" className="error">{error}</p>}
-      <h4>Audit history</h4>
-      <ol className="review-history">
-        {context.events.map((event) => (
-          <li key={event.id}>
-            <p>
-              <strong>{event.from_status ? STATUS_LABELS[event.from_status] : "Saved as"} → {STATUS_LABELS[event.to_status]}</strong><br />
-              {event.actor_name} · <LocalTime value={event.occurred_at} /> · Rubric {event.rules_version} · Catalog {event.mapping_version}
-            </p>
-            {event.comment && <p>{event.comment}</p>}
-          </li>
-        ))}
-      </ol>
+      {latest && (
+        <details className="disclosure">
+          <summary>History ({context.events.length})</summary>
+          <ol className="review-history">
+            {context.events.map((event) => (
+              <li key={event.id}>
+                <p><strong>{EVENT_LABELS[event.to_status]}</strong> · {event.actor_name} · <LocalTime value={event.occurred_at} /></p>
+                {event.comment && <p className="review-comment">{event.comment}</p>}
+              </li>
+            ))}
+          </ol>
+          <p className="method-note">Scored with rubric {latest.rules_version} and catalog {latest.mapping_version}.</p>
+        </details>
+      )}
     </section>
   );
+}
+
+function StatusLine({ status, isOwner, latest, workspace }: {
+  status: AssessmentStatus; isOwner: boolean; latest: ReviewEvent | undefined; workspace: string | undefined;
+}) {
+  if (!latest || status === "draft") return null;
+  const when = <LocalTime value={latest.occurred_at} />;
+  if (status === "in_review") {
+    // An owner's version with no workspace predates workspaces and is still waiting to be sent to one.
+    if (isOwner && !workspace) return null;
+    return <p className="method-note">{isOwner ? <>Waiting for a reviewer in {workspace}.</> : <>Submitted by {latest.actor_name} · {when}</>}</p>;
+  }
+  return <>
+    <p className="method-note">{EVENT_LABELS[status]} by {latest.actor_name} · {when}</p>
+    {latest.comment && <p className="review-comment">{latest.comment}</p>}
+  </>;
 }
