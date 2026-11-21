@@ -239,7 +239,7 @@ describe("assessment flow accessibility", () => {
 
     await screen.findByText(/what drives this score/i);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toMatch(/high risk/);
-    expect(container.querySelector('[data-risk="high"] h2 .risk-icon')).not.toBeNull();
+    expect(container.querySelector('[data-risk="high"] h2')).not.toBeNull();
   });
 });
 

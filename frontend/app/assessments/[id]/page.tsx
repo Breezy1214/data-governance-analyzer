@@ -35,7 +35,7 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
             This is an earlier version. <Link href={assessmentPath(selected.assessmentId)}>See the latest (version {latest.version})</Link>.
           </p>
         )}
-        <h2>The proposed use case is <em><span className="risk-icon" aria-hidden="true" />{result.level.toLowerCase()} risk.</em></h2>
+        <h2>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
         <ScoreBreakdown result={result} />
         <SavedAssessmentSimulation input={input} result={result} actions={{
           assessmentId: selected.assessmentId, reassessHref: reopen("reassess"), duplicateHref: reopen("duplicate"),
@@ -52,7 +52,7 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
                 <li key={entry.id} data-risk={entry.result.level.toLowerCase()}>
                   <Link href={assessmentPath(entry.assessmentId, entry.version)}
                     aria-current={entry.version === selected.version ? "page" : undefined}>Version {entry.version}</Link>
-                  <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{entry.result.level} · {entry.result.score}/100</span>
+                  <span className="risk-label">{entry.result.level} · {entry.result.score}/100</span>
                   <span className="badge">{STATUS_LABELS[entry.status]}</span>
                   <LocalTime value={entry.savedAt} />
                 </li>

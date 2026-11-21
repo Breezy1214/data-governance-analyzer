@@ -248,14 +248,11 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   writeLines(model.meta.flatMap((item) => wrap(doc, `${item.label}: ${item.value}`, CONTENT_WIDTH)));
   y += 6;
 
-  // Risk banner: shape and text label, so the level never depends on colour.
-  const riskColor = RISK_COLORS[model.risk.level];
-  doc.setFillColor(riskColor);
-  drawRiskShape(doc, model.risk.level, MARGIN + 5, y - 4);
+  // Risk banner: the text label carries the level, so it never depends on colour.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.setTextColor(riskColor);
-  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN + 16, y);
+  doc.setTextColor(RISK_COLORS[model.risk.level]);
+  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN, y);
   doc.setTextColor(PALETTE.ink);
   y += 14;
   doc.setDrawColor(PALETTE.line);
@@ -320,16 +317,6 @@ function firstBlockLines(doc: Doc, section: ReportSection): number {
   if (section.kind === "paragraph") return measure(section.body, CONTENT_WIDTH);
   if (section.kind === "pairs") return section.pairs.length ? 1 + measure(section.pairs[0].value, CONTENT_WIDTH - 12) : 0;
   return section.items.length ? measure(section.items[0], CONTENT_WIDTH - 18) : 0;
-}
-
-/** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */
-function drawRiskShape(doc: Doc, level: RiskLevel, x: number, y: number) {
-  const r = 4.5;
-  if (level === "LOW") doc.circle(x, y, r, "F");
-  else if (level === "MEDIUM") {
-    doc.triangle(x - r, y, x, y - r, x + r, y, "F");
-    doc.triangle(x - r, y, x, y + r, x + r, y, "F");
-  } else doc.triangle(x - r, y + r, x, y - r, x + r, y + r, "F");
 }
 
 const REPORT_FILENAME = "data-governance-assessment.pdf";

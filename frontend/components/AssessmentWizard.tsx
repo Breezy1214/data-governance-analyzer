@@ -640,7 +640,7 @@ export function AssessmentWizard({
 
           {step === 2 && result && (
             <div className="step-panel risk-result" data-risk={result.level.toLowerCase()}>
-              <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em><span className="risk-icon" aria-hidden="true" />{result.level.toLowerCase()} risk.</em></h2>
+              <h2 ref={mainHeading} tabIndex={-1}>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
               {saveStatus}
               <ScoreBreakdown result={result} />
               <div className="actions"><button className="secondary" type="button" onClick={() => moveTo(1)}>← Back</button><button className="primary" type="button" onClick={() => moveTo(3)}>See recommendations <span>→</span></button></div>

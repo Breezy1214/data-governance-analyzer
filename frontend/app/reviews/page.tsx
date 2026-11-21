@@ -33,7 +33,7 @@ export default async function ReviewsPage() {
                       <small>Version {entry.version}</small>
                     </th>
                     <td data-risk={entry.level.toLowerCase()}>
-                      <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.level]} · {entry.score}</span>
+                      <span className="risk-label">{RISK_LABELS[entry.level]} · {entry.score}</span>
                     </td>
                     <td>{entry.workspace}</td>
                     <td className="register-saved"><LocalTime value={entry.savedAt} /></td>
