@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LocalTime } from "./LocalTime";
 import { type AssessmentStatus, STATUS_LABELS } from "@/lib/register";
@@ -22,6 +23,7 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
   const [error, setError] = useState("");
   const [pending, setPending] = useState<ReviewDecision | null>(null);
   const actions = reviewActions(status, isOwner, context.role, context.workspaceId);
+  const needsWorkspace = isOwner && actions.length > 0 && workspaces.length === 0 && !context.workspaceId;
 
   async function decide(next: ReviewDecision) {
     setPending(next);
@@ -42,7 +44,9 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
     <section className="card review-panel" aria-labelledby={`${id}-heading`}>
       <h3 className="card-title" id={`${id}-heading`}>Review and approval</h3>
       <p className="method-note">Decisions apply only to this saved version. You can’t review your own submission.</p>
-      {actions.length > 0 && <>
+      {needsWorkspace ? (
+        <p>To submit this assessment for review, create or join a workspace on <Link href="/reviews">Workspace reviews</Link>.</p>
+      ) : actions.length > 0 && <>
         {isOwner && (
           <label className="select-field" htmlFor={`${id}-workspace`}>
             <span>Workspace</span>

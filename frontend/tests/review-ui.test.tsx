@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ReviewControls } from "../components/ReviewControls";
+import { WorkspaceControls } from "../components/WorkspaceControls";
 import type { ReviewContext } from "../lib/review";
 import { approvalEvent } from "./assessment-fixture";
 
@@ -45,4 +46,24 @@ it("gives the author no decision buttons even as admin, and shows a readable his
   expect(history).toContain("Draft → In review");
   expect(history).toContain("owner@example.test");
   expect(history).not.toContain("2026-11-14T12:00:00Z");
+});
+
+it("points an author with no workspace to Workspace reviews", () => {
+  render(<ReviewControls versionId="v" status="draft" isOwner context={context({ workspaceId: null })} workspaces={[]} />);
+  expect(screen.queryByRole("combobox", { name: "Workspace" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Workspace reviews" }).getAttribute("href")).toBe("/reviews");
+});
+
+it("explains roles and what to do without a workspace", () => {
+  render(<WorkspaceControls userId="me" workspaces={[]} />);
+  expect(screen.getByText(/not in a workspace yet/)).toBeTruthy();
+  for (const role of ["Submitter", "Reviewer", "Admin"]) expect(screen.getByText(role, { selector: "dt" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Manage members" })).toBeNull();
+});
+
+it("tells a member who is not an admin who can add people", () => {
+  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "reviewer" }]} />);
+  expect(screen.getByText("Privacy team · Reviewer")).toBeTruthy();
+  expect(screen.getByText(/Only a workspace admin can add members/)).toBeTruthy();
 });

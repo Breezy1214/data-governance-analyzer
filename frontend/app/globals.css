@@ -230,7 +230,7 @@ textarea::placeholder { color: var(--muted); }
 .scenario > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.5; }
 /* Zero specificity, so button-styled links keep their own colours. */
 :where(.account-controls) a { color: inherit; font-size: 14px; }
-.sample-note a, .save-note a, .register-table a { color: var(--brand); font-weight: 600; }
+.sample-note a, .save-note a, .register-table a, .review-panel p a { color: var(--brand); font-weight: 600; }
 .error .secondary { margin-left: auto; }
 .demo-card { display: grid; gap: 4px; margin-top: 28px; padding: 16px 18px; border: 1px solid transparent; border-radius: 12px; background: var(--fill); color: var(--ink); text-decoration: none; transition: background .18s; }
 .demo-card:hover { background: var(--fill-hover); }
@@ -248,6 +248,12 @@ textarea::placeholder { color: var(--muted); }
 .review-panel textarea { min-height: 120px; }
 .review-panel :is(ul, ol) { padding: 0; list-style: none; }
 .review-history { display: grid; gap: 12px; }
+.account-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.account-id > span { font-weight: 600; }
+.role-guide { display: grid; gap: 10px; }
+.role-guide > div { display: grid; grid-template-columns: 90px 1fr; gap: 12px; }
+.role-guide dt { font-weight: 600; }
+.role-guide dd { margin: 0; color: var(--muted); line-height: 1.5; }
 .review-history p { margin: 0; line-height: 1.5; }
 
 /* Panels set data-risk; colour is always paired with a label and a shape. */

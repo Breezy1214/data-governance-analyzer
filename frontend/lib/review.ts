@@ -3,6 +3,11 @@ import type { AssessmentStatus } from "./register";
 
 export const ROLE_LABELS = { submitter: "Submitter", reviewer: "Reviewer", admin: "Admin" } as const;
 export type ReviewRole = keyof typeof ROLE_LABELS;
+export const ROLE_DESCRIPTIONS: Record<ReviewRole, string> = {
+  submitter: "Submits their own assessments for review.",
+  reviewer: "Also approves, rejects or requests changes on teammates’ submissions.",
+  admin: "Also adds members and changes their roles.",
+};
 export type ReviewEvent = {
   id: number; assessment_id: string; version: number;
   /** Null for the snapshot recorded when the workflow was installed. */
