@@ -109,7 +109,9 @@ select throws_ok(
 select throws_ok(
   $$update register.assessment_versions set status = 'approved' where version = 1$$,
   '42501', null, 'an owner cannot approve their own assessment');
-update register.assessment_versions set status = 'in_review' where version = 1;
+select register.transition_review(
+  (select id from register.assessment_versions where version=1),
+  register.create_review_workspace('Review team'), 'in_review', 'Ready', 'draft');
 select is((select status from register.assessment_versions where version = 1), 'in_review',
   'an owner can submit a version for review');
 
@@ -118,7 +120,7 @@ reset role;
 select pg_temp.as_api('00000000-0000-4000-8000-00000000000b');
 select is_empty($$select 1 from register.assessments$$, 'another user sees none of the owner''s assessments');
 select is_empty($$select 1 from register.assessment_register$$, 'another user''s register is empty');
-select is_empty($$update register.assessment_versions set status = 'draft' returning 1$$,
+select throws_ok($$update register.assessment_versions set status = 'draft' returning 1$$, '42501', null,
   'another user cannot change the owner''s versions');
 select is_empty($$delete from register.assessments where id = (select id from saved) returning 1$$,
   'another user cannot delete the owner''s assessment');
@@ -140,18 +142,20 @@ reset role;
 select pg_temp.as_api('00000000-0000-4000-8000-00000000000a');
 select is_empty($$delete from register.assessments where id = (select id from saved) returning 1$$,
   'an assessment with a version in review cannot be deleted');
-update register.assessment_versions set status = 'draft' where version = 1;
-select isnt_empty($$delete from register.assessments where id = (select id from saved) returning 1$$,
+-- A separate private draft remains deletable; submitted records cannot be withdrawn to erase history.
+with created as (insert into register.assessments default values returning id)
+insert into register.assessment_versions(assessment_id,version,answers,result)
+select id,1,pg_temp.answers(),pg_temp.result() from created;
+select isnt_empty($$delete from register.assessments where id <> (select id from saved) returning id$$,
   'the owner deletes an undecided assessment');
-select is_empty($$select 1 from register.assessment_versions$$, 'deleting an assessment deletes all its versions');
+select is_empty($$select 1 from register.assessment_versions where assessment_id <> (select id from saved)$$, 'deleting a private draft deletes all its versions');
 
--- Deleting an account deletes its register.
+-- Account deletion cannot cascade away a submitted review record or workspace membership.
 insert into register.assessments default values;
 reset role;
-delete from auth.users where id = '00000000-0000-4000-8000-00000000000a';
-select is_empty(
-  $$select 1 from register.assessments where user_id = '00000000-0000-4000-8000-00000000000a'$$,
-  'deleting an account deletes its assessments');
+select throws_ok(
+  $$delete from auth.users where id = '00000000-0000-4000-8000-00000000000a'$$,
+  '23503', null, 'account deletion cannot erase submitted review history');
 
 select * from finish();
 rollback;

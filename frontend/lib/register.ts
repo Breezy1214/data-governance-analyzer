@@ -20,8 +20,9 @@ export const STATUS_LABELS = {
   in_review: "In review",
   approved: "Approved",
   rejected: "Rejected",
+  changes_requested: "Changes requested",
 } as const;
-type AssessmentStatus = keyof typeof STATUS_LABELS;
+export type AssessmentStatus = keyof typeof STATUS_LABELS;
 export const DESCRIPTION_NOT_SAVED = "Not saved. The description stays in the browser tab where it was written.";
 
 export type SavedAssessmentVersion = {
@@ -49,9 +50,9 @@ export function assessmentPath(assessmentId: string, version?: number) {
   return `${REGISTER_PATH}/${assessmentId}${version ? `?version=${version}` : ""}`;
 }
 
-/** Drafts and rejected versions can be deleted. FastAPI enforces this across every version. */
+/** Only drafts can be deleted: submitted versions are retained, whatever the decision. FastAPI enforces this across every version. */
 export function isDeletable(status: AssessmentStatus) {
-  return status === "draft" || status === "rejected";
+  return status === "draft";
 }
 
 export function deleteWarning(versionCount: number) {

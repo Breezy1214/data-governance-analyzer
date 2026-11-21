@@ -136,7 +136,7 @@ function SimulatorPanel({ simulation, applied, onApplyPlan, onClear }: {
       <div className="simulator-scores">
         <div className="simulator-assessed" data-risk={assessed.level.toLowerCase()}>
           <span className="simulator-label">Assessed score</span>
-          <b className="risk-label"><span className="risk-icon" aria-hidden="true" />{assessed.score}/100 · {assessed.level}</b>
+          <b className="risk-label">{assessed.score}/100 · {assessed.level}</b>
           <span className="method-note">This is the record. Simulating never changes it.</span>
         </div>
         <div className="simulator-simulated" data-risk={current.level.toLowerCase()}>
@@ -144,7 +144,7 @@ function SimulatorPanel({ simulation, applied, onApplyPlan, onClear }: {
           <div>
             <span className="simulator-label">Simulated score</span>
             <b key={current.level} className="risk-label risk-pill level-change">
-              <span className="risk-icon" aria-hidden="true" />{current.level} RISK
+              {current.level} RISK
             </b>
             <span className="simulator-delta">{applied.size ? `−${removed} points` : "No safeguards applied"}</span>
           </div>

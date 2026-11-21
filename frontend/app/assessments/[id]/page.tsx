@@ -3,19 +3,25 @@ import Link from "next/link";
 import { AssessmentRecord, ScoreBreakdown } from "@/components/AssessmentResultView";
 import { LocalTime } from "@/components/LocalTime";
 import { RegisterShell } from "@/components/RegisterShell";
+import { ReviewControls } from "@/components/ReviewControls";
 import { SavedAssessmentSimulation } from "@/components/SavedAssessmentSimulation";
 import { type AssessmentPageProps, loadAssessmentPage } from "@/lib/register-page";
 import {
   DESCRIPTION_NOT_SAVED, REGISTER_PATH, STATUS_LABELS, assessmentPath, assessmentTitle, isDeletable,
 } from "@/lib/register";
+import { approvalSignOff } from "@/lib/review";
+import { reviewContext, reviewWorkspaces } from "@/lib/review-server";
 
 export const metadata: Metadata = { title: "Saved assessment · Data Governance Readiness Analyzer" };
 
 export default async function SavedAssessment(props: AssessmentPageProps) {
-  const { session, versions, selected, latest } = await loadAssessmentPage(props);
+  const { accessToken, session, versions, selected, latest, isOwner } = await loadAssessmentPage(props);
   const { input, result } = selected;
+  const [context, workspaces] = await Promise.all([
+    reviewContext(accessToken, selected.id), isOwner ? reviewWorkspaces(accessToken) : [],
+  ]);
   const title = assessmentTitle(input);
-  // Deleting removes every version, so it is offered only while no decision is pending or made.
+  // Deleting removes every version, so it is offered only while every version is still a private draft.
   const deletable = versions.every((entry) => isDeletable(entry.status));
   const reopen = (path: string) => `${REGISTER_PATH}/${selected.assessmentId}/${path}?version=${selected.version}`;
 
@@ -29,12 +35,13 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
             This is an earlier version. <Link href={assessmentPath(selected.assessmentId)}>See the latest (version {latest.version})</Link>.
           </p>
         )}
-        <h2>The proposed use case is <em><span className="risk-icon" aria-hidden="true" />{result.level.toLowerCase()} risk.</em></h2>
+        <h2>The proposed use case is <em>{result.level.toLowerCase()} risk.</em></h2>
         <ScoreBreakdown result={result} />
         <SavedAssessmentSimulation input={input} result={result} actions={{
           assessmentId: selected.assessmentId, reassessHref: reopen("reassess"), duplicateHref: reopen("duplicate"),
-          versionCount: versions.length, deletable,
+          versionCount: versions.length, deletable, isOwner, signOff: approvalSignOff(selected.status, context.events),
         }}>
+          <ReviewControls versionId={selected.id} status={selected.status} context={context} isOwner={isOwner} workspaces={workspaces} />
           <AssessmentRecord input={input} result={result} description={DESCRIPTION_NOT_SAVED}
             status={STATUS_LABELS[selected.status]} open />
 
@@ -45,7 +52,7 @@ export default async function SavedAssessment(props: AssessmentPageProps) {
                 <li key={entry.id} data-risk={entry.result.level.toLowerCase()}>
                   <Link href={assessmentPath(entry.assessmentId, entry.version)}
                     aria-current={entry.version === selected.version ? "page" : undefined}>Version {entry.version}</Link>
-                  <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{entry.result.level} · {entry.result.score}/100</span>
+                  <span className="risk-label">{entry.result.level} · {entry.result.score}/100</span>
                   <span className="badge">{STATUS_LABELS[entry.status]}</span>
                   <LocalTime value={entry.savedAt} />
                 </li>

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { AssessmentInput, AssessmentResult, EMPTY_INPUT } from "../lib/assessment";
+import type { ReviewEvent } from "../lib/review";
 
 /** Answers matching `assessmentResult` below; every question is complete. */
 export const completeInput: AssessmentInput = {
@@ -101,3 +102,9 @@ export function stubAssessmentApi(response: Response | Error = new Response(JSON
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
+
+export const approvalEvent: ReviewEvent = {
+  id: 2, assessment_id: "a1", version: 3, actor_id: "r1", actor_name: "reviewer@example.test",
+  occurred_at: "2026-11-14T12:00:00Z", from_status: "in_review", to_status: "approved", comment: "Controls checked",
+  rules_version: "2.0", mapping_version: "2.0",
+};

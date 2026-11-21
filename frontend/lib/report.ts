@@ -14,6 +14,7 @@ import {
 import { redactSensitiveData } from "./sensitive-data";
 import type { SimulatedPlan } from "./simulation";
 import { PALETTE, RISK_COLORS } from "./theme";
+import type { ReviewEvent } from "./review";
 
 // Built and rendered in the browser, never uploaded (docs/data-handling.md). buildReportModel is pure and omits internal rule ids.
 
@@ -60,10 +61,25 @@ function recommendationText(item: Recommendation): string {
   return [item.action, `Why this applies: ${item.rationale}`, basis, ...references].join(" ");
 }
 
+function signOffSection(approval: ReviewEvent): ReportSection {
+  const recorded = approval.actor_id ? [
+    { label: "Reviewer", value: approval.actor_name },
+    { label: "Reviewer account ID", value: approval.actor_id },
+    { label: "Approved at", value: formatAssessedAt(approval.occurred_at) },
+    { label: "Assessment version", value: `${approval.assessment_id} / ${approval.version}` },
+    { label: "Decision comment", value: redactSensitiveData(approval.comment).trim() },
+    { label: "Rubric and catalog", value: `${approval.rules_version} / ${approval.mapping_version}` },
+  ] : [{ label: "Reviewer", value: "Not on record. This version was approved before sign-off records were kept." }];
+  return { heading: "Review sign-off", kind: "pairs", pairs: [
+    { label: "Scope", value: "Approval applies to this saved assessment, not to a what-if simulation." }, ...recorded,
+  ] };
+}
+
 export function buildReportModel(
   input: AssessmentInput,
   result: AssessmentResult,
   simulated: SimulatedPlan | null = null,
+  signOff?: ReviewEvent,
 ): ReportModel {
   const sections: ReportSection[] = [
     { heading: "Use case", kind: "paragraph", body: redactSensitiveData(input.description).trim() },
@@ -115,6 +131,7 @@ export function buildReportModel(
     });
   }
 
+  if (signOff) sections.push(signOffSection(signOff));
   if (simulated) sections.push(...simulationSections(simulated));
 
   sections.push({ heading: "Disclaimer", kind: "paragraph", body: DISCLAIMER });
@@ -231,14 +248,11 @@ export async function renderAssessmentPdf(model: ReportModel): Promise<Doc> {
   writeLines(model.meta.flatMap((item) => wrap(doc, `${item.label}: ${item.value}`, CONTENT_WIDTH)));
   y += 6;
 
-  // Risk banner: shape and text label, so the level never depends on colour.
-  const riskColor = RISK_COLORS[model.risk.level];
-  doc.setFillColor(riskColor);
-  drawRiskShape(doc, model.risk.level, MARGIN + 5, y - 4);
+  // Risk banner: the text label carries the level, so it never depends on colour.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.setTextColor(riskColor);
-  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN + 16, y);
+  doc.setTextColor(RISK_COLORS[model.risk.level]);
+  doc.text(`${model.risk.level} RISK · ${model.risk.score} / 100`, MARGIN, y);
   doc.setTextColor(PALETTE.ink);
   y += 14;
   doc.setDrawColor(PALETTE.line);
@@ -305,16 +319,6 @@ function firstBlockLines(doc: Doc, section: ReportSection): number {
   return section.items.length ? measure(section.items[0], CONTENT_WIDTH - 18) : 0;
 }
 
-/** Matches the in-app icons: circle (low), diamond (medium), triangle (high). */
-function drawRiskShape(doc: Doc, level: RiskLevel, x: number, y: number) {
-  const r = 4.5;
-  if (level === "LOW") doc.circle(x, y, r, "F");
-  else if (level === "MEDIUM") {
-    doc.triangle(x - r, y, x, y - r, x + r, y, "F");
-    doc.triangle(x - r, y, x, y + r, x + r, y, "F");
-  } else doc.triangle(x - r, y + r, x, y - r, x + r, y + r, "F");
-}
-
 const REPORT_FILENAME = "data-governance-assessment.pdf";
 
 /** Throws on failure so the caller can show an error. */
@@ -323,8 +327,9 @@ export async function downloadAssessmentReport(
   result: AssessmentResult,
   simulated: SimulatedPlan | null = null,
   signal?: AbortSignal,
+  signOff?: ReviewEvent,
 ): Promise<void> {
   if (signal?.aborted) return;
-  const doc = await renderAssessmentPdf(buildReportModel(input, result, simulated));
+  const doc = await renderAssessmentPdf(buildReportModel(input, result, simulated, signOff));
   if (!signal?.aborted) doc.save(REPORT_FILENAME);
 }

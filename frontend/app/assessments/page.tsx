@@ -43,7 +43,7 @@ export default async function MyAssessments() {
                       <small>Version {entry.version}{entry.versionCount > 1 ? ` of ${entry.versionCount}` : ""}</small>
                     </th>
                     <td data-risk={entry.level.toLowerCase()}>
-                      <span className="risk-label"><span className="risk-icon" aria-hidden="true" />{RISK_LABELS[entry.level]} · {entry.score}</span>
+                      <span className="risk-label">{RISK_LABELS[entry.level]} · {entry.score}</span>
                     </td>
                     <td><span className="badge badge-neutral">{STATUS_LABELS[entry.status]}</span></td>
                     <td className="register-saved"><LocalTime value={entry.savedAt} /></td>
