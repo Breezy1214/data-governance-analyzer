@@ -67,3 +67,14 @@ it("tells a member who is not an admin who can add people", () => {
   expect(screen.getByText("Privacy team · Reviewer")).toBeTruthy();
   expect(screen.getByText(/Only a workspace admin can add members/)).toBeTruthy();
 });
+
+it("explains why an admin can't change their own role without calling the API", () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "admin" }]} />);
+  fireEvent.change(screen.getByRole("combobox", { name: "Workspace" }), { target: { value: "w" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Member account ID" }), { target: { value: " me " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save membership" }));
+  expect(screen.getByRole("alert").textContent).toContain("can’t change your own role");
+  expect(fetcher).not.toHaveBeenCalled();
+});

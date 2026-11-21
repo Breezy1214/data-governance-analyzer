@@ -60,6 +60,10 @@ export function WorkspaceControls({ workspaces, userId }: { workspaces: ReviewWo
       {administered.length > 0 ? (
         <form onSubmit={(event) => {
           event.preventDefault();
+          if (member.trim() === userId) {
+            setResult({ error: true, text: "You can’t change your own role. As this workspace’s admin you can already review teammates’ submissions." });
+            return;
+          }
           void save("member", { workspaceId: workspace, userId: member.trim(), role: role === "remove" ? null : role });
         }}>
           <h3>Manage members</h3>
