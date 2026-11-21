@@ -238,10 +238,17 @@ textarea::placeholder { color: var(--muted); }
 .demo-card span { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .select-field { display: block; padding-top: 22px; border-top: 1px solid var(--line); }
 .review-panel { overflow-wrap: anywhere; }
-.review-panel :is(.text-field, .select-field) { display: block; margin-block: 16px; padding-top: 0; border-top: 0; }
+.review-panel, .review-panel form { display: flex; flex-direction: column; gap: 16px; }
+.review-panel > *, .review-panel form > *, .review-panel .card-title { margin: 0; }
+.review-panel form > button { align-self: flex-start; }
+.review-panel :is(h3, h4):not(.card-title) { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.review-panel :is(.text-field, .select-field) { display: block; padding-top: 0; border-top: 0; }
+.review-panel :is(.text-field, .select-field) + .method-note { margin-top: -8px; }
 .review-panel input { min-height: 48px; padding: 0 14px; }
 .review-panel textarea { min-height: 120px; }
-.review-history li { margin-block: 12px; }
+.review-panel :is(ul, ol) { padding: 0; list-style: none; }
+.review-history { display: grid; gap: 12px; }
+.review-history p { margin: 0; line-height: 1.5; }
 
 /* Panels set data-risk; colour is always paired with a label and a shape. */
 [data-risk="low"] { --risk-color: var(--risk-low); --risk-bg: var(--success-bg); --risk-shape: circle(50%); }
