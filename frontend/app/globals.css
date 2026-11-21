@@ -187,8 +187,8 @@ textarea::placeholder { color: var(--muted); }
 :is(.sample-note, .save-note, .limitations, .warning-note, .error)::before { content: var(--alert-icon) / ""; position: absolute; top: 12px; left: 14px; width: 18px; height: 18px; border-radius: 50%; background: var(--alert-color); color: var(--surface); font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
 .sample-note { margin: 0 0 18px; }
 .save-note { --alert-color: var(--success); --alert-bg: var(--success-bg); --alert-icon: "✓"; margin: 14px 0 0; }
-.limitations { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; margin-top: 18px; }
-.warning-note { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; }
+.limitations, .warning-note { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; }
+.limitations { margin-top: 18px; }
 .error { --alert-color: var(--danger); --alert-bg: var(--danger-bg); --alert-icon: "!"; margin: 18px 0 0; color: var(--danger); font-weight: 600; }
 .error:has(> button) { display: flex; align-items: center; gap: 10px; }
 
@@ -253,20 +253,18 @@ textarea::placeholder { color: var(--muted); }
 .review-panel { overflow-wrap: anywhere; }
 .review-panel, .review-panel form { display: flex; flex-direction: column; gap: 16px; }
 .review-panel > *, .review-panel form > *, .review-panel .card-title { margin: 0; }
-.review-panel form > button { align-self: flex-start; }
-.review-panel :is(h3, h4):not(.card-title) { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.review-panel h3:not(.card-title) { margin-top: 8px; font-size: 15px; font-weight: 600; }
 .review-panel :is(.text-field, .select-field) { display: block; padding-top: 0; border-top: 0; }
 .review-panel input { min-height: 48px; padding: 0 14px; }
 .review-panel textarea { min-height: 96px; }
 .review-panel :is(ul, ol) { padding: 0; list-style: none; }
 .review-panel .actions { justify-content: flex-start; gap: 10px; }
-.review-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .review-panel .inline-form { display: flex; flex-flow: row wrap; gap: 8px; }
-.inline-form input { flex: 1 1 240px; width: auto; }
-.inline-form select { flex: 0 1 160px; width: auto; }
+.review-panel .inline-form input { flex: 1 1 240px; width: auto; }
+.review-panel .inline-form select { flex: 0 1 160px; width: auto; }
 .review-comment { color: var(--ink); line-height: 1.5; white-space: pre-line; }
-.workspace-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--fill); }
 .workspace-list { display: grid; gap: 8px; }
+.workspace-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 10px; background: var(--fill); }
 .account-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--muted); font-size: 13px; }
 .account-id button { min-height: 36px; padding: 0 12px; }
 .disclosure > :not(summary) { margin: 12px 0 0; }
@@ -335,7 +333,7 @@ textarea::placeholder { color: var(--muted); }
   .simulator { position: sticky; top: 12px; z-index: 2; }
   html:has(.simulator) { scroll-padding-top: calc(var(--simulator-height, 0px) + 24px); }
 }
-.simulator-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.simulator-head, .review-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .simulator-head h4 { margin: 0; font-size: 15px; font-weight: 600; }
 .simulator-scores { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: center; margin-top: 12px; }
 .simulator-assessed { display: grid; gap: 4px; padding: 12px 14px; border-radius: 10px; background: var(--paper); }
@@ -368,11 +366,11 @@ textarea::placeholder { color: var(--muted); }
 .safeguard-points { margin-left: auto; color: var(--accent-strong); font-family: var(--font-mono), monospace; font-size: 13px; white-space: nowrap; }
 .safeguard-answer { flex-basis: 100%; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
-.recommendation-why summary, .disclosure summary { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
-.recommendation-why summary::-webkit-details-marker, .disclosure summary::-webkit-details-marker { display: none; }
-.recommendation-why summary::before, .disclosure summary::before { content: "▸" / ""; transition: transform .18s; }
-.recommendation-why[open] summary::before, .disclosure[open] summary::before { transform: rotate(90deg); }
-.recommendation-why summary:hover, .disclosure summary:hover { color: var(--brand-hover); }
+:is(.recommendation-why, .disclosure) summary { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+:is(.recommendation-why, .disclosure) summary::-webkit-details-marker { display: none; }
+:is(.recommendation-why, .disclosure) summary::before { content: "▸" / ""; transition: transform .18s; }
+:is(.recommendation-why, .disclosure)[open] summary::before { transform: rotate(90deg); }
+:is(.recommendation-why, .disclosure) summary:hover { color: var(--brand-hover); }
 .recommendation-why > div { display: grid; gap: 10px; margin-top: 10px; padding-left: 18px; color: var(--muted); font-size: 13px; }
 .recommendation-why b { color: var(--ink); font-weight: 600; }
 .recommendation-trace { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
@@ -521,7 +519,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
   :is(.choice[aria-pressed="true"], .choice:has(.choice-input:checked)) .choice-mark { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .choice:has([type="radio"]:checked) .choice-mark::after { background: HighlightText; }
   .progress-track i, .factor-bar i { forced-color-adjust: none; background: CanvasText; }
-  select { appearance: auto; padding-right: 14px; }
+  select { appearance: auto; padding-right: 14px; background-image: none; }
   .ring-value { stroke: CanvasText; }
   .safeguard-toggle input { forced-color-adjust: none; border: 1px solid CanvasText; background: Canvas; }
   .safeguard-toggle input::after { background: CanvasText; }

@@ -31,14 +31,6 @@ export function WorkspaceControls({ workspaces, userId }: { workspaces: ReviewWo
     router.refresh();
   }
 
-  function saveMember() {
-    if (member.trim() === userId) {
-      setResult({ error: true, text: "You can’t change your own role. As admin you can already review teammates’ submissions." });
-      return;
-    }
-    void save("member", { workspaceId: target, userId: member.trim(), role: role === "remove" ? null : role });
-  }
-
   // If the clipboard is blocked the ID stays on screen to select by hand.
   const copyId = () => navigator.clipboard.writeText(userId).then(() => setCopied(true), () => undefined);
 
@@ -61,7 +53,10 @@ export function WorkspaceControls({ workspaces, userId }: { workspaces: ReviewWo
         </ul>
       ) : <p className="method-note">You’re not in a workspace yet. Create one, or share your ID with a workspace admin.</p>}
       {administered.length > 0 && (
-        <form onSubmit={(event) => { event.preventDefault(); saveMember(); }}>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          void save("member", { workspaceId: target, userId: member.trim(), role: role === "remove" ? null : role });
+        }}>
           <h3>Add a member</h3>
           <div className="inline-form">
             {administered.length > 1 && (

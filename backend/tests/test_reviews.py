@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
+from psycopg import DatabaseError
 from psycopg.errors import (
     ForeignKeyViolation,
     InsufficientPrivilege,
@@ -18,6 +19,10 @@ from app.register.store import AssessmentNotFound
 
 USER = "00000000-0000-4000-8000-000000000001"
 VERSION = "00000000-0000-4000-8000-000000000002"
+
+
+class OwnRole(DatabaseError):
+    sqlstate = "RV001"
 DECISION = {"action": "transition", "versionId": VERSION, "workspaceId": USER,
             "status": "approved", "expectedStatus": "in_review", "note": "Controls reviewed"}
 
@@ -62,7 +67,7 @@ def test_rejects_invalid_or_spoofed_requests(fixture, change):
 
 @pytest.mark.parametrize("error,status", [(InsufficientPrivilege, 403), (SerializationFailure, 409),
                                          (InvalidParameterValue, 400), (ForeignKeyViolation, 400),
-                                         (InternalError, 503)])
+                                         (InternalError, 503), (OwnRole, 400)])
 def test_safe_database_permission_and_conflict_responses(fixture, error, status):
     client, store, _ = fixture
     store.transition.side_effect = error("PRIVATE database detail")

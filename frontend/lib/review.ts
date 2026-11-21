@@ -1,5 +1,5 @@
 import { ASSESSMENT_TIMEOUT_MS } from "./assessment";
-import type { AssessmentStatus } from "./register";
+import { type AssessmentStatus, STATUS_LABELS } from "./register";
 
 export const ROLE_LABELS = { submitter: "Submitter", reviewer: "Reviewer", admin: "Admin" } as const;
 export type ReviewRole = keyof typeof ROLE_LABELS;
@@ -34,8 +34,7 @@ export const DECISION_LABELS: Record<ReviewDecision, string> = {
 
 /** How each status change reads in a version's history. */
 export const EVENT_LABELS: Record<AssessmentStatus, string> = {
-  draft: "Saved as draft", in_review: "Submitted for review", approved: "Approved", rejected: "Rejected",
-  changes_requested: "Changes requested",
+  ...STATUS_LABELS, draft: "Saved as draft", in_review: "Submitted for review",
 };
 
 /**

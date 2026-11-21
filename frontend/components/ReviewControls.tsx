@@ -19,16 +19,17 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
 }) {
   const router = useRouter();
   const id = useId();
-  const [workspace, setWorkspace] = useState(context.workspaceId ?? (workspaces.length === 1 ? workspaces[0].id : ""));
+  const [picked, setPicked] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState<ReviewDecision | null>(null);
   const actions = reviewActions(status, isOwner, context.role, context.workspaceId);
   const needsWorkspace = isOwner && actions.length > 0 && workspaces.length === 0 && !context.workspaceId;
   const latest = context.events.at(-1);
-  // A workspace where only the author can decide leaves the submission waiting forever.
-  const chosen = isOwner ? workspaces.find((entry) => entry.id === (context.workspaceId ?? workspace)) : undefined;
-  const unreviewed = chosen?.reviewers === 0 && (status === "in_review" || actions.length > 0) ? chosen : undefined;
+  const only = !context.workspaceId && workspaces.length === 1 ? workspaces[0] : undefined;
+  const workspace = context.workspaceId ?? only?.id ?? picked;
+  const chosen = isOwner ? workspaces.find((entry) => entry.id === workspace) : undefined;
+  const label = (action: ReviewDecision) => action === "in_review" && only ? `Submit to ${only.name}` : DECISION_LABELS[action];
 
   async function decide(next: ReviewDecision) {
     setPending(next);
@@ -51,18 +52,15 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
         <h3 className="card-title" id={`${id}-heading`}>Review</h3>
         <span className="badge badge-neutral">{STATUS_LABELS[status]}</span>
       </div>
-      {!(unreviewed && status === "in_review") && <StatusLine status={status} isOwner={isOwner} latest={latest}
-        workspace={workspaces.find((entry) => entry.id === context.workspaceId)?.name} />}
-      {unreviewed && (
-        <p className="warning-note">No one else in {unreviewed.name} can review this yet. <Link href="/reviews">Add a reviewer</Link></p>
-      )}
+      <StatusLine status={status} isOwner={isOwner} latest={latest} workspace={context.workspaceId ? chosen : undefined} />
+      {actions.length > 0 && chosen?.reviewers === 0 && <NoReviewer name={chosen.name} />}
       {needsWorkspace ? (
         <p>Join a workspace to submit this for review. <Link href="/reviews">Workspace reviews</Link></p>
       ) : actions.length > 0 && <>
-        {isOwner && !context.workspaceId && workspaces.length > 1 && (
+        {isOwner && !context.workspaceId && !only && (
           <label className="select-field" htmlFor={`${id}-workspace`}>
             <span>Workspace</span>
-            <select id={`${id}-workspace`} value={workspace} disabled={pending !== null} onChange={(event) => setWorkspace(event.target.value)}>
+            <select id={`${id}-workspace`} value={picked} disabled={pending !== null} onChange={(event) => setPicked(event.target.value)}>
               <option value="">Choose a workspace</option>
               {workspaces.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
             </select>
@@ -77,8 +75,7 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
           {actions.map((action) => (
             <button type="button" className={action === "in_review" || action === "approved" ? "primary" : "secondary"} key={action} aria-busy={pending === action}
               disabled={pending !== null || (action === "in_review" ? !workspace : !note.trim())} onClick={() => decide(action)}>
-              {pending === action ? "Saving…" : action === "in_review" && workspaces.length === 1 && !context.workspaceId
-                ? `Submit to ${workspaces[0].name}` : DECISION_LABELS[action]}
+              {pending === action ? "Saving…" : label(action)}
             </button>
           ))}
         </div>
@@ -103,17 +100,24 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
 }
 
 function StatusLine({ status, isOwner, latest, workspace }: {
-  status: AssessmentStatus; isOwner: boolean; latest: ReviewEvent | undefined; workspace: string | undefined;
+  status: AssessmentStatus; isOwner: boolean; latest: ReviewEvent | undefined; workspace: ReviewWorkspace | undefined;
 }) {
   if (!latest || status === "draft") return null;
   const when = <LocalTime value={latest.occurred_at} />;
-  if (status === "in_review") {
+  if (status === "in_review" && isOwner) {
     // An owner's version with no workspace predates workspaces and is still waiting to be sent to one.
-    if (isOwner && !workspace) return null;
-    return <p className="method-note">{isOwner ? <>Waiting for a reviewer in {workspace}.</> : <>Submitted by {latest.actor_name} · {when}</>}</p>;
+    if (!workspace) return null;
+    return workspace.reviewers === 0 ? <NoReviewer name={workspace.name} />
+      : <p className="method-note">Waiting for a reviewer in {workspace.name}.</p>;
   }
+  if (status === "in_review") return <p className="method-note">Submitted by {latest.actor_name} · {when}</p>;
   return <>
     <p className="method-note">{EVENT_LABELS[status]} by {latest.actor_name} · {when}</p>
     {latest.comment && <p className="review-comment">{latest.comment}</p>}
   </>;
+}
+
+/** A workspace where only the author can decide would leave the submission waiting forever. */
+function NoReviewer({ name }: { name: string }) {
+  return <p className="warning-note">No one else in {name} can review this yet. <Link href="/reviews">Add a reviewer</Link></p>;
 }

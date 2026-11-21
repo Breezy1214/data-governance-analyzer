@@ -22,6 +22,7 @@ REVIEW_ERRORS = {
     "22023": (400, INVALID),
     "23514": (400, INVALID),
     "23503": (400, INVALID),
+    "RV001": (400, "You can’t change your own role. As admin you can already review teammates’ submissions."),
 }
 
 

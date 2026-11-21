@@ -104,6 +104,7 @@ it("allows an independent admin to reject and retains that record while new vers
   const queue = async () => (await db.query<{ id: string; workspace: string }>("select * from register.review_queue(100)")).rows;
   expect(await queue()).toEqual([]);
   await asUser(owner);
+  await expect(db.query("select register.set_review_member($1,$2,'reviewer')", [workspace, owner])).rejects.toMatchObject({ code: "RV001" });
   expect(await queue()).toMatchObject([{ id: saved.id, workspace: "Privacy team" }]);
   await transition("rejected", "in_review", "Missing controls", saved.id);
   expect(await queue()).toEqual([]);

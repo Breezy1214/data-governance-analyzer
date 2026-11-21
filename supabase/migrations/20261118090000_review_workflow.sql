@@ -130,7 +130,9 @@ end;
 $$;
 create function register.set_review_member(w uuid,member_id uuid,member_role text) returns void language plpgsql security definer set search_path='' as $$
 begin
-  if register.review_role(w) is distinct from 'admin' or member_id=register.current_user_id() then raise exception 'Not permitted' using errcode='42501'; end if;
+  if register.review_role(w) is distinct from 'admin' then raise exception 'Not permitted' using errcode='42501'; end if;
+  -- Keeps every workspace with the admin who manages it; a distinct code lets the API explain the refusal.
+  if member_id=register.current_user_id() then raise exception 'Own role' using errcode='RV001'; end if;
   if member_role is null then delete from register.review_members where workspace_id=w and user_id=member_id;
   else insert into register.review_members values(w,member_id,member_role) on conflict(workspace_id,user_id) do update set role=excluded.role; end if;
 end;
