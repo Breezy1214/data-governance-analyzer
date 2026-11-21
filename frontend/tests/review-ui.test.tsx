@@ -12,7 +12,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 const context = (overrides: Partial<ReviewContext> = {}): ReviewContext =>
   ({ workspaceId: "w", role: null, events: [], ...overrides });
 
-const twoWorkspaces = [{ id: "w", name: "Privacy team", role: "submitter" as const }, { id: "x", name: "Legal", role: "reviewer" as const }];
+const twoWorkspaces = [{ id: "w", name: "Privacy team", role: "submitter" as const, reviewers: 1 }, { id: "x", name: "Legal", role: "reviewer" as const, reviewers: 1 }];
 const submitted = { ...approvalEvent, id: 1, actor_id: "owner", actor_name: "owner@example.test", from_status: "draft" as const, to_status: "in_review" as const, comment: "" };
 
 it("submits a selected workspace and refreshes the version", async () => {
@@ -47,7 +47,7 @@ it("requires a decision comment and shows a stale-state failure", async () => {
 
 it("shows an author only where their submission stands, even as admin", () => {
   render(<ReviewControls versionId="v" status="in_review" isOwner context={context({ role: "admin", events: [submitted] })}
-    workspaces={[{ id: "w", name: "Privacy team", role: "admin" }]} />);
+    workspaces={[{ id: "w", name: "Privacy team", role: "admin", reviewers: 1 }]} />);
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.getByText("Waiting for a reviewer in Privacy team.")).toBeTruthy();
@@ -81,7 +81,7 @@ it("offers creating a workspace and explains roles when there are none", () => {
 it("adds a member to an admin's only workspace", async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));
   vi.stubGlobal("fetch", fetcher);
-  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "admin" }]} />);
+  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "admin", reviewers: 1 }]} />);
   fireEvent.change(screen.getByRole("textbox", { name: "Member account ID" }), { target: { value: " them " } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(router.refresh).toHaveBeenCalled());
@@ -89,7 +89,7 @@ it("adds a member to an admin's only workspace", async () => {
 });
 
 it("hides member management from someone who is not an admin", () => {
-  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "reviewer" }]} />);
+  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "reviewer", reviewers: 1 }]} />);
   expect(screen.getByText("Privacy team")).toBeTruthy();
   expect(screen.queryByRole("textbox", { name: "Member account ID" })).toBeNull();
 });
@@ -97,9 +97,21 @@ it("hides member management from someone who is not an admin", () => {
 it("explains why an admin can't change their own role without calling the API", () => {
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
-  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "admin" }]} />);
+  render(<WorkspaceControls userId="me" workspaces={[{ id: "w", name: "Privacy team", role: "admin", reviewers: 1 }]} />);
   fireEvent.change(screen.getByRole("textbox", { name: "Member account ID" }), { target: { value: " me " } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   expect(screen.getByRole("alert").textContent).toContain("can’t change your own role");
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("warns an author when no one else in the workspace can review", () => {
+  const alone = [{ id: "w", name: "Privacy team", role: "admin" as const, reviewers: 0 }];
+  render(<ReviewControls versionId="v" status="in_review" isOwner context={context({ role: "admin", events: [submitted] })} workspaces={alone} />);
+  expect(screen.getByText(/No one else in Privacy team can review this yet/)).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Add a reviewer" }).getAttribute("href")).toBe("/reviews");
+  expect(screen.queryByText(/Waiting for a reviewer/)).toBeNull();
+  cleanup();
+  render(<ReviewControls versionId="v" status="in_review" isOwner context={context({ role: "admin", events: [submitted] })}
+    workspaces={[{ ...alone[0], reviewers: 1 }]} />);
+  expect(screen.queryByText(/No one else/)).toBeNull();
 });

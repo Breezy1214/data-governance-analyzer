@@ -105,10 +105,12 @@ class PostgresRegisterStore:
             raise AssessmentLocked if exists else AssessmentNotFound
 
     def review_workspaces(self, user_id: str) -> list[Row]:
+        """The caller's workspaces, each with how many other members can decide the caller's submissions."""
         with self._as_user(user_id) as conn:
             return conn.execute(
-                "select w.id, w.name, m.role from register.review_workspaces w"
-                " join register.review_members m on m.workspace_id=w.id"
+                "select w.id, w.name, m.role, (select count(*) from register.review_members o where o.workspace_id=w.id"
+                " and o.user_id<>m.user_id and o.role in ('reviewer','admin'))::int as reviewers"
+                " from register.review_workspaces w join register.review_members m on m.workspace_id=w.id"
                 " where m.user_id=register.current_user_id() order by w.name"
             ).fetchall()
 

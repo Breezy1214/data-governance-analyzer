@@ -171,11 +171,12 @@ textarea::placeholder { color: var(--muted); }
 
 /* Alerts share one shape: icon, tint and text, so the state is never carried by colour alone.
    Info is the default; .save-note is success, .limitations a warning and .error a failure. */
-.sample-note, .save-note, .limitations, .error { --alert-color: var(--brand); --alert-bg: var(--brand-soft); --alert-icon: "i"; position: relative; padding: 10px 14px 10px 42px; border-radius: 10px; background: var(--alert-bg); color: var(--ink); font-size: 14px; line-height: 1.5; }
-:is(.sample-note, .save-note, .limitations, .error)::before { content: var(--alert-icon) / ""; position: absolute; top: 12px; left: 14px; width: 18px; height: 18px; border-radius: 50%; background: var(--alert-color); color: var(--surface); font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
+.sample-note, .save-note, .limitations, .warning-note, .error { --alert-color: var(--brand); --alert-bg: var(--brand-soft); --alert-icon: "i"; position: relative; padding: 10px 14px 10px 42px; border-radius: 10px; background: var(--alert-bg); color: var(--ink); font-size: 14px; line-height: 1.5; }
+:is(.sample-note, .save-note, .limitations, .warning-note, .error)::before { content: var(--alert-icon) / ""; position: absolute; top: 12px; left: 14px; width: 18px; height: 18px; border-radius: 50%; background: var(--alert-color); color: var(--surface); font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
 .sample-note { margin: 0 0 18px; }
 .save-note { --alert-color: var(--success); --alert-bg: var(--success-bg); --alert-icon: "✓"; margin: 14px 0 0; }
 .limitations { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; margin-top: 18px; }
+.warning-note { --alert-color: var(--warning); --alert-bg: var(--warning-bg); --alert-icon: "!"; }
 .error { --alert-color: var(--danger); --alert-bg: var(--danger-bg); --alert-icon: "!"; margin: 18px 0 0; color: var(--danger); font-weight: 600; }
 .error:has(> button) { display: flex; align-items: center; gap: 10px; }
 

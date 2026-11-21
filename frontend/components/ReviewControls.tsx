@@ -26,6 +26,9 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
   const actions = reviewActions(status, isOwner, context.role, context.workspaceId);
   const needsWorkspace = isOwner && actions.length > 0 && workspaces.length === 0 && !context.workspaceId;
   const latest = context.events.at(-1);
+  // A workspace where only the author can decide leaves the submission waiting forever.
+  const chosen = isOwner ? workspaces.find((entry) => entry.id === (context.workspaceId ?? workspace)) : undefined;
+  const unreviewed = chosen?.reviewers === 0 && (status === "in_review" || actions.length > 0) ? chosen : undefined;
 
   async function decide(next: ReviewDecision) {
     setPending(next);
@@ -48,8 +51,11 @@ export function ReviewControls({ versionId, status, context, isOwner, workspaces
         <h3 className="card-title" id={`${id}-heading`}>Review</h3>
         <span className="badge badge-neutral">{STATUS_LABELS[status]}</span>
       </div>
-      <StatusLine status={status} isOwner={isOwner} latest={latest}
-        workspace={workspaces.find((entry) => entry.id === context.workspaceId)?.name} />
+      {!(unreviewed && status === "in_review") && <StatusLine status={status} isOwner={isOwner} latest={latest}
+        workspace={workspaces.find((entry) => entry.id === context.workspaceId)?.name} />}
+      {unreviewed && (
+        <p className="warning-note">No one else in {unreviewed.name} can review this yet. <Link href="/reviews">Add a reviewer</Link></p>
+      )}
       {needsWorkspace ? (
         <p>Join a workspace to submit this for review. <Link href="/reviews">Workspace reviews</Link></p>
       ) : actions.length > 0 && <>

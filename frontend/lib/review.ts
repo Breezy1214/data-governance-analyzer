@@ -18,7 +18,11 @@ export type ReviewEvent = {
   from_status: AssessmentStatus | null; to_status: AssessmentStatus; comment: string;
   rules_version: string; mapping_version: string;
 };
-export type ReviewWorkspace = { id: string; name: string; role: ReviewRole };
+export type ReviewWorkspace = {
+  id: string; name: string; role: ReviewRole;
+  /** Other members who can decide the viewer's submissions. */
+  reviewers: number;
+};
 export type ReviewContext = {
   workspaceId: string | null; role: ReviewRole | null; events: ReviewEvent[];
 };
